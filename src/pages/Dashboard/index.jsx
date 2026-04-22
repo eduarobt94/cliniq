@@ -1,6 +1,8 @@
 import { useState, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useKpis } from '../../hooks/useKpis';
+import { useClinic } from '../../hooks/useClinic';
 import { Button, MonoLabel } from '../../components/ui';
 import { Icons } from '../../components/ui';
 import { Sidebar } from './Sidebar';
@@ -14,12 +16,18 @@ import { QuickActionsBlock } from './QuickActionsBlock';
 import { SystemBlock } from './SystemBlock';
 import { NewAppointmentModal } from './NewAppointmentModal';
 
-const KpiCard = memo(function KpiCard({ label, value, delta, trend, hint }) {
+const KpiSkeleton = memo(function KpiSkeleton() {
+  return (
+    <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-8 w-20" />
+  );
+});
+
+const KpiCard = memo(function KpiCard({ label, value, delta, trend, hint, loading }) {
   return (
     <div className="p-5 bg-[var(--cq-bg)]">
       <div className="flex items-center justify-between">
         <MonoLabel>{label}</MonoLabel>
-        {delta && (
+        {delta && !loading && (
           <span
             className={`inline-flex items-center gap-1 text-[12px] font-medium ${
               trend === 'up'
@@ -39,20 +47,20 @@ const KpiCard = memo(function KpiCard({ label, value, delta, trend, hint }) {
         )}
       </div>
       <div className="mt-3 text-[30px] md:text-[34px] tracking-tight font-semibold leading-none">
-        {value}
+        {loading ? <KpiSkeleton /> : (value ?? '—')}
       </div>
       <div className="mt-2 text-[12.5px] text-[var(--cq-fg-muted)]">{hint}</div>
     </div>
   );
 });
 
-const GreetingStrip = memo(function GreetingStrip({ onNewAppointment }) {
+const GreetingStrip = memo(function GreetingStrip({ onNewAppointment, clinicName }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
       <div>
         <MonoLabel>Lun · 20 abr · 2026 · 09:14 UYT</MonoLabel>
         <h2 className="mt-2 text-[28px] md:text-[34px] tracking-[-0.02em] font-semibold leading-tight">
-          Buen día, María.
+          {clinicName ? `Buen día, ${clinicName}.` : 'Buen día.'}
         </h2>
         <p className="text-[14px] text-[var(--cq-fg-muted)]">
           Mientras desayunabas, Cliniq confirmó{' '}
@@ -80,12 +88,22 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
   const [mobileOpen, setMobileOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
+  const { kpis, loading: kpisLoading } = useKpis();
+  const { clinic } = useClinic();
+
   const openModal  = useCallback(() => setModalOpen(true),  []);
   const closeModal = useCallback(() => setModalOpen(false), []);
   const openMobileMenu = useCallback(() => setMobileOpen(true), []);
 
   const gapClass = density === 'compact' ? 'gap-3' : 'gap-5';
   const padClass = density === 'compact' ? 'p-5 md:p-6' : 'p-5 md:p-8';
+
+  const confirmedLabel = kpis
+    ? `${kpis.confirmed_today} / ${kpis.total_today}`
+    : null;
+  const confirmRate = kpis && kpis.total_today > 0
+    ? `${Math.round((kpis.confirmed_today / kpis.total_today) * 100)}%`
+    : null;
 
   return (
     <div className="min-h-screen bg-[var(--cq-surface-2)] text-[var(--cq-fg)] flex">
@@ -104,14 +122,14 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
           onNewAppointment={openModal}
         />
         <main className={`flex-1 overflow-y-auto ${padClass}`}>
-          <GreetingStrip onNewAppointment={openModal} />
+          <GreetingStrip onNewAppointment={openModal} clinicName={clinic?.name} />
 
           {/* KPI strip */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--cq-border)] border border-[var(--cq-border)] rounded-[14px] overflow-hidden mb-5">
-            <KpiCard label="Turnos confirmados" value="14 / 17" delta="+23%" trend="up" hint="vs. semana pasada" />
-            <KpiCard label="Mensajes enviados" value="142" delta="+12" trend="up" hint="automáticos · 24h" />
-            <KpiCard label="Tasa de confirmación" value="92%" delta="+6 pts" trend="up" hint="objetivo: 90%" />
-            <KpiCard label="Ahorro estimado" value="4.2 h" delta="esta semana" trend="flat" hint="recepción" />
+            <KpiCard label="Turnos confirmados" value={confirmedLabel} loading={kpisLoading} delta="+23%" trend="up" hint="vs. semana pasada" />
+            <KpiCard label="Mensajes enviados" value={kpis?.reminders_sent} loading={kpisLoading} delta="+12" trend="up" hint="automáticos · 24h" />
+            <KpiCard label="Tasa de confirmación" value={confirmRate} loading={kpisLoading} delta="+6 pts" trend="up" hint="objetivo: 90%" />
+            <KpiCard label="Auto-confirmados" value={kpis?.auto_confirmed} loading={kpisLoading} delta="hoy" trend="flat" hint="sin intervención" />
           </div>
 
           {/* Main grid */}
