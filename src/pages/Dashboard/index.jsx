@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useKpis } from '../../hooks/useKpis';
 import { useClinic } from '../../hooks/useClinic';
+import { useAppointments } from '../../hooks/useAppointments';
 import { Button, MonoLabel } from '../../components/ui';
 import { Icons } from '../../components/ui';
 import { Sidebar } from './Sidebar';
@@ -90,6 +91,7 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
 
   const { kpis, loading: kpisLoading } = useKpis();
   const { clinic } = useClinic();
+  const { appointments, loading: appointmentsLoading } = useAppointments();
 
   const openModal  = useCallback(() => setModalOpen(true),  []);
   const closeModal = useCallback(() => setModalOpen(false), []);
@@ -134,7 +136,7 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
 
           {/* Main grid */}
           <div className={`grid lg:grid-cols-3 ${gapClass} mb-5`}>
-            <AgendaBlock />
+            <AgendaBlock appointments={appointments} loading={appointmentsLoading} />
             <AutomationsBlock />
           </div>
           <div className={`grid lg:grid-cols-3 ${gapClass}`}>
