@@ -23,8 +23,8 @@ export function RiskBlock() {
         </span>
       </div>
       <ul className="space-y-2">
-        {RISK_ITEMS.map((it, i) => (
-          <li key={i} className="flex items-center gap-3 py-2">
+        {RISK_ITEMS.map((it) => (
+          <li key={it.name} className="flex items-center gap-3 py-2">
             <span
               className={`w-1 h-8 rounded-full ${
                 it.tone === 'danger' ? 'bg-[var(--cq-danger)]' : 'bg-[var(--cq-warn)]'

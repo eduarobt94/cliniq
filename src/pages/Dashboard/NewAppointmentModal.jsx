@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Icons, Badge, Button, MonoLabel } from '../../components/ui';
 
 function MiniField({ label, icon, placeholder, defaultValue }) {
@@ -19,6 +20,13 @@ function MiniField({ label, icon, placeholder, defaultValue }) {
 }
 
 export function NewAppointmentModal({ open, onClose }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (

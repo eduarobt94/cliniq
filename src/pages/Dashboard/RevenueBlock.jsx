@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Icons, Card, MonoLabel } from '../../components/ui';
 
 const SERIES = [42, 48, 45, 52, 58, 54, 62, 68, 72, 69, 76, 82];
@@ -5,15 +6,19 @@ const LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', '
 
 function RevenueChart({ series, labels }) {
   const w = 600, h = 140, pad = 8;
-  const max = Math.max(...series);
-  const min = Math.min(...series) * 0.85;
-  const pts = series.map((v, i) => {
-    const x = (i / (series.length - 1)) * (w - pad * 2) + pad;
-    const y = h - ((v - min) / (max - min)) * (h - pad * 2) - pad;
-    return [x, y];
-  });
-  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
-  const area = path + ` L${w - pad} ${h} L${pad} ${h} Z`;
+
+  const { pts, path, area } = useMemo(() => {
+    const max = Math.max(...series);
+    const min = Math.min(...series) * 0.85;
+    const pts = series.map((v, i) => {
+      const x = (i / (series.length - 1)) * (w - pad * 2) + pad;
+      const y = h - ((v - min) / (max - min)) * (h - pad * 2) - pad;
+      return [x, y];
+    });
+    const path = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+    const area = path + ` L${w - pad} ${h} L${pad} ${h} Z`;
+    return { pts, path, area };
+  }, [series]);
 
   return (
     <div>

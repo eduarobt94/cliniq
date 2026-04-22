@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { Button, MonoLabel } from '../../components/ui';
 import { Icons } from '../../components/ui';
 import { Sidebar } from './Sidebar';
@@ -13,7 +14,7 @@ import { QuickActionsBlock } from './QuickActionsBlock';
 import { SystemBlock } from './SystemBlock';
 import { NewAppointmentModal } from './NewAppointmentModal';
 
-function KpiCard({ label, value, delta, trend, hint }) {
+const KpiCard = memo(function KpiCard({ label, value, delta, trend, hint }) {
   return (
     <div className="p-5 bg-[var(--cq-bg)]">
       <div className="flex items-center justify-between">
@@ -43,9 +44,9 @@ function KpiCard({ label, value, delta, trend, hint }) {
       <div className="mt-2 text-[12.5px] text-[var(--cq-fg-muted)]">{hint}</div>
     </div>
   );
-}
+});
 
-function GreetingStrip({ onNewAppointment }) {
+const GreetingStrip = memo(function GreetingStrip({ onNewAppointment }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
       <div>
@@ -69,14 +70,19 @@ function GreetingStrip({ onNewAppointment }) {
       </div>
     </div>
   );
-}
+});
 
 export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable' }) {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [active, setActive] = useState('overview');
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+
+  const openModal  = useCallback(() => setModalOpen(true),  []);
+  const closeModal = useCallback(() => setModalOpen(false), []);
+  const openMobileMenu = useCallback(() => setMobileOpen(true), []);
 
   const gapClass = density === 'compact' ? 'gap-3' : 'gap-5';
   const padClass = density === 'compact' ? 'p-5 md:p-6' : 'p-5 md:p-8';
@@ -94,11 +100,11 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
       />
       <div className="flex-1 min-w-0 flex flex-col">
         <TopBar
-          onMobileMenu={() => setMobileOpen(true)}
-          onNewAppointment={() => setModalOpen(true)}
+          onMobileMenu={openMobileMenu}
+          onNewAppointment={openModal}
         />
         <main className={`flex-1 overflow-y-auto ${padClass}`}>
-          <GreetingStrip onNewAppointment={() => setModalOpen(true)} />
+          <GreetingStrip onNewAppointment={openModal} />
 
           {/* KPI strip */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--cq-border)] border border-[var(--cq-border)] rounded-[14px] overflow-hidden mb-5">
@@ -125,13 +131,13 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
 
           <div className="mt-8 flex items-center justify-between text-[12px] text-[var(--cq-fg-muted)]">
             <MonoLabel>Cliniq v2.4.1 · Sistema operativo</MonoLabel>
-            <button onClick={() => navigate('/')} className="hover:text-[var(--cq-fg)]">
+            <button onClick={() => { logout(); navigate('/'); }} className="hover:text-[var(--cq-fg)]">
               Cerrar sesión
             </button>
           </div>
         </main>
       </div>
-      <NewAppointmentModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <NewAppointmentModal open={modalOpen} onClose={closeModal} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { Icons, Button, MonoLabel, Divider } from '../../components/ui';
 
 function Field({ label, icon, right, error, success, children }) {
@@ -35,6 +36,7 @@ function Field({ label, icon, right, error, success, children }) {
 
 export function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
@@ -55,6 +57,7 @@ export function Login() {
     if (!emailValid || !passwordValid) return;
     setLoading(true);
     setTimeout(() => {
+      login({ email, name: 'Dra. María Bonomi' });
       setLoading(false);
       navigate('/dashboard');
     }, 900);
@@ -196,6 +199,7 @@ export function Login() {
             </div>
 
             <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
+              <fieldset disabled={loading} className="contents">
               <Field
                 label="Correo electrónico"
                 icon={<Icons.Mail size={15} />}
@@ -302,6 +306,7 @@ export function Login() {
               >
                 <Icons.Sparkle size={12} /> Probar con cuenta demo
               </button>
+              </fieldset>
             </form>
 
             <div className="mt-8 flex items-center justify-between">

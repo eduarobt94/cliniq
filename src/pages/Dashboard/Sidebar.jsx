@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { Icons, Badge, Avatar, MonoLabel } from '../../components/ui';
 
 const NAV_ITEMS = [
@@ -13,6 +14,11 @@ const SECONDARY_ITEMS = [{ id: 'config', label: 'Configuración', icon: Icons.Se
 
 export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
   const isFloating = variant === 'floating';
+
+  const handleNavClick = useCallback((id) => {
+    setActive(id);
+    setMobileOpen(false);
+  }, [setActive, setMobileOpen]);
   const isIconOnly = variant === 'icon' || collapsed;
   const width = isIconOnly ? 'w-[68px]' : 'w-[240px]';
   const base = isFloating
@@ -102,10 +108,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
               return (
                 <li key={it.id}>
                   <button
-                    onClick={() => {
-                      setActive(it.id);
-                      setMobileOpen(false);
-                    }}
+                    onClick={() => handleNavClick(it.id)}
                     aria-current={active === it.id ? 'page' : undefined}
                     title={isIconOnly ? it.label : undefined}
                     className={`w-full flex items-center gap-2.5 ${

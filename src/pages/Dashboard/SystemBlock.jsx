@@ -17,8 +17,8 @@ export function SystemBlock() {
         </Badge>
       </div>
       <ul className="space-y-2.5">
-        {SERVICES.map((s, i) => (
-          <li key={i} className="flex items-center justify-between text-[12.5px]">
+        {SERVICES.map((s) => (
+          <li key={s.n} className="flex items-center justify-between text-[12.5px]">
             <span className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--cq-success)]" />
               {s.n}
