@@ -21,7 +21,7 @@ WITH
 clinic_insert AS (
   INSERT INTO clinics (owner_id, name, whatsapp_number, timezone)
   VALUES (
-    'REEMPLAZAR-CON-UUID-DEL-USUARIO'::uuid,
+    '39235755-78e8-427b-9fae-76b80fb09ee5'::uuid,
     'Clínica Bonomi',
     '+59891634316',
     'America/Montevideo'
