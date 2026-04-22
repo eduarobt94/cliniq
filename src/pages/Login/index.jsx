@@ -50,17 +50,22 @@ export function Login() {
   const emailError = touched.email && !emailValid;
   const pwdError = touched.password && !passwordValid;
 
-  const onSubmit = (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault();
     setTouched({ email: true, password: true });
     setError('');
     if (!emailValid || !passwordValid) return;
     setLoading(true);
-    setTimeout(() => {
-      login({ email, name: 'Dra. María Bonomi' });
-      setLoading(false);
+    try {
+      await login(email, password);
       navigate('/dashboard');
-    }, 900);
+    } catch (err) {
+      setError(err.message === 'Invalid login credentials'
+        ? 'Email o contraseña incorrectos.'
+        : err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fillDemo = () => {
