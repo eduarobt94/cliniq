@@ -22,19 +22,11 @@ export function AuthProvider({ children }) {
     setNeedsOnboarding(!data);
   }, []);
 
-  // Sesión inicial al montar la app
+  // onAuthStateChange dispara INITIAL_SESSION al montar — no necesitamos getSession()
+  // separado (evita race condition de dos loadClinic() simultáneos).
   useEffect(() => {
-    authService.getSession().then(async (session) => {
-      if (session?.user) {
-        setUser(session.user);
-        await loadClinic(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    // Reacciona a login / logout / token refresh automático
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         const u = session?.user ?? null;
         setUser(u);
         if (u) {
@@ -43,6 +35,7 @@ export function AuthProvider({ children }) {
           setClinic(null);
           setNeedsOnboarding(false);
         }
+        if (event === 'INITIAL_SESSION') setLoading(false);
       }
     );
 
