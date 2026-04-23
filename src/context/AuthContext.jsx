@@ -7,50 +7,66 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user,            setUser]            = useState(null);
   const [clinic,          setClinic]          = useState(null);
+  const [role,            setRole]            = useState(null);   // 'owner' | 'staff' | 'viewer'
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [loading,         setLoading]         = useState(true);
   const [networkError,    setNetworkError]    = useState(false);
 
-  // Ref para cancelar loadClinic si el usuario cambia antes de que termine.
+  // Cancela cargas en vuelo si el usuario cambia antes de que terminen
   const loadAbortRef = useRef(null);
 
-  const loadClinic = useCallback(async (userId) => {
-    // Cancela cualquier carga previa en vuelo
+  // ── loadMembership ────────────────────────────────────────────────────────
+  // Fuente de verdad: clinic_members (no clinics.owner_id).
+  // Funciona para owners y staff por igual.
+  // Si el usuario tiene una membresía activa → setClinic + setRole.
+  // Si no tiene membresía → needsOnboarding = true (debe crear clínica).
+  const loadMembership = useCallback(async (userId) => {
     const abortController = { cancelled: false };
     loadAbortRef.current = abortController;
 
     const { data, error } = await supabase
-      .from('clinics')
-      .select('*')
-      .eq('owner_id', userId)
+      .from('clinic_members')
+      .select('role, status, clinics(*)')
+      .eq('user_id', userId)
+      .eq('status', 'active')
       .maybeSingle();
 
-    // Si el usuario cambió mientras esperábamos, descartamos el resultado
     if (abortController.cancelled) return;
 
     if (error) {
+      // Error de red o tabla inexistente — no tocar needsOnboarding
+      // para evitar falso redirect al onboarding
       setNetworkError(true);
       return;
     }
 
     setNetworkError(false);
-    setClinic(data ?? null);
-    setNeedsOnboarding(!data);
+
+    if (data?.clinics) {
+      setClinic(data.clinics);
+      setRole(data.role);
+      setNeedsOnboarding(false);
+    } else {
+      // Sin membresía activa → el usuario debe crear su clínica
+      setClinic(null);
+      setRole(null);
+      setNeedsOnboarding(true);
+    }
   }, []);
 
-  // ── 1. onAuthStateChange: SOLO sincrónico — nunca async/await aquí ──────────
-  // Si poné async acá, Supabase dispara SIGNED_IN + TOKEN_REFRESHED juntos en
-  // re-login y dos loadClinic() corren en paralelo con race condition de estado.
+  // ── 1. onAuthStateChange: SOLO sincrónico ────────────────────────────────
+  // Nunca usar async/await aquí. Supabase dispara SIGNED_IN + TOKEN_REFRESHED
+  // juntos en el re-login — si el callback es async, dos loadMembership()
+  // corren en paralelo y el estado queda inconsistente.
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        const u = session?.user ?? null;
-        setUser(u);
+        setUser(session?.user ?? null);
 
         if (event === 'SIGNED_OUT') {
-          // Cancela cualquier loadClinic en vuelo
           if (loadAbortRef.current) loadAbortRef.current.cancelled = true;
           setClinic(null);
+          setRole(null);
           setNeedsOnboarding(false);
           setNetworkError(false);
         }
@@ -64,13 +80,13 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []); // Sin dependencias: se registra una sola vez
 
-  // ── 2. Carga de clínica: reacciona a cambios de user.id — separado del listener
-  // Esto garantiza que loadClinic siempre corre con una sola instancia a la vez
-  // y que se re-ejecuta en cada login (cambio de user.id: null → uuid → null → uuid)
+  // ── 2. Carga de membresía reactiva a user.id ─────────────────────────────
+  // Separado del listener para evitar async dentro de onAuthStateChange.
+  // Se dispara en: login (null→uuid), re-login (null→uuid), logout (uuid→null).
   useEffect(() => {
     if (!user?.id) return;
-    loadClinic(user.id);
-  }, [user?.id, loadClinic]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadMembership(user.id);
+  }, [user?.id, loadMembership]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── signUp ────────────────────────────────────────────────────────────────
   async function signup(email, password, clinicName) {
@@ -81,34 +97,36 @@ export function AuthProvider({ children }) {
 
   // ── login ─────────────────────────────────────────────────────────────────
   async function login(email, password) {
-    // onAuthStateChange maneja el estado automáticamente al dispararse SIGNED_IN
     return authService.signIn(email, password);
   }
 
   // ── logout ────────────────────────────────────────────────────────────────
   async function logout() {
-    // Limpia el estado ANTES del await para que la UI sea inmediata
+    // Limpiar inmediatamente para UI responsiva
     if (loadAbortRef.current) loadAbortRef.current.cancelled = true;
     setUser(null);
     setClinic(null);
+    setRole(null);
     setNeedsOnboarding(false);
     setNetworkError(false);
-    // El signOut dispara SIGNED_OUT en onAuthStateChange (redundante pero correcto)
     await authService.signOut();
   }
 
-  // ── createClinic: usado desde el onboarding (retry) ──────────────────────
+  // ── createClinic: usado desde el onboarding (solo para owners nuevos) ────
   async function createClinic(clinicName) {
     if (!user) throw new Error('No hay sesión activa.');
     const error = await authService.createClinic(user.id, clinicName);
     if (error) throw error;
-    await loadClinic(user.id);
+    // Recargar membresía — el trigger trg_clinics_add_owner
+    // habrá creado automáticamente la fila en clinic_members
+    await loadMembership(user.id);
   }
 
   return (
     <AuthContext.Provider value={{
       user,
       clinic,
+      role,
       needsOnboarding,
       networkError,
       loading,

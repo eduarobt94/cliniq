@@ -1,144 +1,135 @@
 -- ============================================================
--- CLINIQ — Clinic Members Migration
+-- CLINIQ — Multi-User Architecture: clinic_members
 -- PostgreSQL 15 / Supabase
--- Version : 1.2.0
--- Date    : 2026-04-23
+-- Version : 2.0.0
 -- ============================================================
 --
--- OBJETIVO: Soporte para múltiples usuarios por clínica.
+-- OBJETIVO: Sistema completo de membresías con invitaciones.
 --
--- ARQUITECTURA MULTI-USUARIO:
--- ─────────────────────────────────────────────────────────────
--- Antes de esta migración, solo el owner_id de clinics podía
--- acceder a los datos de una clínica. Esta migración agrega
--- la tabla clinic_members para que el owner pueda invitar
--- usuarios con distintos roles (staff, viewer).
+-- MODELO:
+--   clinics.owner_id  → quién creó la clínica (metadata)
+--   clinic_members    → fuente de verdad para autorización
 --
--- IMPACTO EN RLS EXISTENTE:
--- fn_user_clinic_ids() se actualiza para incluir clínicas donde
--- el usuario es miembro. Todas las políticas existentes de
--- patients y appointments automáticamente soportan multi-usuario
--- sin ningún cambio adicional.
+-- FLUJOS:
+--   Owner signup  → crea clinic → trigger inserta owner en clinic_members
+--   Staff invite  → INSERT clinic_members (user_id NULL, status='invited')
+--   Staff signup  → trigger fn_link_invitation_on_signup lo activa automáticamente
+--   Post-login    → query clinic_members WHERE user_id=auth.uid() AND status='active'
 --
--- ROLES DISPONIBLES:
---   owner  → Acceso total. Puede invitar/remover miembros.
---   staff  → Puede ver y operar pacientes y turnos.
---   viewer → Solo lectura (futuro uso en dashboards compartidos).
+-- ROLES:
+--   owner  → acceso total, puede invitar y remover miembros
+--   staff  → puede ver y operar pacientes y turnos
+--   viewer → solo lectura (para dashboards compartidos)
 --
--- FLUJO DE INVITACIÓN (Fase 2):
---   owner invita email → INSERT en clinic_members con invited_by
---   → usuario acepta → ya puede acceder a la clínica
+-- STATUS:
+--   invited → invitación enviada, usuario aún no registrado
+--   active  → miembro activo con acceso
 -- ============================================================
 
 
 -- ─────────────────────────────────────────────────────────────
 -- 1. TABLA: clinic_members
 -- ─────────────────────────────────────────────────────────────
--- Tabla pivot entre clinics y auth.users.
 --
--- UNIQUE(clinic_id, user_id): un usuario solo puede tener un rol
--- por clínica. Para cambiar el rol, UPDATE en lugar de INSERT.
+-- user_id es NULLABLE: es NULL mientras la invitación está pendiente
+-- (el usuario todavía no tiene cuenta). Se llena automáticamente
+-- cuando el usuario se registra con el email invitado (trigger).
 --
--- invited_by: auditoría de quién invitó al miembro. NULL para el
--- owner original (insertado por el trigger de auto-membership).
---
--- No tiene updated_at porque los cambios de rol son raros y
--- se auditarán via logs en Fase 2. Si se necesita, agregar en
--- una migración futura con ALTER TABLE.
+-- email es la clave de identificación para invitaciones.
+-- UNIQUE(clinic_id, email) evita invitar al mismo email dos veces.
 
 CREATE TABLE clinic_members (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  clinic_id  UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
-  user_id    UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role       TEXT NOT NULL DEFAULT 'staff'
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id  UUID        NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  user_id    UUID        REFERENCES auth.users(id) ON DELETE CASCADE, -- NULL si invitación pendiente
+  email      TEXT        NOT NULL,
+  role       TEXT        NOT NULL DEFAULT 'staff'
              CHECK (role IN ('owner', 'staff', 'viewer')),
-  invited_by UUID REFERENCES auth.users(id),
+  status     TEXT        NOT NULL DEFAULT 'invited'
+             CHECK (status IN ('invited', 'active')),
+  invited_by UUID        REFERENCES auth.users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (clinic_id, user_id)
+  UNIQUE (clinic_id, email)
 );
 
 
 -- ─────────────────────────────────────────────────────────────
 -- 2. ÍNDICES
 -- ─────────────────────────────────────────────────────────────
--- idx_clinic_members_clinic_id: usado en las políticas RLS para
--- encontrar los miembros de una clínica dada (ej: listar miembros).
---
--- idx_clinic_members_user_id: usado en fn_user_clinic_ids() para
--- encontrar las clínicas a las que pertenece un usuario.
--- Este índice es CRÍTICO para el rendimiento de todas las queries
--- que pasan por las políticas RLS de patients y appointments.
+-- idx_clinic_members_user_status: usado en fn_user_clinic_ids() y
+-- en loadClinic del frontend — la query más frecuente de toda la app.
 
-CREATE INDEX idx_clinic_members_clinic_id ON clinic_members(clinic_id);
-CREATE INDEX idx_clinic_members_user_id   ON clinic_members(user_id);
+CREATE INDEX idx_clinic_members_clinic_id   ON clinic_members(clinic_id);
+CREATE INDEX idx_clinic_members_user_id     ON clinic_members(user_id);
+CREATE INDEX idx_clinic_members_email       ON clinic_members(email);
+CREATE INDEX idx_clinic_members_user_status ON clinic_members(user_id, status)
+  WHERE user_id IS NOT NULL;
 
 
 -- ─────────────────────────────────────────────────────────────
--- 3. ROW LEVEL SECURITY — clinic_members
+-- 3. ROW LEVEL SECURITY
 -- ─────────────────────────────────────────────────────────────
--- Estrategia:
---   SELECT → cualquier miembro (o owner) de la clínica puede ver
---            el listado de miembros.
---   INSERT → solo el owner puede agregar miembros.
---   DELETE → solo el owner puede eliminar miembros.
---   UPDATE → no hay política de UPDATE: para cambiar roles se debe
---            DELETE + INSERT (simplifica la lógica de auditoría).
---
--- DEFINICIÓN DE "ES OWNER":
---   Un usuario es owner si:
---     a) clinics.owner_id = auth.uid()  (owner original de la tabla clinics)
---     b) tiene una fila en clinic_members con role = 'owner'
---   Ambas condiciones se unen con OR para garantizar retrocompatibilidad.
 
 ALTER TABLE clinic_members ENABLE ROW LEVEL SECURITY;
 
 
--- ── 3.1 SELECT: miembros visibles para cualquier miembro de la clínica ──
-
+-- SELECT: cualquier miembro activo de la clínica puede ver el equipo
 CREATE POLICY "clinic_members: select as member"
   ON clinic_members FOR SELECT
   USING (
-    -- El usuario es member de esta clínica (cualquier rol)
     clinic_id IN (SELECT fn_user_clinic_ids())
   );
 
 
--- ── 3.2 INSERT: solo el owner puede agregar miembros ─────────────────────
-
+-- INSERT: solo el owner puede invitar miembros
 CREATE POLICY "clinic_members: insert as owner"
   ON clinic_members FOR INSERT
   WITH CHECK (
-    -- El usuario que inserta es owner de la clínica (via clinics.owner_id)
-    clinic_id IN (
-      SELECT id FROM clinics WHERE owner_id = auth.uid()
-    )
+    -- Owner via clinics.owner_id (retrocompatibilidad)
+    clinic_id IN (SELECT id FROM clinics WHERE owner_id = auth.uid())
     OR
-    -- O tiene role='owner' en clinic_members de esa clínica
+    -- Owner via clinic_members
     EXISTS (
       SELECT 1 FROM clinic_members cm
       WHERE cm.clinic_id = clinic_members.clinic_id
         AND cm.user_id   = auth.uid()
         AND cm.role      = 'owner'
+        AND cm.status    = 'active'
     )
   );
 
 
--- ── 3.3 DELETE: solo el owner puede eliminar miembros ────────────────────
-
-CREATE POLICY "clinic_members: delete as owner"
-  ON clinic_members FOR DELETE
+-- UPDATE: solo el owner puede cambiar roles
+CREATE POLICY "clinic_members: update as owner"
+  ON clinic_members FOR UPDATE
   USING (
-    -- El usuario es owner via clinics.owner_id
-    clinic_id IN (
-      SELECT id FROM clinics WHERE owner_id = auth.uid()
-    )
+    clinic_id IN (SELECT id FROM clinics WHERE owner_id = auth.uid())
     OR
-    -- O tiene role='owner' en clinic_members de esa clínica
     EXISTS (
       SELECT 1 FROM clinic_members cm
       WHERE cm.clinic_id = clinic_members.clinic_id
         AND cm.user_id   = auth.uid()
         AND cm.role      = 'owner'
+        AND cm.status    = 'active'
+    )
+  );
+
+
+-- DELETE: solo el owner puede eliminar miembros (no puede eliminarse a sí mismo)
+CREATE POLICY "clinic_members: delete as owner"
+  ON clinic_members FOR DELETE
+  USING (
+    user_id <> auth.uid() -- no puede auto-eliminarse
+    AND (
+      clinic_id IN (SELECT id FROM clinics WHERE owner_id = auth.uid())
+      OR
+      EXISTS (
+        SELECT 1 FROM clinic_members cm
+        WHERE cm.clinic_id = clinic_members.clinic_id
+          AND cm.user_id   = auth.uid()
+          AND cm.role      = 'owner'
+          AND cm.status    = 'active'
+      )
     )
   );
 
@@ -146,17 +137,9 @@ CREATE POLICY "clinic_members: delete as owner"
 -- ─────────────────────────────────────────────────────────────
 -- 4. ACTUALIZAR fn_user_clinic_ids()
 -- ─────────────────────────────────────────────────────────────
--- CAMBIO CLAVE: la función ahora devuelve clínicas donde el usuario
--- es owner (via clinics.owner_id) UNION clínicas donde es miembro
--- (via clinic_members).
---
--- Esto hace que TODAS las políticas RLS existentes de patients y
--- appointments soporten multi-usuario automáticamente, sin modificar
--- ninguna política individual.
---
--- STABLE + SECURITY DEFINER: el planner puede cachear el resultado
--- dentro de la transacción, evitando re-ejecutar por cada fila.
--- SET search_path = public: protección contra search_path hijacking.
+-- Ahora incluye membresías activas además de ownership directo.
+-- Todas las políticas RLS de patients y appointments ganan
+-- soporte multi-usuario sin modificar ninguna política individual.
 
 CREATE OR REPLACE FUNCTION fn_user_clinic_ids()
 RETURNS SETOF UUID
@@ -165,50 +148,49 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
+  -- Owner directo (retrocompatibilidad + performance)
   SELECT id FROM clinics WHERE owner_id = auth.uid()
   UNION
-  SELECT clinic_id FROM clinic_members WHERE user_id = auth.uid();
+  -- Membresías activas (owner, staff, viewer)
+  SELECT clinic_id FROM clinic_members
+  WHERE user_id = auth.uid() AND status = 'active';
 $$;
 
 
 -- ─────────────────────────────────────────────────────────────
--- 5. MIGRAR OWNERS EXISTENTES A clinic_members
+-- 5. MIGRAR OWNERS EXISTENTES → clinic_members
 -- ─────────────────────────────────────────────────────────────
--- Inserta al owner de cada clínica existente como miembro con
--- role='owner'. Esto garantiza consistencia: el owner siempre
--- aparece en clinic_members.
---
--- ON CONFLICT DO NOTHING: idempotente, seguro de re-ejecutar.
--- invited_by queda NULL para el owner original (se auto-invitó
--- al crear la clínica).
+-- Inserta al owner de cada clínica existente como miembro activo.
+-- ON CONFLICT DO NOTHING: idempotente.
 
-INSERT INTO clinic_members (clinic_id, user_id, role)
-SELECT id, owner_id, 'owner'
-FROM clinics
-ON CONFLICT (clinic_id, user_id) DO NOTHING;
+INSERT INTO clinic_members (clinic_id, user_id, email, role, status)
+SELECT c.id, c.owner_id, au.email, 'owner', 'active'
+FROM   clinics c
+JOIN   auth.users au ON au.id = c.owner_id
+ON CONFLICT (clinic_id, email) DO NOTHING;
 
 
 -- ─────────────────────────────────────────────────────────────
 -- 6. TRIGGER: auto-insertar owner al crear clínica nueva
 -- ─────────────────────────────────────────────────────────────
--- Cuando se inserta una nueva fila en clinics, el trigger
--- automáticamente agrega al owner como miembro con role='owner'.
---
--- Esto elimina la responsabilidad de la aplicación de hacer dos
--- inserts separados (clinics + clinic_members) y garantiza que
--- nunca haya una clínica sin un owner en clinic_members.
---
--- AFTER INSERT: se ejecuta después de que la fila en clinics existe,
--- lo que permite la FK clinic_members.clinic_id → clinics.id.
+-- Cuando se inserta en clinics, el trigger agrega al owner como
+-- miembro activo. Elimina la responsabilidad del frontend de hacer
+-- dos INSERTs separados y garantiza consistencia.
 
 CREATE OR REPLACE FUNCTION fn_add_owner_as_member()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
+DECLARE
+  v_email TEXT;
 BEGIN
-  INSERT INTO clinic_members (clinic_id, user_id, role)
-  VALUES (NEW.id, NEW.owner_id, 'owner')
-  ON CONFLICT (clinic_id, user_id) DO NOTHING;
+  SELECT email INTO v_email FROM auth.users WHERE id = NEW.owner_id;
+
+  INSERT INTO clinic_members (clinic_id, user_id, email, role, status)
+  VALUES (NEW.id, NEW.owner_id, v_email, 'owner', 'active')
+  ON CONFLICT (clinic_id, email) DO NOTHING;
 
   RETURN NEW;
 END;
@@ -220,50 +202,61 @@ CREATE TRIGGER trg_clinics_add_owner
 
 
 -- ─────────────────────────────────────────────────────────────
--- FIN DEL MIGRATION
+-- 7. TRIGGER: auto-activar invitación al registrarse
 -- ─────────────────────────────────────────────────────────────
+-- Cuando alguien se registra con un email que tiene invitación
+-- pendiente, el trigger automáticamente:
+--   1. Llena user_id con el nuevo auth.uid()
+--   2. Cambia status de 'invited' a 'active'
+--
+-- Resultado: el staff puede iniciar sesión inmediatamente después
+-- del signup sin ningún paso manual adicional.
+
+CREATE OR REPLACE FUNCTION fn_link_invitation_on_signup()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE clinic_members
+  SET    user_id = NEW.id,
+         status  = 'active'
+  WHERE  email   = NEW.email
+    AND  status  = 'invited'
+    AND  user_id IS NULL;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_link_invitation_on_signup
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION fn_link_invitation_on_signup();
 
 
 -- ============================================================
--- INSTRUCCIONES PARA EJECUTAR EN SUPABASE SQL EDITOR
+-- INSTRUCCIONES PARA EJECUTAR
 -- ============================================================
 --
--- 1. Ir a: https://supabase.com/dashboard/project/jmpyygecgqkeuwwaioew/sql/new
+-- 1. Ir a: supabase.com/dashboard → proyecto → SQL Editor → New query
 --
--- 2. Copiar TODO el contenido de este archivo (desde el inicio
---    hasta esta línea) y pegarlo en el editor SQL.
+-- 2. Pegar TODO el contenido de este archivo y ejecutar (Ctrl+Enter)
 --
--- 3. Hacer clic en "Run" (o Ctrl+Enter / Cmd+Enter).
+-- 3. Verificar con estas queries:
 --
--- 4. Verificar que no haya errores en el panel inferior.
---    Resultado esperado: "Success. No rows returned."
---
--- 5. Verificar la migración ejecutando estas queries de comprobación:
---
---    -- Comprobar que la tabla existe con la estructura correcta
+--    -- Estructura de la tabla
 --    SELECT column_name, data_type, is_nullable
 --    FROM information_schema.columns
 --    WHERE table_name = 'clinic_members'
 --    ORDER BY ordinal_position;
 --
---    -- Comprobar que el owner fue migrado como miembro
---    SELECT cm.clinic_id, cm.user_id, cm.role, c.name AS clinic_name
+--    -- Owners migrados (debe mostrar al menos 1 fila)
+--    SELECT cm.role, cm.status, cm.email, c.name
 --    FROM clinic_members cm
 --    JOIN clinics c ON c.id = cm.clinic_id;
 --
---    -- Comprobar los índices
---    SELECT indexname, indexdef
---    FROM pg_indexes
---    WHERE tablename = 'clinic_members';
---
---    -- Comprobar que fn_user_clinic_ids() fue actualizada
+--    -- Función actualizada
 --    SELECT prosrc FROM pg_proc WHERE proname = 'fn_user_clinic_ids';
---
--- 6. ⚠️  IMPORTANTE: Esta migración es IDEMPOTENTE en el INSERT
---    de owners (ON CONFLICT DO NOTHING), pero NO es seguro
---    ejecutarla más de una vez completa porque CREATE TABLE,
---    CREATE TRIGGER y CREATE INDEX fallarían en duplicados.
---    Si se necesita re-ejecutar, usar DROP TABLE clinic_members CASCADE
---    primero (solo en desarrollo, NUNCA en producción con datos).
 --
 -- ============================================================
