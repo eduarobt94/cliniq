@@ -9,15 +9,23 @@ export function AuthProvider({ children }) {
   const [clinic,          setClinic]          = useState(null);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [loading,         setLoading]         = useState(true);
+  const [networkError,    setNetworkError]    = useState(false);
 
   // Carga la clínica del usuario. Si no tiene → needsOnboarding = true.
+  // Si hay error de red, no modifica needsOnboarding para evitar falso onboarding.
   const loadClinic = useCallback(async (userId) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('clinics')
       .select('*')
       .eq('owner_id', userId)
       .maybeSingle();
 
+    if (error) {
+      setNetworkError(true);
+      return;
+    }
+
+    setNetworkError(false);
     setClinic(data ?? null);
     setNeedsOnboarding(!data);
   }, []);
@@ -76,6 +84,7 @@ export function AuthProvider({ children }) {
       user,
       clinic,
       needsOnboarding,
+      networkError,
       loading,
       login,
       signup,

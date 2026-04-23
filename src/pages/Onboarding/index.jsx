@@ -7,7 +7,7 @@ import { Icons, MonoLabel } from '../../components/ui';
 // Puede pasar si el signup falló justo después de crear el usuario en auth.
 export function Onboarding() {
   const navigate      = useNavigate();
-  const { createClinic, logout, user } = useAuth();
+  const { createClinic, logout, user, networkError } = useAuth();
 
   const [clinicName, setClinicName] = useState('');
   const [loading,    setLoading]    = useState(false);
@@ -36,6 +36,12 @@ export function Onboarding() {
           <span className="text-[17px] font-semibold tracking-tight">Cliniq</span>
         </div>
 
+        {networkError && (
+          <div role="alert" className="mb-6 px-4 py-3 rounded-[10px] bg-[color-mix(in_oklch,var(--cq-warn)_12%,transparent)] text-[var(--cq-warn)] text-[13px] leading-relaxed">
+            <strong className="font-semibold">Sin conexión con el servidor.</strong> El proyecto de Supabase puede estar pausado.
+            Entrá a <span className="font-mono">app.supabase.com</span>, seleccioná el proyecto y hacé clic en <em>Restore project</em>.
+          </div>
+        )}
         <MonoLabel>[ Último paso ]</MonoLabel>
         <h1 className="mt-3 text-[30px] font-semibold tracking-tight leading-tight">
           Poné el nombre de tu clínica
