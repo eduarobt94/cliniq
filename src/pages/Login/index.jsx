@@ -262,19 +262,12 @@ export function Login() {
 
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <span
-                        onClick={() => setRemember(!remember)}
-                        className={`w-4 h-4 rounded-[4px] border flex items-center justify-center transition-colors ${
-                          remember
-                            ? 'bg-[var(--cq-fg)] border-[var(--cq-fg)]'
-                            : 'border-[var(--cq-border)] bg-[var(--cq-surface)]'
-                        }`}
-                        role="checkbox"
-                        aria-checked={remember}
-                        tabIndex={0}
-                      >
-                        {remember && <Icons.Check size={10} />}
-                      </span>
+                      <input
+                        type="checkbox"
+                        checked={remember}
+                        onChange={(e) => setRemember(e.target.checked)}
+                        className="w-4 h-4 rounded-[4px] accent-[var(--cq-fg)] cursor-pointer"
+                      />
                       <span className="text-[13.5px] text-[var(--cq-fg-muted)]">
                         Mantener sesión iniciada
                       </span>

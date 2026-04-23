@@ -36,7 +36,7 @@ export function TopBar({ onMobileMenu, onNewAppointment }) {
 
       <div className="flex items-center gap-1.5">
         <button
-          className="w-9 h-9 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center relative"
+          className="w-11 h-11 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center relative"
           aria-label="Notificaciones"
         >
           <Icons.Bell size={15} />

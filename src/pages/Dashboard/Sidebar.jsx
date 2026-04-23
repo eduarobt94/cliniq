@@ -53,7 +53,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
           {!isIconOnly && variant !== 'icon' && (
             <button
               onClick={() => setCollapsed(true)}
-              className="hidden lg:inline-flex w-7 h-7 items-center justify-center rounded-[6px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] hover:bg-[var(--cq-surface-2)]"
+              className="hidden lg:inline-flex w-8 h-8 items-center justify-center rounded-[6px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] hover:bg-[var(--cq-surface-2)]"
               aria-label="Colapsar menú"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -64,7 +64,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
           {isIconOnly && variant !== 'icon' && (
             <button
               onClick={() => setCollapsed(false)}
-              className="hidden lg:inline-flex w-7 h-7 absolute top-4 right-[-14px] items-center justify-center rounded-full bg-[var(--cq-surface)] border border-[var(--cq-border)] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)]"
+              className="hidden lg:inline-flex w-8 h-8 absolute top-4 right-[-16px] items-center justify-center rounded-full bg-[var(--cq-surface)] border border-[var(--cq-border)] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)]"
               aria-label="Expandir menú"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -74,7 +74,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
           )}
           <button
             onClick={() => setMobileOpen(false)}
-            className="lg:hidden w-7 h-7 flex items-center justify-center"
+            className="lg:hidden w-11 h-11 flex items-center justify-center"
             aria-label="Cerrar menú"
           >
             <Icons.Close size={16} />
@@ -113,7 +113,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
                     title={isIconOnly ? it.label : undefined}
                     className={`w-full flex items-center gap-2.5 ${
                       isIconOnly ? 'justify-center px-0' : 'px-2.5'
-                    } h-9 rounded-[8px] text-[13.5px] transition-colors relative ${
+                    } h-11 rounded-[8px] text-[13.5px] transition-colors relative ${
                       active === it.id
                         ? 'bg-[var(--cq-surface-2)] text-[var(--cq-fg)] font-medium'
                         : 'text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] hover:text-[var(--cq-fg)]'
@@ -149,7 +149,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
                     title={isIconOnly ? it.label : undefined}
                     className={`w-full flex items-center gap-2.5 ${
                       isIconOnly ? 'justify-center px-0' : 'px-2.5'
-                    } h-9 rounded-[8px] text-[13.5px] transition-colors ${
+                    } h-11 rounded-[8px] text-[13.5px] transition-colors ${
                       active === it.id
                         ? 'bg-[var(--cq-surface-2)] text-[var(--cq-fg)] font-medium'
                         : 'text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] hover:text-[var(--cq-fg)]'
