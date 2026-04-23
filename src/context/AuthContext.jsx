@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import * as authService from '../lib/authService';
 
@@ -11,14 +11,22 @@ export function AuthProvider({ children }) {
   const [loading,         setLoading]         = useState(true);
   const [networkError,    setNetworkError]    = useState(false);
 
-  // Carga la clínica del usuario. Si no tiene → needsOnboarding = true.
-  // Si hay error de red, no modifica needsOnboarding para evitar falso onboarding.
+  // Ref para cancelar loadClinic si el usuario cambia antes de que termine.
+  const loadAbortRef = useRef(null);
+
   const loadClinic = useCallback(async (userId) => {
+    // Cancela cualquier carga previa en vuelo
+    const abortController = { cancelled: false };
+    loadAbortRef.current = abortController;
+
     const { data, error } = await supabase
       .from('clinics')
       .select('*')
       .eq('owner_id', userId)
       .maybeSingle();
+
+    // Si el usuario cambió mientras esperábamos, descartamos el resultado
+    if (abortController.cancelled) return;
 
     if (error) {
       setNetworkError(true);
@@ -30,27 +38,41 @@ export function AuthProvider({ children }) {
     setNeedsOnboarding(!data);
   }, []);
 
-  // onAuthStateChange dispara INITIAL_SESSION al montar — no necesitamos getSession()
-  // separado (evita race condition de dos loadClinic() simultáneos).
+  // ── 1. onAuthStateChange: SOLO sincrónico — nunca async/await aquí ──────────
+  // Si poné async acá, Supabase dispara SIGNED_IN + TOKEN_REFRESHED juntos en
+  // re-login y dos loadClinic() corren en paralelo con race condition de estado.
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         const u = session?.user ?? null;
         setUser(u);
-        if (u) {
-          await loadClinic(u.id);
-        } else {
+
+        if (event === 'SIGNED_OUT') {
+          // Cancela cualquier loadClinic en vuelo
+          if (loadAbortRef.current) loadAbortRef.current.cancelled = true;
           setClinic(null);
           setNeedsOnboarding(false);
+          setNetworkError(false);
         }
-        if (event === 'INITIAL_SESSION') setLoading(false);
+
+        if (event === 'INITIAL_SESSION') {
+          setLoading(false);
+        }
       }
     );
 
     return () => subscription.unsubscribe();
-  }, [loadClinic]);
+  }, []); // Sin dependencias: se registra una sola vez
 
-  // ── signUp: crea usuario + clínica ───────────────────────────────────────
+  // ── 2. Carga de clínica: reacciona a cambios de user.id — separado del listener
+  // Esto garantiza que loadClinic siempre corre con una sola instancia a la vez
+  // y que se re-ejecuta en cada login (cambio de user.id: null → uuid → null → uuid)
+  useEffect(() => {
+    if (!user?.id) return;
+    loadClinic(user.id);
+  }, [user?.id, loadClinic]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── signUp ────────────────────────────────────────────────────────────────
   async function signup(email, password, clinicName) {
     const result = await authService.signUp(email, password, clinicName);
     if (result.needsOnboarding) setNeedsOnboarding(true);
@@ -59,16 +81,20 @@ export function AuthProvider({ children }) {
 
   // ── login ─────────────────────────────────────────────────────────────────
   async function login(email, password) {
+    // onAuthStateChange maneja el estado automáticamente al dispararse SIGNED_IN
     return authService.signIn(email, password);
-    // onAuthStateChange actualiza user + clinic automáticamente
   }
 
   // ── logout ────────────────────────────────────────────────────────────────
   async function logout() {
-    await authService.signOut();
+    // Limpia el estado ANTES del await para que la UI sea inmediata
+    if (loadAbortRef.current) loadAbortRef.current.cancelled = true;
     setUser(null);
     setClinic(null);
     setNeedsOnboarding(false);
+    setNetworkError(false);
+    // El signOut dispara SIGNED_OUT en onAuthStateChange (redundante pero correcto)
+    await authService.signOut();
   }
 
   // ── createClinic: usado desde el onboarding (retry) ──────────────────────
