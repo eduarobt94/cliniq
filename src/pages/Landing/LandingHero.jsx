@@ -161,16 +161,16 @@ export function LandingHero({ onLogin, onSignup }) {
         <Reveal delay={400} className="mt-20 md:mt-28">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-[var(--cq-border)] border border-[var(--cq-border)] rounded-[14px] overflow-hidden">
             {[
-              { icon: '✓', l: 'Recordatorios automáticos', s: 'WhatsApp · sin intervención' },
-              { icon: '✓', l: 'Agenda siempre al día', s: 'confirmaciones en tiempo real' },
-              { icon: '✓', l: 'Seguimiento de presupuestos', s: 'sin llamadas manuales' },
-              { icon: '✓', l: 'Reportes semanales', s: 'en tu correo cada lunes' },
+              { Icon: Icons.Whatsapp,  l: 'Recordatorios automáticos', s: 'WhatsApp · sin intervención' },
+              { Icon: Icons.Calendar,  l: 'Agenda siempre al día',      s: 'confirmaciones en tiempo real' },
+              { Icon: Icons.Zap,       l: 'Seguimiento de presupuestos', s: 'sin llamadas manuales' },
+              { Icon: Icons.Chart,     l: 'Reportes semanales',         s: 'en tu correo cada lunes' },
             ].map((m, i) => (
               <div key={i} className="bg-[var(--cq-bg)] p-5 md:p-6">
-                <div className="text-[28px] md:text-[34px] tracking-tight font-semibold leading-none text-[var(--cq-accent)]">
-                  {m.icon}
+                <div className="w-9 h-9 rounded-[10px] bg-[var(--cq-accent-soft)] text-[var(--cq-accent)] flex items-center justify-center">
+                  <m.Icon size={18} />
                 </div>
-                <div className="mt-3 text-[14px] font-medium text-[var(--cq-fg)]">{m.l}</div>
+                <div className="mt-4 text-[14px] font-medium text-[var(--cq-fg)]">{m.l}</div>
                 <div className="mt-1 font-mono text-[10.5px] uppercase tracking-wider text-[var(--cq-fg-muted)]">
                   {m.s}
                 </div>
