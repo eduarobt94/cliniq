@@ -17,7 +17,7 @@ const steps = [
   {
     n: '03',
     title: 'Medís la diferencia en 30 días',
-    body: 'Turnos recuperados, horas ahorradas, dinero en la agenda. Si no cubre su costo, te devolvemos la plata.',
+    body: 'Turnos recuperados, horas ahorradas, dinero en la agenda. Un reporte claro con todo lo que Cliniq movió en el mes.',
     tag: 'Día 30',
   },
 ];

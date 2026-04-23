@@ -131,10 +131,9 @@ export function LandingHero({ onLogin, onSignup }) {
             <Reveal delay={120}>
               <p className="mt-8 text-[17px] md:text-[19px] text-[var(--cq-fg-muted)] max-w-[520px] leading-relaxed">
                 Cliniq conecta tu agenda, tus pacientes y tu WhatsApp con inteligencia
-                automatizada. Los turnos se confirman solos, los presupuestos se siguen solos, y vos
-                recuperás entre un{' '}
-                <strong className="text-[var(--cq-fg)] font-medium">20% y 35%</strong> de
-                facturación perdida.
+                automatizada. Los turnos se confirman solos, los presupuestos se siguen solos, y tu
+                equipo se enfoca en lo que importa:{' '}
+                <strong className="text-[var(--cq-fg)] font-medium">atender pacientes</strong>.
               </p>
             </Reveal>
 
@@ -158,20 +157,20 @@ export function LandingHero({ onLogin, onSignup }) {
           </Reveal>
         </div>
 
-        {/* Metric strip */}
+        {/* Value strip */}
         <Reveal delay={400} className="mt-20 md:mt-28">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-[var(--cq-border)] border border-[var(--cq-border)] rounded-[14px] overflow-hidden">
             {[
-              { n: '+28%', l: 'Facturación recuperada', s: 'promedio mes 2' },
-              { n: '92%', l: 'Turnos confirmados', s: 'vs. 68% manual' },
-              { n: '4.2h', l: 'Ahorro por semana', s: 'por recepcionista' },
-              { n: '<30d', l: 'Retorno de inversión', s: 'garantizado' },
+              { icon: '✓', l: 'Recordatorios automáticos', s: 'WhatsApp · sin intervención' },
+              { icon: '✓', l: 'Agenda siempre al día', s: 'confirmaciones en tiempo real' },
+              { icon: '✓', l: 'Seguimiento de presupuestos', s: 'sin llamadas manuales' },
+              { icon: '✓', l: 'Reportes semanales', s: 'en tu correo cada lunes' },
             ].map((m, i) => (
               <div key={i} className="bg-[var(--cq-bg)] p-5 md:p-6">
-                <div className="text-[32px] md:text-[40px] tracking-tight font-semibold leading-none">
-                  {m.n}
+                <div className="text-[28px] md:text-[34px] tracking-tight font-semibold leading-none text-[var(--cq-accent)]">
+                  {m.icon}
                 </div>
-                <div className="mt-2 text-[14px] text-[var(--cq-fg)]">{m.l}</div>
+                <div className="mt-3 text-[14px] font-medium text-[var(--cq-fg)]">{m.l}</div>
                 <div className="mt-1 font-mono text-[10.5px] uppercase tracking-wider text-[var(--cq-fg-muted)]">
                   {m.s}
                 </div>

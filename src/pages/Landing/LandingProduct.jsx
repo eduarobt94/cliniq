@@ -11,7 +11,7 @@ const features = [
   {
     n: '02',
     title: 'Presupuestos que no se olvidan',
-    body: 'Si un paciente recibió un presupuesto y no lo aprobó en 5 días, Cliniq le escribe. Amable, preciso, con tu tono de voz. El 60% responde.',
+    body: 'Si un paciente recibió un presupuesto y no lo aprobó en 5 días, Cliniq le escribe. Amable, preciso, con tu tono de voz. Sin que tu equipo tenga que recordarlo.',
     label: 'SEGUIMIENTO',
   },
   {

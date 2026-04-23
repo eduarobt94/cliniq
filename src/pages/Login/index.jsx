@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Icons, Button, MonoLabel, Divider } from '../../components/ui';
 
@@ -90,7 +90,7 @@ export function Login() {
         </div>
 
         <div className="relative max-w-[460px]">
-          <MonoLabel className="text-[var(--cq-bg)]/60">[ Sistema en línea · 99.98% ]</MonoLabel>
+          <MonoLabel className="text-[var(--cq-bg)]/60">[ Tu clínica en piloto automático ]</MonoLabel>
           <h1 className="mt-5 text-[44px] lg:text-[56px] leading-[1.02] tracking-[-0.03em] font-semibold">
             Bienvenida
             <br />
@@ -102,19 +102,22 @@ export function Login() {
             </span>
           </h1>
           <p className="mt-6 text-[15px] text-[var(--cq-bg)]/70 leading-relaxed">
-            Mientras dormías, Cliniq envió 18 recordatorios, confirmó 14 turnos y agendó 2 consultas
-            nuevas.
+            Confirmaciones, seguimientos y reportes. Todo corre solo mientras vos atendés.
           </p>
-          <div className="mt-8 space-y-2">
+          <div className="mt-8 space-y-4">
             {[
-              { t: '02:14', m: 'Reporte semanal generado' },
-              { t: '07:00', m: 'Recordatorios WhatsApp enviados · 18' },
-              { t: '08:42', m: 'Turno confirmado · Camila A.' },
-            ].map((e, i) => (
-              <div key={i} className="flex items-center gap-3 text-[13px]">
-                <span className="font-mono text-[var(--cq-bg)]/50 w-10">{e.t}</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--cq-accent)]" />
-                <span className="text-[var(--cq-bg)]/85">{e.m}</span>
+              'Recordatorios automáticos por WhatsApp',
+              'Agenda confirmada sin llamadas manuales',
+              'Seguimiento de presupuestos sin esfuerzo',
+              'Reporte semanal en tu correo cada lunes',
+            ].map((item, i) => (
+              <div key={i} className="flex items-center gap-3 text-[13.5px]">
+                <span className="w-5 h-5 rounded-full bg-[var(--cq-accent)] flex items-center justify-center shrink-0">
+                  <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
+                    <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <span className="text-[var(--cq-bg)]/85">{item}</span>
               </div>
             ))}
           </div>
@@ -145,12 +148,12 @@ export function Login() {
           </div>
           <div className="text-[13px] text-[var(--cq-fg-muted)]">
             ¿Nuevo?{' '}
-            <a
-              href="#"
+            <Link
+              to="/signup"
               className="text-[var(--cq-fg)] underline underline-offset-4 decoration-[var(--cq-border)] hover:decoration-[var(--cq-accent)]"
             >
               Crear clínica
-            </a>
+            </Link>
           </div>
         </header>
 
