@@ -2,8 +2,8 @@ const base =
   'inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--cq-accent)] focus-visible:ring-offset-[var(--cq-bg)] disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap';
 
 const sizes = {
-  sm: 'text-[13px] px-3 h-8 rounded-[7px]',
-  md: 'text-[14px] px-4 h-10 rounded-[9px]',
+  sm: 'text-[13px] px-3 h-9 rounded-[7px]',
+  md: 'text-[14px] px-4 h-11 rounded-[9px]',
   lg: 'text-[15px] px-5 h-12 rounded-[10px]',
 };
 

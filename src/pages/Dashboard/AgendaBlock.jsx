@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState, useEffect } from 'react';
 import { Icons, Badge, Card, Avatar, MonoLabel, Divider } from '../../components/ui';
 
 const STATUS_MAP = {
@@ -74,7 +74,7 @@ const AppointmentRow = memo(({ appt, isNow }) => {
       </div>
       <StatusPill status={normalized.status} />
       <button
-        className="w-7 h-7 rounded-[6px] hover:bg-[var(--cq-surface-3)] opacity-0 group-hover:opacity-100 flex items-center justify-center focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[var(--cq-accent)]"
+        className="w-9 h-9 rounded-[6px] hover:bg-[var(--cq-surface-3)] opacity-0 group-hover:opacity-100 flex items-center justify-center focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[var(--cq-accent)]"
         aria-label={`Acciones para ${normalized.name}`}
       >
         <Icons.More size={14} />
@@ -83,7 +83,17 @@ const AppointmentRow = memo(({ appt, isNow }) => {
   );
 });
 
+function useTodayLabel() {
+  const [label, setLabel] = useState('');
+  useEffect(() => {
+    const fmt = new Date().toLocaleDateString('es-UY', { weekday: 'long', day: 'numeric', month: 'long' });
+    setLabel(fmt.charAt(0).toUpperCase() + fmt.slice(1));
+  }, []);
+  return label;
+}
+
 export function AgendaBlock({ appointments, loading }) {
+  const todayLabel = useTodayLabel();
   const usingReal = appointments !== undefined;
   const displayAppts = usingReal ? appointments : APPTS;
 
@@ -96,7 +106,7 @@ export function AgendaBlock({ appointments, loading }) {
       <div className="flex items-center justify-between p-5 pb-4">
         <div>
           <MonoLabel>Agenda · Hoy</MonoLabel>
-          <h3 className="mt-1 text-[18px] font-semibold tracking-tight">Lunes 20 abril</h3>
+          <h3 className="mt-1 text-[18px] font-semibold tracking-tight">{todayLabel}</h3>
         </div>
         <div className="flex items-center gap-1.5">
           {loading ? (

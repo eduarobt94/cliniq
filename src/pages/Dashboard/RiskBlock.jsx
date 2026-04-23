@@ -38,7 +38,7 @@ export function RiskBlock() {
           </li>
         ))}
       </ul>
-      <button className="mt-4 w-full h-9 rounded-[8px] bg-[var(--cq-fg)] text-[var(--cq-bg)] text-[12.5px] font-medium hover:bg-[var(--cq-accent)] transition-colors inline-flex items-center justify-center gap-1.5">
+      <button className="mt-4 w-full h-11 rounded-[8px] bg-[var(--cq-fg)] text-[var(--cq-bg)] text-[13px] font-medium hover:bg-[var(--cq-accent)] transition-colors inline-flex items-center justify-center gap-1.5">
         Activar recuperación <Icons.Sparkle size={11} />
       </button>
     </Card>

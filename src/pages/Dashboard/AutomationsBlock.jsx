@@ -28,7 +28,14 @@ const AutomationRow = memo(({ flow }) => {
         <div className="flex-1 min-w-0">
           <div className="text-[13.5px] font-medium truncate">{flow.name}</div>
           <div className="mt-1 flex items-center gap-2">
-            <div className="flex-1 h-1 rounded-full bg-[var(--cq-surface-3)] overflow-hidden max-w-[120px]">
+            <div
+              role="progressbar"
+              aria-valuenow={pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`Tasa de éxito: ${pct}%`}
+              className="flex-1 h-1 rounded-full bg-[var(--cq-surface-3)] overflow-hidden max-w-[120px]"
+            >
               <div className="h-full bg-[var(--cq-success)]" style={{ width: `${pct}%` }} />
             </div>
             <MonoLabel>{flow.ok}/{flow.runs} OK</MonoLabel>

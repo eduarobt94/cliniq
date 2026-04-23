@@ -41,7 +41,7 @@ export function InboxBlock() {
                 </span>
                 {m.auto && <MonoLabel className="text-[var(--cq-success)]">auto</MonoLabel>}
                 {m.bot && <MonoLabel className="text-[var(--cq-accent)]">bot</MonoLabel>}
-                <span className="ml-auto font-mono text-[10.5px] text-[var(--cq-fg-muted)]">
+                <span className="ml-auto font-mono text-[11px] text-[var(--cq-fg-muted)]">
                   {m.time}
                 </span>
               </div>

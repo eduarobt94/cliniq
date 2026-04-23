@@ -25,7 +25,7 @@ export function QuickActionsBlock({ onNew }) {
               className="h-20 rounded-[10px] border border-[var(--cq-border)] hover:border-[var(--cq-fg)] hover:bg-[var(--cq-surface-2)] transition-all flex flex-col items-start justify-between p-3 text-left group"
             >
               <Icon size={16} />
-              <span className="text-[12.5px] font-medium">{a.l}</span>
+              <span className="text-[13px] font-medium">{a.l}</span>
             </button>
           );
         })}

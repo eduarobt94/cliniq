@@ -74,8 +74,19 @@ function useGreeting() {
   return { saludo, fecha: `${fecha} · ${hora} UYT` };
 }
 
-const GreetingStrip = memo(function GreetingStrip({ onNewAppointment, clinicName }) {
+const GreetingStrip = memo(function GreetingStrip({ onNewAppointment, clinicName, kpis, kpisLoading }) {
   const { saludo, fecha } = useGreeting();
+
+  const subline = kpisLoading
+    ? 'Cargando resumen del día…'
+    : kpis && kpis.total_today > 0
+    ? <>
+        Cliniq tiene{' '}
+        <strong className="text-[var(--cq-fg)] font-medium">{kpis.total_today} turnos</strong> hoy ·{' '}
+        <strong className="text-[var(--cq-fg)] font-medium">{kpis.confirmed_today} confirmados</strong> hasta ahora.
+      </>
+    : 'Sin turnos registrados por ahora. ¡Buen momento para agregar uno!';
+
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
       <div>
@@ -83,11 +94,7 @@ const GreetingStrip = memo(function GreetingStrip({ onNewAppointment, clinicName
         <h2 className="mt-2 text-[28px] md:text-[34px] tracking-[-0.02em] font-semibold leading-tight">
           {clinicName ? `${saludo}, ${clinicName}.` : `${saludo}.`}
         </h2>
-        <p className="text-[14px] text-[var(--cq-fg-muted)]">
-          Mientras desayunabas, Cliniq confirmó{' '}
-          <strong className="text-[var(--cq-fg)] font-medium">11 turnos</strong> y agendó{' '}
-          <strong className="text-[var(--cq-fg)] font-medium">2 consultas nuevas</strong>.
-        </p>
+        <p className="text-[14px] text-[var(--cq-fg-muted)]">{subline}</p>
       </div>
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm">
@@ -144,7 +151,7 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
           onNewAppointment={openModal}
         />
         <main className={`flex-1 overflow-y-auto ${padClass}`}>
-          <GreetingStrip onNewAppointment={openModal} clinicName={clinic?.name} />
+          <GreetingStrip onNewAppointment={openModal} clinicName={clinic?.name} kpis={kpis} kpisLoading={kpisLoading} />
 
           {/* KPI strip */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--cq-border)] border border-[var(--cq-border)] rounded-[14px] overflow-hidden mb-5">
@@ -171,7 +178,7 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
 
           <div className="mt-8 flex items-center justify-between text-[12px] text-[var(--cq-fg-muted)]">
             <MonoLabel>Cliniq v2.4.1 · Sistema operativo</MonoLabel>
-            <button onClick={() => { logout(); navigate('/login'); }} className="hover:text-[var(--cq-fg)]">
+            <button onClick={() => { logout(); navigate('/login'); }} className="hover:text-[var(--cq-fg)] cursor-pointer px-2 py-1">
               Cerrar sesión
             </button>
           </div>

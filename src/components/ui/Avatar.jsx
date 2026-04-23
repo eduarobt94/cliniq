@@ -14,9 +14,10 @@ export function Avatar({ name = '', size = 32, tone = 'neutral' }) {
 
   return (
     <div
+      role="img"
+      aria-label={name}
       className={`rounded-full flex items-center justify-center font-medium shrink-0 ${tones[tone]}`}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}
-      aria-label={name}
     >
       {initials}
     </div>
