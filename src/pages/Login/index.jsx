@@ -46,12 +46,12 @@ export function Login() {
   const { login } = useAuth();
   const { toasts, push: pushToast, dismiss } = useToast();
 
-  const [email, setEmail] = useState('');
+  const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
-  const [showPwd, setShowPwd] = useState(false);
+  const [showPwd,  setShowPwd]  = useState(false);
   const [remember, setRemember] = useState(true);
-  const [touched, setTouched] = useState({ email: false, password: false });
-  const [loading, setLoading] = useState(false);
+  const [touched,  setTouched]  = useState({ email: false, password: false });
+  const [loading,  setLoading]  = useState(false);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const passwordValid = password.length >= 6;
@@ -76,12 +76,6 @@ export function Login() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillDemo = () => {
-    setEmail('maria@bonomi.uy');
-    setPassword('demo1234');
-    setTouched({ email: false, password: false });
   };
 
   return (
@@ -293,7 +287,7 @@ export function Login() {
                     </a>
                   </div>
 
-                  <div className="pt-2 space-y-3">
+                  <div className="pt-2">
                     <button
                       type="submit"
                       disabled={loading}
@@ -309,14 +303,6 @@ export function Login() {
                           Entrar al panel <Icons.Arrow size={13} />
                         </>
                       )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={fillDemo}
-                      className="w-full h-10 rounded-[10px] border border-dashed border-[var(--cq-border)] text-[13px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] hover:border-[var(--cq-fg)] transition-all inline-flex items-center justify-center gap-2"
-                    >
-                      <Icons.Sparkle size={12} /> Probar con cuenta demo
                     </button>
                   </div>
                 </fieldset>

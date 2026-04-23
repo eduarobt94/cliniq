@@ -12,7 +12,7 @@ export function Toast({ message, type = 'error', duration = 4000, onDismiss }) {
 
   const colors =
     type === 'error'
-      ? 'bg-[var(--cq-fg)] text-[var(--cq-bg)]'
+      ? 'bg-[var(--cq-danger)] text-white'
       : 'bg-[var(--cq-success)] text-white';
 
   return (

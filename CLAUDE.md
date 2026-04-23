@@ -19,23 +19,28 @@ SaaS de automatización para clínicas médicas en Uruguay. Gestiona turnos, pac
 ## Estructura del proyecto
 ```
 src/
-  components/ui/          ← Button, Badge, Card, Avatar, Icons, Typography
+  components/ui/          ← Button, Badge, Card, Avatar, Icons, Typography, Toast
   components/ErrorBoundary.jsx
   components/ProtectedRoute.jsx
   context/AuthContext.jsx  ← Auth con Supabase real
-  hooks/                   ← useClinic, useAppointments, useKpis, usePatients
-  lib/supabase.js          ← cliente Supabase singleton
-  pages/Landing/
-  pages/Login/
-  pages/Dashboard/         ← AgendaBlock y KPIs ya conectados a Supabase
+  hooks/                   ← useClinic, useAppointments, useKpis, usePatients, useMembers
+  lib/
+    supabase.js            ← cliente Supabase singleton
+    authService.js         ← lógica pura de auth (signUp, createClinic)
+  pages/Landing/           ← LandingHero, LandingProduct, LandingHow, LandingStory, LandingPricing, LandingNav, LandingFooter
+  pages/Login/             ← formulario de login con toast de error
+  pages/Signup/            ← registro con nombre de clínica
+  pages/Onboarding/        ← recuperación si clinic creation falló post-signup
+  pages/Dashboard/         ← AgendaBlock y KPIs conectados a Supabase
   pages/NotFound/
-  styles/globals.css       ← variables --cq-* (design tokens)
+  styles/globals.css       ← variables --cq-* (design tokens) + keyframes
   App.jsx                  ← ErrorBoundary + AuthProvider + ProtectedRoute + Routes
   main.jsx
 supabase/
   migrations/
-    20260420000000_cliniq_mvp.sql         ← tablas, RLS, vistas, triggers (YA EJECUTADA)
-    20260422000000_cliniq_optimizations.sql ← índices extra, fn_user_clinic_ids() (YA EJECUTADA)
+    20260420000000_cliniq_mvp.sql            ← tablas, RLS, vistas, triggers (YA EJECUTADA)
+    20260422000000_cliniq_optimizations.sql  ← índices extra, fn_user_clinic_ids() (YA EJECUTADA)
+    20260423000000_clinic_members.sql        ← tabla clinic_members, multi-user (PENDIENTE ejecutar)
   seed.sql                 ← 6 pacientes + 6 turnos de prueba (reemplazar UUID antes de ejecutar)
 ```
 
@@ -47,6 +52,7 @@ supabase/
 
 ### Tablas
 - `clinics` — raíz multi-tenant. `owner_id` FK → `auth.users.id`
+- `clinic_members` — multi-usuario por clínica. roles: owner / staff / viewer
 - `patients` — UNIQUE(clinic_id, phone_number). Teléfono en formato E.164
 - `appointments` — tabla central. ENUM status: new/pending/confirmed/rescheduled/cancelled
 
@@ -55,11 +61,10 @@ supabase/
 - `v_clinic_kpis_today` — conteos del día por clínica
 
 ### Seguridad
-- RLS activado en clinics, patients, appointments
-- `fn_user_clinic_ids()` — función STABLE SECURITY DEFINER que deduplica subqueries RLS
-- Realtime habilitado solo en `appointments`
+- RLS activado en clinics, patients, appointments, clinic_members
+- `fn_user_clinic_ids()` — STABLE SECURITY DEFINER con UNION para owner + membership
 
-### ⚠️ Migraciones — NO volver a ejecutar, ya están aplicadas en producción
+### ⚠️ Migraciones — NO volver a ejecutar las ya aplicadas en producción
 
 ---
 
@@ -74,18 +79,29 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_...clave de Supabase → Settings → API 
 
 ## Auth
 - `AuthContext.jsx` usa `supabase.auth` (signInWithPassword, signUp, signOut, onAuthStateChange)
-- `ProtectedRoute` → redirige a `/login` si no hay sesión activa
-- Usuario de prueba creado: `maria@bonomi.uy` / `demo1234`
-- Para crear usuarios: Supabase Dashboard → Authentication → Users → Add user → copiar UUID
+- `authService.js` — lógica pura: signUp crea user + clinic; si clinic falla → needsOnboarding=true
+- `ProtectedRoute` → redirige a `/login` si no hay sesión, a `/onboarding` si needsOnboarding
+- Usuario de prueba: `maria@bonomi.uy` / `demo1234`
+- Flujo: `/signup` → crea user + clinic → `/dashboard`; si falla clinic → `/onboarding`
 
 ---
 
 ## Hooks de datos (src/hooks/)
 Todos leen de Supabase. Retornan `{ data, loading, error }`.
-- `useClinic()` — clínica del usuario logueado
+- `useClinic()` — clínica del usuario (query a clinic_members con join)
 - `useAppointments()` — turnos de hoy + suscripción Realtime automática
 - `useKpis()` — KPIs del dashboard desde v_clinic_kpis_today
 - `usePatients()` — lista de pacientes (limit 50)
+- `useMembers(clinicId)` — miembros de la clínica + addMember / removeMember
+
+---
+
+## UI Components (src/components/ui/)
+- `Button`, `Badge`, `Card`, `Avatar`, `Icons`, `MonoLabel`, `SectionLabel`, `Divider`
+- `Toast` / `ToastContainer` / `useToast` — notificaciones auto-dismiss (4s), color rojo mate para errores
+- Colores: siempre `var(--cq-*)`, nunca hardcoded
+- Fuentes: Geist (sans), Geist Mono, Instrument Serif (solo itálicas)
+- Idioma: español rioplatense / Uruguay en toda la UI
 
 ---
 
@@ -99,14 +115,8 @@ Todos leen de Supabase. Retornan `{ data, loading, error }`.
 | RevenueBlock | ⏳ Mockeado |
 | InboxBlock | ⏳ Mockeado |
 | RiskBlock | ⏳ Mockeado |
-
----
-
-## Diseño
-- Colores: siempre `var(--cq-*)`, nunca hardcoded. Definidos en `src/styles/globals.css`
-- Fuentes: Geist (sans), Geist Mono, Instrument Serif (solo itálicas)
-- UI primitives en `src/components/ui/` — nunca duplicar
-- Idioma: español rioplatense / Uruguay en toda la UI
+| QuickActionsBlock | ⏳ Mockeado |
+| SystemBlock | ⏳ Mockeado |
 
 ---
 
@@ -114,9 +124,8 @@ Todos leen de Supabase. Retornan `{ data, loading, error }`.
 ```bash
 npm run dev      # servidor local → localhost:5173
 npm run build    # build de producción (debe pasar sin errores)
-git add .
-git commit -m "mensaje"
-git push
+git add -p       # revisar cambios antes de commit
+git push -u origin main
 ```
 
 ---
