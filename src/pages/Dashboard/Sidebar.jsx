@@ -38,7 +38,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
         aria-label="Navegación lateral"
         className={`fixed lg:static inset-y-0 left-0 z-50 lg:z-0 transition-transform duration-300 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        } ${base} flex flex-col shrink-0`}
+        } ${base} flex flex-col shrink-0 h-screen lg:h-auto`}
       >
         {/* Brand */}
         <div
@@ -97,8 +97,8 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
           </div>
         )}
 
-        {/* Nav */}
-        <nav className="flex-1 p-3 overflow-y-auto" aria-label="Secciones">
+        {/* Nav — ocupa el espacio disponible, scroll interno solo si hay muchos ítems */}
+        <nav className="flex-1 p-3 overflow-y-auto min-h-0" aria-label="Secciones">
           {!isIconOnly && (
             <MonoLabel className="px-2.5 block mb-2 mt-2">Espacio de trabajo</MonoLabel>
           )}

@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, useEffect, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useKpis } from '../../hooks/useKpis';
@@ -55,13 +55,33 @@ const KpiCard = memo(function KpiCard({ label, value, delta, trend, hint, loadin
   );
 });
 
+function useGreeting() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const hour = now.getHours();
+  const saludo = hour < 12 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches';
+
+  const fecha = now.toLocaleDateString('es-UY', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  }).replace(/\./g, '').replace(/,/g, ' ·');
+
+  const hora = now.toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
+
+  return { saludo, fecha: `${fecha} · ${hora} UYT` };
+}
+
 const GreetingStrip = memo(function GreetingStrip({ onNewAppointment, clinicName }) {
+  const { saludo, fecha } = useGreeting();
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
       <div>
-        <MonoLabel>Lun · 20 abr · 2026 · 09:14 UYT</MonoLabel>
+        <MonoLabel>{fecha}</MonoLabel>
         <h2 className="mt-2 text-[28px] md:text-[34px] tracking-[-0.02em] font-semibold leading-tight">
-          {clinicName ? `Buen día, ${clinicName}.` : 'Buen día.'}
+          {clinicName ? `${saludo}, ${clinicName}.` : `${saludo}.`}
         </h2>
         <p className="text-[14px] text-[var(--cq-fg-muted)]">
           Mientras desayunabas, Cliniq confirmó{' '}
@@ -151,7 +171,7 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
 
           <div className="mt-8 flex items-center justify-between text-[12px] text-[var(--cq-fg-muted)]">
             <MonoLabel>Cliniq v2.4.1 · Sistema operativo</MonoLabel>
-            <button onClick={() => { logout(); navigate('/'); }} className="hover:text-[var(--cq-fg)]">
+            <button onClick={() => { logout(); navigate('/login'); }} className="hover:text-[var(--cq-fg)]">
               Cerrar sesión
             </button>
           </div>
