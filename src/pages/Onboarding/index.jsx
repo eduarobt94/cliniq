@@ -1,17 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Icons, MonoLabel } from '../../components/ui';
 
-// Pantalla de recuperación cuando el usuario existe pero no tiene clínica.
-// Puede pasar si el signup falló justo después de crear el usuario en auth.
+// Pantalla de recuperación: el usuario existe en auth pero no tiene clínica.
+// Ocurre si el signup falló justo después de crear el usuario.
+// Guard: si ya tiene clínica, redirige al dashboard inmediatamente.
 export function Onboarding() {
   const navigate      = useNavigate();
-  const { createClinic, logout, user, networkError } = useAuth();
+  const { createClinic, logout, user, clinic, networkError } = useAuth();
 
   const [clinicName, setClinicName] = useState('');
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState('');
+
+  // Guard: si ya tiene clínica, no mostrar esta pantalla
+  useEffect(() => {
+    if (clinic) navigate('/dashboard', { replace: true });
+  }, [clinic, navigate]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -37,11 +43,12 @@ export function Onboarding() {
         </div>
 
         {networkError && (
-          <div role="alert" className="mb-6 px-4 py-3 rounded-[10px] bg-[color-mix(in_oklch,var(--cq-warn)_12%,transparent)] text-[var(--cq-warn)] text-[13px] leading-relaxed">
+          <div role="alert" className="mb-6 px-4 py-3 rounded-[10px] bg-[color-mix(in_oklch,var(--cq-warn)_12%,transparent)] text-[var(--cq-warn)] text-[13px] leading-relaxed border border-[color-mix(in_oklch,var(--cq-warn)_30%,transparent)]">
             <strong className="font-semibold">Sin conexión con el servidor.</strong> El proyecto de Supabase puede estar pausado.
-            Entrá a <span className="font-mono">app.supabase.com</span>, seleccioná el proyecto y hacé clic en <em>Restore project</em>.
+            Entrá a <span className="font-mono">app.supabase.com</span> y hacé clic en <em>Restore project</em>.
           </div>
         )}
+
         <MonoLabel>[ Último paso ]</MonoLabel>
         <h1 className="mt-3 text-[30px] font-semibold tracking-tight leading-tight">
           Poné el nombre de tu clínica
@@ -65,14 +72,14 @@ export function Onboarding() {
             </div>
 
             {error && (
-              <div role="alert" className="px-3 py-2 rounded-lg bg-[color-mix(in_oklch,var(--cq-danger)_12%,transparent)] text-[var(--cq-danger)] text-[13px]">
+              <div role="alert" className="px-3 py-2 rounded-lg bg-[color-mix(in_oklch,var(--cq-danger)_12%,transparent)] text-[var(--cq-danger)] text-[13px] border border-[color-mix(in_oklch,var(--cq-danger)_30%,transparent)]">
                 {error}
               </div>
             )}
 
             <button
               type="submit"
-              disabled={clinicName.trim().length < 2}
+              disabled={clinicName.trim().length < 2 || loading}
               className="w-full h-12 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] font-medium hover:bg-[var(--cq-accent)] disabled:opacity-50 transition-all inline-flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -89,7 +96,7 @@ export function Onboarding() {
 
         <button
           onClick={logout}
-          className="mt-6 w-full text-[13px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] text-center transition-colors"
+          className="mt-6 w-full text-[13px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] text-center transition-colors cursor-pointer"
         >
           Cerrar sesión ({user?.email})
         </button>

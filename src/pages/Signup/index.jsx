@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Icons, MonoLabel, Divider } from '../../components/ui';
 
@@ -25,7 +25,12 @@ function Field({ label, icon, error, success, children }) {
 
 export function Signup() {
   const navigate  = useNavigate();
-  const { signup } = useAuth();
+  const { signup, user, clinic, needsOnboarding, loading } = useAuth();
+
+  // Guard: si ya tiene sesión y clínica, ir al dashboard
+  if (!loading && user && !needsOnboarding) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const [firstName,  setFirstName]  = useState('');
   const [lastName,   setLastName]   = useState('');
@@ -36,7 +41,7 @@ export function Signup() {
   const [touched,    setTouched]    = useState({
     firstName: false, lastName: false, clinic: false, email: false, password: false,
   });
-  const [loading,    setLoading]    = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error,      setError]      = useState('');
 
   const firstNameValid = firstName.trim().length >= 2;
@@ -53,7 +58,7 @@ export function Signup() {
     setError('');
     if (!allValid) return;
 
-    setLoading(true);
+    setSubmitting(true);
     try {
       const { needsOnboarding } = await signup(email, password, clinicName, firstName, lastName);
       navigate(needsOnboarding ? '/onboarding' : '/dashboard');
@@ -64,7 +69,7 @@ export function Signup() {
           : err.message
       );
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -134,7 +139,7 @@ export function Signup() {
             </p>
 
             <form onSubmit={onSubmit} className="mt-8 space-y-4" noValidate>
-              <fieldset disabled={loading} className="contents">
+              <fieldset disabled={submitting} className="contents">
 
                 {/* Nombre y apellido en fila */}
                 <div className="grid grid-cols-2 gap-3">
@@ -240,7 +245,7 @@ export function Signup() {
                   type="submit"
                   className="w-full h-12 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] font-medium hover:bg-[var(--cq-accent)] disabled:opacity-70 transition-all active:scale-[0.99] inline-flex items-center justify-center gap-2"
                 >
-                  {loading ? (
+                  {submitting ? (
                     <>
                       <span className="w-4 h-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
                       Creando tu clínica…
