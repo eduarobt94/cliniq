@@ -5,7 +5,7 @@ import { Icons, MonoLabel, Divider, ToastContainer, useToast } from '../../compo
 
 function Field({ label, icon, right, error, success, children }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1">
       <label className="flex items-center justify-between">
         <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--cq-fg-muted)]">
           {label}
