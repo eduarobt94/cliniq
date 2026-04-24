@@ -5,15 +5,15 @@ import { Icons, MonoLabel, Divider, ToastContainer, useToast } from '../../compo
 
 function Field({ label, icon, right, error, success, children }) {
   return (
-    <div>
-      <label className="flex items-center justify-between mb-1.5">
+    <div className="flex flex-col gap-2">
+      <label className="flex items-center justify-between">
         <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--cq-fg-muted)]">
           {label}
         </span>
         {error && <span className="text-[11px] text-[var(--cq-danger)]">{error}</span>}
       </label>
       <div
-        className={`flex items-center gap-2 h-12 px-4 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-[var(--cq-accent)] focus-within:ring-offset-[var(--cq-bg)] ${
+        className={`flex items-center gap-2 h-12 px-4 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-fg)] focus-within:ring-1 focus-within:ring-[var(--cq-fg)] ${
           error
             ? 'border-[var(--cq-danger)]'
             : success
