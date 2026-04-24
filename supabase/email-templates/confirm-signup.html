@@ -4,9 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Confirmá tu cuenta — Cliniq</title>
+  <style>
+    @media (prefers-color-scheme: light) {
+      .body-wrap  { background-color: #f4f4f5 !important; }
+      .card       { background-color: #ffffff !important; border-color: #e4e4e7 !important; }
+      .tag        { color: #a1a1aa !important; }
+      .heading    { color: #09090b !important; }
+      .body-text  { color: #52525b !important; }
+      .fallback-label { color: #a1a1aa !important; }
+      .footer-text{ color: #a1a1aa !important; }
+    }
+  </style>
 </head>
-<body style="margin:0;padding:0;background-color:#0f0f0f;font-family:'Helvetica Neue',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f0f0f;padding:40px 16px;">
+<body class="body-wrap" style="margin:0;padding:0;background-color:#0f0f0f;font-family:'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" class="body-wrap" style="background-color:#0f0f0f;padding:40px 16px;">
     <tr>
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
@@ -29,20 +40,20 @@
 
           <!-- Card -->
           <tr>
-            <td style="background-color:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:40px 36px;">
+            <td class="card" style="background-color:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:40px 36px;">
 
               <!-- Tag -->
-              <p style="margin:0 0 20px 0;font-family:'Courier New',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#666666;">
+              <p class="tag" style="margin:0 0 20px 0;font-family:'Courier New',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#666666;">
                 [ Confirmación de cuenta ]
               </p>
 
               <!-- Heading -->
-              <h1 style="margin:0 0 12px 0;color:#ffffff;font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.2;">
+              <h1 class="heading" style="margin:0 0 12px 0;color:#ffffff;font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.2;">
                 Confirmá tu correo
               </h1>
 
               <!-- Body -->
-              <p style="margin:0 0 32px 0;color:#a0a0a0;font-size:15px;line-height:1.6;">
+              <p class="body-text" style="margin:0 0 32px 0;color:#a0a0a0;font-size:15px;line-height:1.6;">
                 Gracias por registrarte en Cliniq. Hacé clic en el botón para confirmar tu dirección de correo y acceder a tu panel.
               </p>
 
@@ -62,7 +73,7 @@
               <hr style="border:none;border-top:1px solid #2a2a2a;margin:32px 0;" />
 
               <!-- Fallback link -->
-              <p style="margin:0 0 8px 0;color:#666666;font-size:12px;">
+              <p class="fallback-label" style="margin:0 0 8px 0;color:#666666;font-size:12px;">
                 Si el botón no funciona, copiá este link en tu navegador:
               </p>
               <p style="margin:0;word-break:break-all;">
@@ -77,7 +88,7 @@
           <!-- Footer -->
           <tr>
             <td style="padding-top:28px;padding-bottom:8px;">
-              <p style="margin:0;color:#444444;font-size:12px;line-height:1.5;text-align:center;">
+              <p class="footer-text" style="margin:0;color:#444444;font-size:12px;line-height:1.5;text-align:center;">
                 Si no creaste esta cuenta, podés ignorar este correo.<br />
                 Cliniq · Montevideo, Uruguay
               </p>

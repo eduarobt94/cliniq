@@ -61,8 +61,8 @@ export function ResetPassword() {
         <form onSubmit={onSubmit} className="mt-8 space-y-4" noValidate>
           <fieldset disabled={loading} className="contents">
             {/* Nueva contraseña */}
-            <div>
-              <label className="flex items-center justify-between mb-1.5">
+            <div className="flex flex-col gap-1">
+              <label className="flex items-center justify-between">
                 <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--cq-fg-muted)]">
                   Nueva contraseña
                 </span>
@@ -70,7 +70,7 @@ export function ResetPassword() {
                   <span className="text-[11px] text-[var(--cq-danger)]">Mínimo 6 caracteres</span>
                 )}
               </label>
-              <div className={`flex items-center gap-2 h-12 px-4 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:ring-2 focus-within:ring-[var(--cq-accent)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--cq-bg)] ${
+              <div className={`flex items-center gap-2 h-12 px-4 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-success)] focus-within:ring-1 focus-within:ring-[var(--cq-success)] ${
                 password.length > 0 && !passwordValid ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'
               }`}>
                 <Icons.Lock size={15} className="text-[var(--cq-fg-muted)] shrink-0" />
@@ -95,8 +95,8 @@ export function ResetPassword() {
             </div>
 
             {/* Confirmar contraseña */}
-            <div>
-              <label className="flex items-center justify-between mb-1.5">
+            <div className="flex flex-col gap-1">
+              <label className="flex items-center justify-between">
                 <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--cq-fg-muted)]">
                   Repetir contraseña
                 </span>
@@ -104,7 +104,7 @@ export function ResetPassword() {
                   <span className="text-[11px] text-[var(--cq-danger)]">No coinciden</span>
                 )}
               </label>
-              <div className={`flex items-center gap-2 h-12 px-4 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:ring-2 focus-within:ring-[var(--cq-accent)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--cq-bg)] ${
+              <div className={`flex items-center gap-2 h-12 px-4 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-success)] focus-within:ring-1 focus-within:ring-[var(--cq-success)] ${
                 password2.length > 0 && !passwordMatch ? 'border-[var(--cq-danger)]' : passwordMatch ? 'border-[var(--cq-fg)]' : 'border-[var(--cq-border)]'
               }`}>
                 <Icons.Lock size={15} className="text-[var(--cq-fg-muted)] shrink-0" />
@@ -133,6 +133,7 @@ export function ResetPassword() {
               </div>
             )}
 
+            <div className="pt-4">
             <button
               type="submit"
               disabled={!passwordValid || !passwordMatch || loading}
@@ -147,6 +148,7 @@ export function ResetPassword() {
                 <>Guardar contraseña <Icons.Arrow size={13} /></>
               )}
             </button>
+            </div>
           </fieldset>
         </form>
       </div>
