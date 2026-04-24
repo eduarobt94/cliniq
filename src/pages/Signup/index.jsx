@@ -70,6 +70,8 @@ export function Signup() {
       setError(
         err.message.includes('already registered')
           ? 'Ya existe una cuenta con ese correo.'
+          : err.message.includes('sending confirmation email') || err.message.includes('unexpected_failure')
+          ? 'No se pudo enviar el correo de confirmación. Verificá tu conexión o intentá de nuevo.'
           : err.message
       );
     } finally {
