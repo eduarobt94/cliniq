@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Confirmá tu cuenta — Cliniq</title>
+</head>
+<body style="margin:0;padding:0;background-color:#0f0f0f;font-family:'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f0f0f;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
+
+          <!-- Logo -->
+          <tr>
+            <td style="padding-bottom:32px;">
+              <table cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding-right:8px;vertical-align:middle;">
+                    <div style="width:28px;height:28px;background-color:#16a34a;border-radius:6px;display:inline-block;"></div>
+                  </td>
+                  <td style="vertical-align:middle;">
+                    <span style="color:#ffffff;font-size:18px;font-weight:600;letter-spacing:-0.02em;">Cliniq</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Card -->
+          <tr>
+            <td style="background-color:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:40px 36px;">
+
+              <!-- Tag -->
+              <p style="margin:0 0 20px 0;font-family:'Courier New',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#666666;">
+                [ Confirmación de cuenta ]
+              </p>
+
+              <!-- Heading -->
+              <h1 style="margin:0 0 12px 0;color:#ffffff;font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.2;">
+                Confirmá tu correo
+              </h1>
+
+              <!-- Body -->
+              <p style="margin:0 0 32px 0;color:#a0a0a0;font-size:15px;line-height:1.6;">
+                Gracias por registrarte en Cliniq. Hacé clic en el botón para confirmar tu dirección de correo y acceder a tu panel.
+              </p>
+
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td>
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:block;background-color:#16a34a;color:#ffffff;text-decoration:none;text-align:center;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;letter-spacing:-0.01em;">
+                      Confirmar mi cuenta →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Divider -->
+              <hr style="border:none;border-top:1px solid #2a2a2a;margin:32px 0;" />
+
+              <!-- Fallback link -->
+              <p style="margin:0 0 8px 0;color:#666666;font-size:12px;">
+                Si el botón no funciona, copiá este link en tu navegador:
+              </p>
+              <p style="margin:0;word-break:break-all;">
+                <a href="{{ .ConfirmationURL }}" style="color:#16a34a;font-size:12px;text-decoration:none;">
+                  {{ .ConfirmationURL }}
+                </a>
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding-top:28px;padding-bottom:8px;">
+              <p style="margin:0;color:#444444;font-size:12px;line-height:1.5;text-align:center;">
+                Si no creaste esta cuenta, podés ignorar este correo.<br />
+                Cliniq · Montevideo, Uruguay
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
