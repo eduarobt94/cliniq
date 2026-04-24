@@ -10,6 +10,7 @@ export function AuthProvider({ children }) {
   const [role,                setRole]                = useState(null);   // 'owner' | 'staff' | 'viewer'
   const [profile,             setProfile]             = useState(null);   // { first_name, last_name }
   const [needsOnboarding,     setNeedsOnboarding]     = useState(false);
+  const [emailConfirmed,      setEmailConfirmed]      = useState(null);   // null=desconocido, true, false
   const [passwordRecoveryMode, setPasswordRecoveryMode] = useState(false);
   const [loading,             setLoading]             = useState(true);
   const [networkError,        setNetworkError]        = useState(false);
@@ -109,6 +110,7 @@ export function AuthProvider({ children }) {
           setRole(null);
           setProfile(null);
           setNeedsOnboarding(false);
+          setEmailConfirmed(null);
           setNetworkError(false);
           setPasswordRecoveryMode(false);
         }
@@ -127,13 +129,25 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── 2. Carga de membresía reactiva a user.id ──────────────────────────────
-  // Separado del listener para evitar async dentro de onAuthStateChange.
-  // No corre en modo recovery (el usuario está autenticado temporalmente solo para cambiar pwd).
+  // ── 2. Verificación de email + carga de membresía ────────────────────────
+  // Corre cuando cambia user.id o email_confirmed_at (Supabase actualiza el
+  // objeto user cuando el usuario confirma su email → EMAIL_VERIFIED).
+  // En modo recovery el usuario está temporalmente autenticado solo para
+  // cambiar contraseña, no cargar membresía.
   useEffect(() => {
-    if (!user?.id || passwordRecoveryMode) return;
-    loadMembership(user.id);
-  }, [user?.id, passwordRecoveryMode, loadMembership]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!user?.id || passwordRecoveryMode) {
+      if (!user) setEmailConfirmed(null);
+      return;
+    }
+
+    const confirmed = !!user.email_confirmed_at;
+    setEmailConfirmed(confirmed);
+
+    // Solo cargar membresía si el email está verificado
+    if (confirmed) {
+      loadMembership(user.id);
+    }
+  }, [user?.id, user?.email_confirmed_at, passwordRecoveryMode, loadMembership]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── signUp ────────────────────────────────────────────────────────────────
   async function signup(email, password, clinicName, firstName, lastName) {
@@ -177,6 +191,11 @@ export function AuthProvider({ children }) {
     await loadMembership(user.id);
   }
 
+  // ── resendConfirmation ────────────────────────────────────────────────────
+  async function resendConfirmation(email) {
+    return authService.resendConfirmationEmail(email);
+  }
+
   // ── sendPasswordReset ─────────────────────────────────────────────────────
   async function sendPasswordReset(email) {
     return authService.resetPasswordForEmail(email);
@@ -196,6 +215,7 @@ export function AuthProvider({ children }) {
       role,
       profile,
       needsOnboarding,
+      emailConfirmed,
       passwordRecoveryMode,
       networkError,
       loading,
@@ -204,6 +224,7 @@ export function AuthProvider({ children }) {
       signup,
       logout,
       createClinic,
+      resendConfirmation,
       sendPasswordReset,
       updatePassword,
     }}>

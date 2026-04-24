@@ -6,6 +6,9 @@ export async function signUp(email, password, clinicName, firstName, lastName) {
     email,
     password,
     options: {
+      // Después de confirmar email, el link redirige a /auth/callback
+      // que ya maneja la sesión y redirige a onboarding o dashboard.
+      emailRedirectTo: `${window.location.origin}/auth/callback`,
       data: {
         first_name: firstName?.trim() ?? '',
         last_name:  lastName?.trim()  ?? '',
@@ -17,6 +20,12 @@ export async function signUp(email, password, clinicName, firstName, lastName) {
   const user = data.user;
   if (!user) throw new Error('No se pudo crear el usuario.');
 
+  // Supabase devuelve session=null cuando la confirmación de email está activa.
+  // En ese caso NO intentamos crear la clínica todavía — lo haremos post-confirmación.
+  if (!data.session) {
+    return { user, session: null, needsEmailVerification: true, needsOnboarding: false };
+  }
+
   // Chequear si el trigger activó una invitación pendiente (staff invitado)
   const { data: membership } = await supabase
     .from('clinic_members')
@@ -25,12 +34,12 @@ export async function signUp(email, password, clinicName, firstName, lastName) {
     .eq('status', 'active')
     .maybeSingle();
 
-  if (membership) return { user, needsOnboarding: false };
+  if (membership) return { user, session: data.session, needsEmailVerification: false, needsOnboarding: false };
 
-  if (!clinicName?.trim()) return { user, needsOnboarding: true };
+  if (!clinicName?.trim()) return { user, session: data.session, needsEmailVerification: false, needsOnboarding: true };
 
   const clinicError = await createClinic(clinicName, firstName, lastName);
-  return { user, needsOnboarding: !!clinicError };
+  return { user, session: data.session, needsEmailVerification: false, needsOnboarding: !!clinicError };
 }
 
 // ─── Sign In ─────────────────────────────────────────────────────────────────
@@ -94,6 +103,18 @@ export async function resetPasswordForEmail(email) {
 // ─── Update Password (desde sesión de recovery) ──────────────────────────────
 export async function updatePassword(newPassword) {
   const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+}
+
+// ─── Reenviar email de confirmación ──────────────────────────────────────────
+export async function resendConfirmationEmail(email) {
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: {
+      emailRedirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
   if (error) throw error;
 }
 

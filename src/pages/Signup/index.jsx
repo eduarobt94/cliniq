@@ -60,8 +60,12 @@ export function Signup() {
 
     setSubmitting(true);
     try {
-      const { needsOnboarding } = await signup(email, password, clinicName, firstName, lastName);
-      navigate(needsOnboarding ? '/onboarding' : '/dashboard');
+      const result = await signup(email, password, clinicName, firstName, lastName);
+      if (result.needsEmailVerification) {
+        navigate('/verify-email', { state: { email }, replace: true });
+        return;
+      }
+      navigate(result.needsOnboarding ? '/onboarding' : '/dashboard');
     } catch (err) {
       setError(
         err.message.includes('already registered')

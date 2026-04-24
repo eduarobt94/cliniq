@@ -75,7 +75,7 @@ export function Login() {
     } catch (err) {
       pushToast(
         err.message === 'Invalid login credentials'
-          ? 'Email o contraseña incorrectos.'
+          ? 'Email o contraseña incorrectos. ¿Accedés con Google? Probá el botón de arriba.'
           : err.message,
         'error'
       );
