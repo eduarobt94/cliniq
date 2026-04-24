@@ -13,7 +13,7 @@ function Field({ label, icon, right, error, success, children }) {
         {error && <span className="text-[11px] text-[var(--cq-danger)]">{error}</span>}
       </label>
       <div
-        className={`flex items-center gap-2 h-12 px-4 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-fg)] focus-within:ring-1 focus-within:ring-[var(--cq-fg)] ${
+        className={`flex items-center gap-2 h-12 px-4 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-success)] focus-within:ring-1 focus-within:ring-[var(--cq-success)] ${
           error
             ? 'border-[var(--cq-danger)]'
             : success
@@ -287,7 +287,7 @@ export function Login() {
                     </Link>
                   </div>
 
-                  <div className="pt-1">
+                  <div className="pt-4">
                     <button
                       type="submit"
                       disabled={submitting || googleLoading}

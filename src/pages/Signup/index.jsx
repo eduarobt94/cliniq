@@ -12,7 +12,7 @@ function Field({ label, icon, error, success, children }) {
         </span>
         {error && <span className="text-[11px] text-[var(--cq-danger)]">{error}</span>}
       </label>
-      <div className={`flex items-center gap-2 h-11 px-3.5 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-fg)] focus-within:ring-1 focus-within:ring-[var(--cq-fg)] ${
+      <div className={`flex items-center gap-2 h-11 px-3.5 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-success)] focus-within:ring-1 focus-within:ring-[var(--cq-success)] ${
         error ? 'border-[var(--cq-danger)]' : success ? 'border-[var(--cq-fg)]' : 'border-[var(--cq-border)]'
       }`}>
         {icon && <span className="text-[var(--cq-fg-muted)] shrink-0">{icon}</span>}
@@ -243,7 +243,7 @@ export function Signup() {
 
                 <button
                   type="submit"
-                  className="w-full h-12 mt-1 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] font-medium hover:bg-[var(--cq-accent)] disabled:opacity-70 transition-all active:scale-[0.99] inline-flex items-center justify-center gap-2"
+                  className="w-full h-12 mt-4 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] font-medium hover:bg-[var(--cq-accent)] disabled:opacity-70 transition-all active:scale-[0.99] inline-flex items-center justify-center gap-2"
                 >
                   {submitting ? (
                     <>
