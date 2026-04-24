@@ -27,29 +27,35 @@ export function Signup() {
   const navigate  = useNavigate();
   const { signup } = useAuth();
 
+  const [firstName,  setFirstName]  = useState('');
+  const [lastName,   setLastName]   = useState('');
   const [clinicName, setClinicName] = useState('');
   const [email,      setEmail]      = useState('');
   const [password,   setPassword]   = useState('');
   const [showPwd,    setShowPwd]    = useState(false);
-  const [touched,    setTouched]    = useState({ clinic: false, email: false, password: false });
+  const [touched,    setTouched]    = useState({
+    firstName: false, lastName: false, clinic: false, email: false, password: false,
+  });
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState('');
 
-  const clinicValid   = clinicName.trim().length >= 2;
-  const emailValid    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const passwordValid = password.length >= 6;
+  const firstNameValid = firstName.trim().length >= 2;
+  const lastNameValid  = lastName.trim().length >= 2;
+  const clinicValid    = clinicName.trim().length >= 2;
+  const emailValid     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const passwordValid  = password.length >= 6;
 
-  const allValid = clinicValid && emailValid && passwordValid;
+  const allValid = firstNameValid && lastNameValid && clinicValid && emailValid && passwordValid;
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    setTouched({ clinic: true, email: true, password: true });
+    setTouched({ firstName: true, lastName: true, clinic: true, email: true, password: true });
     setError('');
     if (!allValid) return;
 
     setLoading(true);
     try {
-      const { needsOnboarding } = await signup(email, password, clinicName);
+      const { needsOnboarding } = await signup(email, password, clinicName, firstName, lastName);
       navigate(needsOnboarding ? '/onboarding' : '/dashboard');
     } catch (err) {
       setError(
@@ -72,7 +78,7 @@ export function Signup() {
           <span className="text-[17px] font-semibold tracking-tight">Cliniq</span>
         </div>
         <div className="relative max-w-[460px]">
-          <MonoLabel className="text-[var(--cq-bg)]/60">[ Nueva clínica ]</MonoLabel>
+          <MonoLabel className="text-[var(--cq-bg)]/60">[ Para dueños de clínica ]</MonoLabel>
           <h1 className="mt-5 text-[44px] lg:text-[52px] leading-[1.02] tracking-[-0.03em] font-semibold">
             Tu clínica en
             <br />
@@ -81,13 +87,13 @@ export function Signup() {
             </span>
           </h1>
           <p className="mt-6 text-[15px] text-[var(--cq-bg)]/70 leading-relaxed">
-            Configurá tu clínica en 2 minutos. Sin tarjeta de crédito.
+            Registrate como dueño y administrá tu clínica. Invitá a tu equipo desde el dashboard.
           </p>
           <div className="mt-8 space-y-3">
             {[
               'Recordatorios automáticos por WhatsApp',
               'Dashboard con KPIs en tiempo real',
-              'Sin instalar nada — todo en la nube',
+              'Invitá a tu equipo sin costo adicional',
             ].map((item) => (
               <div key={item} className="flex items-center gap-3 text-[13.5px]">
                 <span className="w-5 h-5 rounded-full bg-[var(--cq-accent)] flex items-center justify-center shrink-0">
@@ -119,7 +125,7 @@ export function Signup() {
 
         <div className="flex-1 flex items-center justify-center px-5 md:px-10 py-6">
           <div className="w-full max-w-[420px]">
-            <MonoLabel>[ Registro / Paso 1 de 1 ]</MonoLabel>
+            <MonoLabel>[ Registro de clínica ]</MonoLabel>
             <h2 className="mt-3 text-[30px] md:text-[36px] tracking-[-0.02em] font-semibold leading-[1.05]">
               Crear cuenta
             </h2>
@@ -129,6 +135,41 @@ export function Signup() {
 
             <form onSubmit={onSubmit} className="mt-8 space-y-4" noValidate>
               <fieldset disabled={loading} className="contents">
+
+                {/* Nombre y apellido en fila */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Field
+                    label="Nombre"
+                    error={touched.firstName && !firstNameValid ? 'Requerido' : ''}
+                    success={touched.firstName && firstNameValid}
+                  >
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      onBlur={() => setTouched((t) => ({ ...t, firstName: true }))}
+                      placeholder="María"
+                      autoComplete="given-name"
+                      className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)] min-w-0"
+                    />
+                  </Field>
+                  <Field
+                    label="Apellido"
+                    error={touched.lastName && !lastNameValid ? 'Requerido' : ''}
+                    success={touched.lastName && lastNameValid}
+                  >
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      onBlur={() => setTouched((t) => ({ ...t, lastName: true }))}
+                      placeholder="Bonomi"
+                      autoComplete="family-name"
+                      className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)] min-w-0"
+                    />
+                  </Field>
+                </div>
+
                 <Field
                   label="Nombre de la clínica"
                   icon={<Icons.Home size={15} />}
@@ -169,14 +210,6 @@ export function Signup() {
                   icon={<Icons.Lock size={15} />}
                   error={touched.password && !passwordValid ? 'Mínimo 6 caracteres' : ''}
                   success={touched.password && passwordValid}
-                  right={
-                    <button type="button" onClick={() => setShowPwd((v) => !v)}
-                      className="text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)]"
-                      aria-label={showPwd ? 'Ocultar' : 'Mostrar'}
-                    >
-                      <Icons.Eye size={15} open={!showPwd} />
-                    </button>
-                  }
                 >
                   <input
                     type={showPwd ? 'text' : 'password'}
@@ -187,6 +220,14 @@ export function Signup() {
                     autoComplete="new-password"
                     className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)]"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwd((v) => !v)}
+                    className="text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] shrink-0"
+                    aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    <Icons.Eye size={15} open={!showPwd} />
+                  </button>
                 </Field>
 
                 {error && (
@@ -211,7 +252,13 @@ export function Signup() {
               </fieldset>
             </form>
 
-            <p className="mt-6 text-center text-[12px] text-[var(--cq-fg-muted)]">
+            <p className="mt-5 text-center text-[12px] text-[var(--cq-fg-muted)]">
+              ¿Tu clínica ya usa Cliniq y te invitaron?{' '}
+              <Link to="/login" className="underline underline-offset-2 hover:text-[var(--cq-fg)]">
+                Iniciá sesión acá.
+              </Link>
+            </p>
+            <p className="mt-3 text-center text-[12px] text-[var(--cq-fg-muted)]">
               Al registrarte aceptás los{' '}
               <a href="#" className="underline underline-offset-2 hover:text-[var(--cq-fg)]">Términos de servicio</a>
               {' '}y la{' '}
