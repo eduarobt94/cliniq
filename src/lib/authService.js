@@ -119,16 +119,31 @@ export async function resendConfirmationEmail(email) {
 }
 
 // ─── Invite Member ───────────────────────────────────────────────────────────
-export async function inviteMember(clinicId, email, role, invitedBy) {
-  const { error } = await supabase.from('clinic_members').insert({
-    clinic_id:  clinicId,
-    user_id:    null,
-    email:      email.trim().toLowerCase(),
-    role:       role ?? 'staff',
-    status:     'invited',
-    invited_by: invitedBy,
+// Crea o renueva una invitación pendiente. Devuelve el invite_token UUID.
+export async function inviteMember(clinicId, email, role) {
+  const { data, error } = await supabase.rpc('create_member_invite', {
+    p_clinic_id: clinicId,
+    p_email:     email,
+    p_role:      role ?? 'staff',
   });
-  return error ?? null;
+  if (error) throw error;
+  return data; // UUID del invite_token
+}
+
+// ─── Get Invite By Token ──────────────────────────────────────────────────────
+// Pública (anon). Devuelve { clinic_id, clinic_name, email, role, status } o null.
+export async function getInviteByToken(token) {
+  const { data, error } = await supabase.rpc('get_invite_by_token', { p_token: token });
+  if (error) throw error;
+  return data?.[0] ?? null;
+}
+
+// ─── Accept Invite ────────────────────────────────────────────────────────────
+// Vincula auth.uid() a la invitación. El email del usuario debe coincidir.
+export async function acceptInvite(token) {
+  const { data, error } = await supabase.rpc('accept_member_invite', { p_token: token });
+  if (error) throw error;
+  return data;
 }
 
 // ─── Get Session ─────────────────────────────────────────────────────────────

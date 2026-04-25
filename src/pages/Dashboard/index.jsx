@@ -16,6 +16,7 @@ import { RiskBlock } from './RiskBlock';
 import { QuickActionsBlock } from './QuickActionsBlock';
 import { SystemBlock } from './SystemBlock';
 import { NewAppointmentModal } from './NewAppointmentModal';
+import { InviteMemberModal } from './InviteMemberModal';
 
 const KpiSkeleton = memo(function KpiSkeleton() {
   return (
@@ -114,14 +115,17 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
   const [active, setActive] = useState('overview');
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalOpen,  setModalOpen]  = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const { kpis, loading: kpisLoading } = useKpis();
   const { clinic } = useClinic();
   const { appointments, loading: appointmentsLoading } = useAppointments();
 
-  const openModal  = useCallback(() => setModalOpen(true),  []);
-  const closeModal = useCallback(() => setModalOpen(false), []);
+  const openModal   = useCallback(() => setModalOpen(true),  []);
+  const closeModal  = useCallback(() => setModalOpen(false), []);
+  const openInvite  = useCallback(() => setInviteOpen(true),  []);
+  const closeInvite = useCallback(() => setInviteOpen(false), []);
   const openMobileMenu = useCallback(() => setMobileOpen(true), []);
 
   const gapClass = density === 'compact' ? 'gap-3' : 'gap-5';
@@ -172,7 +176,7 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
           </div>
           <div className={`grid lg:grid-cols-3 ${gapClass} mt-5`}>
             <RiskBlock />
-            <QuickActionsBlock onNew={() => setModalOpen(true)} />
+            <QuickActionsBlock onNew={openModal} onInvite={openInvite} />
             <SystemBlock />
           </div>
 
@@ -185,6 +189,7 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
         </main>
       </div>
       <NewAppointmentModal open={modalOpen} onClose={closeModal} />
+      <InviteMemberModal open={inviteOpen} onClose={closeInvite} clinicId={clinic?.id} />
     </div>
   );
 }

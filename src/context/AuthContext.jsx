@@ -191,6 +191,12 @@ export function AuthProvider({ children }) {
     await loadMembership(user.id);
   }
 
+  // ── refreshMembership ─────────────────────────────────────────────────────
+  // Fuerza recarga de membresía (útil después de aceptar una invitación).
+  async function refreshMembership() {
+    if (user?.id) await loadMembership(user.id);
+  }
+
   // ── resendConfirmation ────────────────────────────────────────────────────
   async function resendConfirmation(email) {
     return authService.resendConfirmationEmail(email);
@@ -224,6 +230,7 @@ export function AuthProvider({ children }) {
       signup,
       logout,
       createClinic,
+      refreshMembership,
       resendConfirmation,
       sendPasswordReset,
       updatePassword,

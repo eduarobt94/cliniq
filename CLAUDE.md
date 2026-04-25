@@ -3,15 +3,16 @@
 ## ⚡ INICIO RÁPIDO DE SESIÓN
 > Leé esta sección primero. Resume el estado actual y qué hacer a continuación.
 
-**Último trabajo completado (2026-04-23):**
-- Landing page: copy real (sin métricas falsas), sección Antes/Después reemplaza testimonial falso
-- Login: toast de error rojo mate, animación stagger en beneficios, espaciado mejorado
-- Auth: race condition en AuthContext corregida (eliminado getSession duplicado)
-- Seguridad: CSP meta tag en index.html + netlify.toml + vercel.json con headers completos
-- QA: auditoría estática (27 escenarios, 87% score), .env.example saneado
+**Último trabajo completado (2026-04-25):**
+- Flujo completo de invitación de staff: token UUID, RPCs en Supabase, página /accept-invite, modal en Dashboard
+- Auth: emailConfirmed state, VerifyEmail page, ProtectedRoute con pathname check, fix onboarding loop
+- Email templates: confirm-signup y reset-password con tema blanco siempre
+- ResetPassword: fix focus ring, espaciado botón
 
 **Próximas tareas priorizadas:**
-1. 🔴 Ejecutar migración `20260423000000_clinic_members.sql` en Supabase (multi-usuario)
+1. 🔴 Ejecutar migraciones en Supabase en orden:
+   - `20260423000000_clinic_members.sql` (tabla multi-usuario)
+   - `20260425000000_invite_flow.sql` (columna invite_token + RPCs)
 2. 🟡 Conectar `NewAppointmentModal` a Supabase (actualmente es mock, no guarda)
 3. 🟡 Conectar `AutomationsBlock` a datos reales
 4. 🟡 Conectar `InboxBlock` a datos reales

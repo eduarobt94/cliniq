@@ -10,6 +10,7 @@ import { ForgotPassword }  from './pages/ForgotPassword';
 import { ResetPassword }   from './pages/ResetPassword';
 import { VerifyEmail }     from './pages/VerifyEmail';
 import { AuthCallback }    from './pages/AuthCallback';
+import { AcceptInvite }    from './pages/AcceptInvite';
 import { Dashboard }       from './pages/Dashboard';
 import { NotFound }        from './pages/NotFound';
 
@@ -26,6 +27,7 @@ export function App() {
           <Route path="/auth/reset-password" element={<ResetPassword />} />
           <Route path="/auth/callback"       element={<AuthCallback />} />
           <Route path="/verify-email"        element={<VerifyEmail />} />
+          <Route path="/accept-invite"       element={<AcceptInvite />} />
 
           {/* Protegidas */}
           <Route path="/onboarding" element={

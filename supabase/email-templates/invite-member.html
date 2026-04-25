@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Invitación al equipo — Cliniq</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
+
+          <!-- Logo -->
+          <tr>
+            <td style="padding-bottom:32px;">
+              <table cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding-right:8px;vertical-align:middle;">
+                    <div style="width:28px;height:28px;background-color:#16a34a;border-radius:6px;display:inline-block;"></div>
+                  </td>
+                  <td style="vertical-align:middle;">
+                    <span style="color:#09090b;font-size:18px;font-weight:600;letter-spacing:-0.02em;">Cliniq</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Card -->
+          <tr>
+            <td style="background-color:#ffffff;border:1px solid #e4e4e7;border-radius:16px;padding:40px 36px;">
+
+              <!-- Tag -->
+              <p style="margin:0 0 20px 0;font-family:'Courier New',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#a1a1aa;">
+                [ Invitación al equipo ]
+              </p>
+
+              <!-- Heading -->
+              <h1 style="margin:0 0 12px 0;color:#09090b;font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.2;">
+                Te invitaron a unirte
+              </h1>
+
+              <!-- Body -->
+              <p style="margin:0 0 8px 0;color:#52525b;font-size:15px;line-height:1.6;">
+                Te invitaron a unirte al equipo de <strong style="color:#09090b;">{{ .ClinicName }}</strong> en Cliniq como <strong style="color:#09090b;">{{ .Role }}</strong>.
+              </p>
+              <p style="margin:0 0 32px 0;color:#52525b;font-size:15px;line-height:1.6;">
+                Hacé clic en el botón para crear tu cuenta y acceder al panel.
+              </p>
+
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td>
+                    <a href="{{ .InviteURL }}"
+                       style="display:block;background-color:#16a34a;color:#ffffff;text-decoration:none;text-align:center;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;letter-spacing:-0.01em;">
+                      Aceptar invitación →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Divider -->
+              <hr style="border:none;border-top:1px solid #e4e4e7;margin:32px 0;" />
+
+              <!-- Info note -->
+              <table cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td style="background-color:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px;">
+                    <p style="margin:0;color:#52525b;font-size:12px;line-height:1.5;">
+                      Esta invitación es personal y solo válida para este correo electrónico. Si no esperabas este mensaje, podés ignorarlo.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Fallback link -->
+              <p style="margin:24px 0 8px 0;color:#a1a1aa;font-size:12px;">
+                Si el botón no funciona, copiá este link en tu navegador:
+              </p>
+              <p style="margin:0;word-break:break-all;">
+                <a href="{{ .InviteURL }}" style="color:#16a34a;font-size:12px;text-decoration:none;">
+                  {{ .InviteURL }}
+                </a>
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding-top:28px;padding-bottom:8px;">
+              <p style="margin:0;color:#a1a1aa;font-size:12px;line-height:1.5;text-align:center;">
+                Cliniq · Montevideo, Uruguay
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

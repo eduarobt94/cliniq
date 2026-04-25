@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { useNavigate, Link, Navigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { getInviteByToken } from '../../lib/authService';
 import { Icons, MonoLabel, Divider } from '../../components/ui';
 
 function Field({ label, icon, error, success, children }) {
@@ -24,8 +25,10 @@ function Field({ label, icon, error, success, children }) {
 }
 
 export function Signup() {
-  const navigate  = useNavigate();
-  const { signup, user, clinic, needsOnboarding, loading } = useAuth();
+  const navigate     = useNavigate();
+  const [params]     = useSearchParams();
+  const inviteToken  = params.get('invite');
+  const { signup, user, needsOnboarding, loading } = useAuth();
 
   // Guard: si ya tiene sesión y clínica, ir al dashboard
   if (!loading && user && !needsOnboarding) {
@@ -41,12 +44,29 @@ export function Signup() {
   const [touched,    setTouched]    = useState({
     firstName: false, lastName: false, clinic: false, email: false, password: false,
   });
-  const [submitting, setSubmitting] = useState(false);
-  const [error,      setError]      = useState('');
+  const [submitting,   setSubmitting]   = useState(false);
+  const [error,        setError]        = useState('');
+  const [invite,       setInvite]       = useState(null);   // { clinic_name, email, role }
+  const [inviteLoading, setInviteLoading] = useState(!!inviteToken);
 
+  // Cargar datos de la invitación si hay token en la URL
+  useEffect(() => {
+    if (!inviteToken) return;
+    getInviteByToken(inviteToken)
+      .then((data) => {
+        if (data && data.status !== 'active') {
+          setInvite(data);
+          setEmail(data.email);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setInviteLoading(false));
+  }, [inviteToken]);
+
+  const isInviteMode = !!invite;
   const firstNameValid = firstName.trim().length >= 2;
   const lastNameValid  = lastName.trim().length >= 2;
-  const clinicValid    = clinicName.trim().length >= 2;
+  const clinicValid    = isInviteMode || clinicName.trim().length >= 2;
   const emailValid     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const passwordValid  = password.length >= 6;
 
@@ -60,7 +80,8 @@ export function Signup() {
 
     setSubmitting(true);
     try {
-      const result = await signup(email, password, clinicName, firstName, lastName);
+      // En modo invitación no se crea clínica; el trigger la vincula por email
+      const result = await signup(email, password, isInviteMode ? null : clinicName, firstName, lastName);
       if (result.needsEmailVerification) {
         navigate('/verify-email', { state: { email }, replace: true });
         return;
@@ -79,6 +100,14 @@ export function Signup() {
     }
   };
 
+  if (inviteLoading) {
+    return (
+      <div className="min-h-screen bg-[var(--cq-bg)] flex items-center justify-center">
+        <span className="w-6 h-6 border-2 border-[var(--cq-border)] border-t-[var(--cq-fg)] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[var(--cq-bg)] text-[var(--cq-fg)] grid lg:grid-cols-[1.1fr_1fr]">
       {/* Panel izquierdo */}
@@ -89,23 +118,38 @@ export function Signup() {
           <span className="text-[17px] font-semibold tracking-tight">Cliniq</span>
         </div>
         <div className="relative max-w-[460px]">
-          <MonoLabel className="text-[var(--cq-bg)]/60">[ Para dueños de clínica ]</MonoLabel>
+          <MonoLabel className="text-[var(--cq-bg)]/60">
+            {isInviteMode ? '[ Invitación al equipo ]' : '[ Para dueños de clínica ]'}
+          </MonoLabel>
           <h1 className="mt-5 text-[44px] lg:text-[52px] leading-[1.02] tracking-[-0.03em] font-semibold">
-            Tu clínica en
-            <br />
-            <span className="italic font-normal" style={{ fontFamily: 'Instrument Serif, serif' }}>
-              piloto automático.
-            </span>
+            {isInviteMode ? (
+              <>
+                Uniéndote a
+                <br />
+                <span className="italic font-normal" style={{ fontFamily: 'Instrument Serif, serif' }}>
+                  {invite.clinic_name}
+                </span>
+              </>
+            ) : (
+              <>
+                Tu clínica en
+                <br />
+                <span className="italic font-normal" style={{ fontFamily: 'Instrument Serif, serif' }}>
+                  piloto automático.
+                </span>
+              </>
+            )}
           </h1>
           <p className="mt-6 text-[15px] text-[var(--cq-bg)]/70 leading-relaxed">
-            Registrate como dueño y administrá tu clínica. Invitá a tu equipo desde el dashboard.
+            {isInviteMode
+              ? `Creá tu cuenta para unirte a ${invite.clinic_name} como parte del equipo.`
+              : 'Registrate como dueño y administrá tu clínica. Invitá a tu equipo desde el dashboard.'}
           </p>
           <div className="mt-8 space-y-3">
-            {[
-              'Recordatorios automáticos por WhatsApp',
-              'Dashboard con KPIs en tiempo real',
-              'Invitá a tu equipo sin costo adicional',
-            ].map((item) => (
+            {(isInviteMode
+              ? ['Acceso inmediato al panel', 'Gestión de turnos y pacientes', 'Automatizaciones activas desde el día uno']
+              : ['Recordatorios automáticos por WhatsApp', 'Dashboard con KPIs en tiempo real', 'Invitá a tu equipo sin costo adicional']
+            ).map((item) => (
               <div key={item} className="flex items-center gap-3 text-[13.5px]">
                 <span className="w-5 h-5 rounded-full bg-[var(--cq-accent)] flex items-center justify-center shrink-0">
                   <Icons.Check size={10} />
@@ -116,7 +160,9 @@ export function Signup() {
           </div>
         </div>
         <div className="relative">
-          <MonoLabel className="text-[var(--cq-bg)]/50">14 días gratis · Sin compromiso</MonoLabel>
+          <MonoLabel className="text-[var(--cq-bg)]/50">
+            {isInviteMode ? `Rol asignado · ${invite.role}` : '14 días gratis · Sin compromiso'}
+          </MonoLabel>
         </div>
       </aside>
 
@@ -136,12 +182,14 @@ export function Signup() {
 
         <div className="flex-1 flex items-center justify-center px-5 md:px-10 py-6">
           <div className="w-full max-w-[420px]">
-            <MonoLabel>[ Registro de clínica ]</MonoLabel>
+            <MonoLabel>{isInviteMode ? '[ Invitación al equipo ]' : '[ Registro de clínica ]'}</MonoLabel>
             <h2 className="mt-3 text-[30px] md:text-[36px] tracking-[-0.02em] font-semibold leading-[1.05]">
-              Crear cuenta
+              {isInviteMode ? 'Crear tu cuenta' : 'Crear cuenta'}
             </h2>
             <p className="mt-2 text-[14px] text-[var(--cq-fg-muted)]">
-              Tu clínica queda lista al instante.
+              {isInviteMode
+                ? <>Uniéndote a <strong className="text-[var(--cq-fg)]">{invite.clinic_name}</strong>.</>
+                : 'Tu clínica queda lista al instante.'}
             </p>
 
             <form onSubmit={onSubmit} className="mt-8 space-y-5" noValidate>
@@ -181,21 +229,23 @@ export function Signup() {
                   </Field>
                 </div>
 
-                <Field
-                  label="Nombre de la clínica"
-                  icon={<Icons.Home size={15} />}
-                  error={touched.clinic && !clinicValid ? 'Mínimo 2 caracteres' : ''}
-                  success={touched.clinic && clinicValid}
-                >
-                  <input
-                    type="text"
-                    value={clinicName}
-                    onChange={(e) => setClinicName(e.target.value)}
-                    onBlur={() => setTouched((t) => ({ ...t, clinic: true }))}
-                    placeholder="Clínica Bonomi"
-                    className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)]"
-                  />
-                </Field>
+                {!isInviteMode && (
+                  <Field
+                    label="Nombre de la clínica"
+                    icon={<Icons.Home size={15} />}
+                    error={touched.clinic && !clinicValid ? 'Mínimo 2 caracteres' : ''}
+                    success={touched.clinic && clinicValid}
+                  >
+                    <input
+                      type="text"
+                      value={clinicName}
+                      onChange={(e) => setClinicName(e.target.value)}
+                      onBlur={() => setTouched((t) => ({ ...t, clinic: true }))}
+                      placeholder="Clínica Bonomi"
+                      className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)]"
+                    />
+                  </Field>
+                )}
 
                 <Divider />
 
@@ -208,11 +258,12 @@ export function Signup() {
                   <input
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={isInviteMode ? undefined : (e) => setEmail(e.target.value)}
                     onBlur={() => setTouched((t) => ({ ...t, email: true }))}
                     placeholder="maria@clinica.uy"
                     autoComplete="email"
-                    className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)]"
+                    readOnly={isInviteMode}
+                    className={`flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)] ${isInviteMode ? 'cursor-default select-none' : ''}`}
                   />
                 </Field>
 

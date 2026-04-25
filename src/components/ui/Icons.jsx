@@ -146,4 +146,17 @@ export const Icons = {
       <path d="M1 8H4L5.5 3.5L8.5 12.5L10.5 8H15" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+  UserPlus: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="6.5" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M2 13C2 10.8 4 9.5 6.5 9.5C9 9.5 11 10.8 11 13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M13 6V10M11 8H15" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  ),
+  Copy: ({ size = 14 }) => (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <rect x="4.5" y="4.5" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M4.5 9.5H2.5C1.95 9.5 1.5 9.05 1.5 8.5V2.5C1.5 1.95 1.95 1.5 2.5 1.5H8.5C9.05 1.5 9.5 1.95 9.5 2.5V4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  ),
 };

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useNavigate, Link, Navigate } from 'react-router-dom';
+import { useNavigate, Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { acceptInvite } from '../../lib/authService';
 import { Icons, MonoLabel, Divider, ToastContainer, useToast } from '../../components/ui';
 
 function Field({ label, icon, right, error, success, children }) {
@@ -42,8 +43,10 @@ const BENEFITS = [
 ];
 
 export function Login() {
-  const navigate = useNavigate();
-  const { login, loginWithGoogle, user, clinic, needsOnboarding, loading } = useAuth();
+  const navigate     = useNavigate();
+  const [params]     = useSearchParams();
+  const inviteToken  = params.get('invite');
+  const { login, loginWithGoogle, user, needsOnboarding, loading, refreshMembership } = useAuth();
   const { toasts, push: pushToast, dismiss } = useToast();
 
   const [email,       setEmail]       = useState('');
@@ -71,7 +74,20 @@ export function Login() {
     setSubmitting(true);
     try {
       await login(email, password);
-      navigate(needsOnboarding ? '/onboarding' : '/dashboard');
+      if (inviteToken) {
+        try {
+          await acceptInvite(inviteToken);
+          await refreshMembership();
+        } catch (inviteErr) {
+          const msg = inviteErr.message?.includes('email_mismatch')
+            ? 'La invitación es para otro correo. Iniciá sesión con el correo correcto.'
+            : inviteErr.message?.includes('already_used')
+            ? null // ya aceptada — igual dejamos pasar al dashboard
+            : 'No se pudo vincular la invitación, pero tu sesión está activa.';
+          if (msg) pushToast(msg, 'error');
+        }
+      }
+      navigate('/dashboard');
     } catch (err) {
       pushToast(
         err.message === 'Invalid login credentials'

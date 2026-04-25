@@ -1,15 +1,17 @@
 import { Icons, Card, MonoLabel } from '../../components/ui';
 
 const BASE_ACTIONS = [
-  { id: 'new-appt',    l: 'Nuevo turno',    icon: Icons.Plus  },
-  { id: 'new-patient', l: 'Nuevo paciente', icon: Icons.Users },
-  { id: 'survey',      l: 'Enviar encuesta', icon: Icons.Chat },
-  { id: 'invoice',     l: 'Emitir factura', icon: Icons.Zap   },
+  { id: 'new-appt',    l: 'Nuevo turno',    icon: Icons.Plus     },
+  { id: 'new-patient', l: 'Nuevo paciente', icon: Icons.Users    },
+  { id: 'invite',      l: 'Invitar equipo', icon: Icons.UserPlus },
+  { id: 'invoice',     l: 'Emitir factura', icon: Icons.Zap      },
 ];
 
-export function QuickActionsBlock({ onNew }) {
+export function QuickActionsBlock({ onNew, onInvite }) {
   const actions = BASE_ACTIONS.map((a) =>
-    a.id === 'new-appt' ? { ...a, onClick: onNew } : a
+    a.id === 'new-appt'  ? { ...a, onClick: onNew    } :
+    a.id === 'invite'    ? { ...a, onClick: onInvite } :
+    a
   );
 
   return (
