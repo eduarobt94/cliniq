@@ -1,13 +1,12 @@
 import { useState, useCallback, useEffect, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useKpis } from '../../hooks/useKpis';
 import { useClinic } from '../../hooks/useClinic';
 import { useAppointments } from '../../hooks/useAppointments';
 import { Button, MonoLabel } from '../../components/ui';
 import { Icons } from '../../components/ui';
-import { Sidebar } from './Sidebar';
-import { TopBar } from './TopBar';
 import { AgendaBlock } from './AgendaBlock';
 import { AutomationsBlock } from './AutomationsBlock';
 import { RevenueBlock } from './RevenueBlock';
@@ -15,13 +14,9 @@ import { InboxBlock } from './InboxBlock';
 import { RiskBlock } from './RiskBlock';
 import { QuickActionsBlock } from './QuickActionsBlock';
 import { SystemBlock } from './SystemBlock';
-import { NewAppointmentModal } from './NewAppointmentModal';
-import { InviteMemberModal } from './InviteMemberModal';
 
 const KpiSkeleton = memo(function KpiSkeleton() {
-  return (
-    <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-8 w-20" />
-  );
+  return <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-8 w-20" />;
 });
 
 const KpiCard = memo(function KpiCard({ label, value, delta, trend, hint, loading }) {
@@ -30,20 +25,10 @@ const KpiCard = memo(function KpiCard({ label, value, delta, trend, hint, loadin
       <div className="flex items-center justify-between">
         <MonoLabel>{label}</MonoLabel>
         {delta && !loading && (
-          <span
-            className={`inline-flex items-center gap-1 text-[12px] font-medium ${
-              trend === 'up'
-                ? 'text-[var(--cq-success)]'
-                : trend === 'down'
-                ? 'text-[var(--cq-danger)]'
-                : 'text-[var(--cq-fg-muted)]'
-            }`}
-          >
-            {trend === 'up' ? (
-              <Icons.TrendUp size={12} />
-            ) : trend === 'down' ? (
-              <Icons.TrendDown size={12} />
-            ) : null}
+          <span className={`inline-flex items-center gap-1 text-[12px] font-medium ${
+            trend === 'up' ? 'text-[var(--cq-success)]' : trend === 'down' ? 'text-[var(--cq-danger)]' : 'text-[var(--cq-fg-muted)]'
+          }`}>
+            {trend === 'up' ? <Icons.TrendUp size={12} /> : trend === 'down' ? <Icons.TrendDown size={12} /> : null}
             {delta}
           </span>
         )}
@@ -62,30 +47,20 @@ function useGreeting() {
     const id = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(id);
   }, []);
-
-  const hour = now.getHours();
+  const hour   = now.getHours();
   const saludo = hour < 12 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches';
-
-  const fecha = now.toLocaleDateString('es-UY', {
-    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
-  }).replace(/\./g, '').replace(/,/g, ' ·');
-
-  const hora = now.toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
-
+  const fecha  = now.toLocaleDateString('es-UY', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+    .replace(/\./g, '').replace(/,/g, ' ·');
+  const hora   = now.toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
   return { saludo, fecha: `${fecha} · ${hora} UYT` };
 }
 
-const GreetingStrip = memo(function GreetingStrip({ onNewAppointment, clinicName, kpis, kpisLoading }) {
+const GreetingStrip = memo(function GreetingStrip({ clinicName, kpis, kpisLoading }) {
   const { saludo, fecha } = useGreeting();
-
   const subline = kpisLoading
     ? 'Cargando resumen del día…'
     : kpis && kpis.total_today > 0
-    ? <>
-        Cliniq tiene{' '}
-        <strong className="text-[var(--cq-fg)] font-medium">{kpis.total_today} turnos</strong> hoy ·{' '}
-        <strong className="text-[var(--cq-fg)] font-medium">{kpis.confirmed_today} confirmados</strong> hasta ahora.
-      </>
+    ? <><strong className="text-[var(--cq-fg)] font-medium">{kpis.total_today} turnos</strong> hoy · <strong className="text-[var(--cq-fg)] font-medium">{kpis.confirmed_today} confirmados</strong> hasta ahora.</>
     : 'Sin turnos registrados por ahora. ¡Buen momento para agregar uno!';
 
   return (
@@ -98,106 +73,59 @@ const GreetingStrip = memo(function GreetingStrip({ onNewAppointment, clinicName
         <p className="text-[14px] text-[var(--cq-fg-muted)]">{subline}</p>
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm">
-          <Icons.Calendar size={14} /> Agenda
-        </Button>
-        <Button variant="secondary" size="sm">
-          Exportar reporte
-        </Button>
+        <Button variant="outline" size="sm"><Icons.Calendar size={14} /> Agenda</Button>
+        <Button variant="secondary" size="sm">Exportar reporte</Button>
       </div>
     </div>
   );
 });
 
-const NAV_LABELS = {
-  overview: 'Resumen', agenda: 'Agenda', pacientes: 'Pacientes',
-  automatizaciones: 'Automatizaciones', inbox: 'Inbox WhatsApp',
-  reportes: 'Reportes', config: 'Configuración',
-};
-
-export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable' }) {
+export function Dashboard() {
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const [active, setActive] = useState('overview');
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [modalOpen,  setModalOpen]  = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
-
-  const { kpis, loading: kpisLoading } = useKpis();
-  const { clinic } = useClinic();
+  const { openModal, openInvite } = useOutletContext() ?? {};
+  const { kpis, loading: kpisLoading }             = useKpis();
+  const { clinic }                                  = useClinic();
   const { appointments, loading: appointmentsLoading } = useAppointments();
 
-  const openModal   = useCallback(() => setModalOpen(true),  []);
-  const closeModal  = useCallback(() => setModalOpen(false), []);
-  const openInvite  = useCallback(() => setInviteOpen(true),  []);
-  const closeInvite = useCallback(() => setInviteOpen(false), []);
-  const openMobileMenu = useCallback(() => setMobileOpen(true), []);
-
-  const gapClass = density === 'compact' ? 'gap-3' : 'gap-5';
-  const padClass = density === 'compact' ? 'p-5 md:p-6' : 'p-5 md:p-8';
-
-  const confirmedLabel = kpis
-    ? `${kpis.confirmed_today} / ${kpis.total_today}`
-    : null;
-  const confirmRate = kpis && kpis.total_today > 0
+  const confirmedLabel = kpis ? `${kpis.confirmed_today} / ${kpis.total_today}` : null;
+  const confirmRate    = kpis && kpis.total_today > 0
     ? `${Math.round((kpis.confirmed_today / kpis.total_today) * 100)}%`
     : null;
 
   return (
-    <div className="min-h-screen bg-[var(--cq-surface-2)] text-[var(--cq-fg)] flex">
-      <Sidebar
-        active={active}
-        setActive={setActive}
-        variant={sidebarVariant}
-        collapsed={collapsed}
-        setCollapsed={setCollapsed}
-        mobileOpen={mobileOpen}
-        setMobileOpen={setMobileOpen}
-      />
-      <div className="flex-1 min-w-0 flex flex-col">
-        <TopBar
-          onMobileMenu={openMobileMenu}
-          onNewAppointment={openModal}
-          clinicName={clinic?.name}
-          activeLabel={NAV_LABELS[active]}
-        />
-        <main className={`flex-1 overflow-y-auto ${padClass}`}>
-          <GreetingStrip onNewAppointment={openModal} clinicName={clinic?.name} kpis={kpis} kpisLoading={kpisLoading} />
+    <>
+      <GreetingStrip clinicName={clinic?.name} kpis={kpis} kpisLoading={kpisLoading} />
 
-          {/* KPI strip */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--cq-border)] border border-[var(--cq-border)] rounded-[14px] overflow-hidden mb-5">
-            <KpiCard label="Turnos confirmados" value={confirmedLabel} loading={kpisLoading} delta="+23%" trend="up" hint="vs. semana pasada" />
-            <KpiCard label="Mensajes enviados" value={kpis?.reminders_sent} loading={kpisLoading} delta="+12" trend="up" hint="automáticos · 24h" />
-            <KpiCard label="Tasa de confirmación" value={confirmRate} loading={kpisLoading} delta="+6 pts" trend="up" hint="objetivo: 90%" />
-            <KpiCard label="Auto-confirmados" value={kpis?.auto_confirmed} loading={kpisLoading} delta="hoy" trend="flat" hint="sin intervención" />
-          </div>
-
-          {/* Main grid */}
-          <div className={`grid lg:grid-cols-3 ${gapClass} mb-5`}>
-            <AgendaBlock appointments={appointments} loading={appointmentsLoading} />
-            <AutomationsBlock />
-          </div>
-          <div className={`grid lg:grid-cols-3 ${gapClass}`}>
-            <RevenueBlock />
-            <InboxBlock />
-          </div>
-          <div className={`grid lg:grid-cols-3 ${gapClass} mt-5`}>
-            <RiskBlock />
-            <QuickActionsBlock onNew={openModal} onInvite={openInvite} />
-            <SystemBlock />
-          </div>
-
-          <div className="mt-8 flex items-center justify-between text-[12px] text-[var(--cq-fg-muted)]">
-            <MonoLabel>Cliniq v2.4.1 · Sistema operativo</MonoLabel>
-            <button onClick={() => { logout(); navigate('/login'); }} className="hover:text-[var(--cq-fg)] cursor-pointer px-2 py-1">
-              Cerrar sesión
-            </button>
-          </div>
-        </main>
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--cq-border)] border border-[var(--cq-border)] rounded-[14px] overflow-hidden mb-5">
+        <KpiCard label="Turnos confirmados"   value={confirmedLabel}       loading={kpisLoading} delta="+23%"    trend="up"   hint="vs. semana pasada" />
+        <KpiCard label="Mensajes enviados"    value={kpis?.reminders_sent} loading={kpisLoading} delta="+12"     trend="up"   hint="automáticos · 24h" />
+        <KpiCard label="Tasa de confirmación" value={confirmRate}          loading={kpisLoading} delta="+6 pts"  trend="up"   hint="objetivo: 90%" />
+        <KpiCard label="Auto-confirmados"     value={kpis?.auto_confirmed} loading={kpisLoading} delta="hoy"     trend="flat" hint="sin intervención" />
       </div>
-      <NewAppointmentModal open={modalOpen} onClose={closeModal} />
-      <InviteMemberModal open={inviteOpen} onClose={closeInvite} clinicId={clinic?.id} />
-    </div>
+
+      {/* Main grid */}
+      <div className="grid lg:grid-cols-3 gap-5 mb-5">
+        <AgendaBlock appointments={appointments} loading={appointmentsLoading} />
+        <AutomationsBlock />
+      </div>
+      <div className="grid lg:grid-cols-3 gap-5">
+        <RevenueBlock />
+        <InboxBlock />
+      </div>
+      <div className="grid lg:grid-cols-3 gap-5 mt-5">
+        <RiskBlock />
+        <QuickActionsBlock onNew={openModal} onInvite={openInvite} />
+        <SystemBlock />
+      </div>
+
+      <div className="mt-8 flex items-center justify-between text-[12px] text-[var(--cq-fg-muted)]">
+        <MonoLabel>Cliniq v2.4.1 · Sistema operativo</MonoLabel>
+        <button onClick={() => { logout(); navigate('/login'); }} className="hover:text-[var(--cq-fg)] cursor-pointer px-2 py-1">
+          Cerrar sesión
+        </button>
+      </div>
+    </>
   );
 }

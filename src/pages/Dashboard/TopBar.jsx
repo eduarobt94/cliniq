@@ -1,8 +1,25 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Icons, Button, MonoLabel } from '../../components/ui';
+import { useAuth } from '../../context/AuthContext';
 
-export function TopBar({ onMobileMenu, onNewAppointment, clinicName, activeLabel }) {
+const ROUTE_LABELS = {
+  '/dashboard':                 'Resumen',
+  '/dashboard/agenda':          'Agenda',
+  '/dashboard/pacientes':       'Pacientes',
+  '/dashboard/automatizaciones':'Automatizaciones',
+  '/dashboard/inbox':           'Inbox WhatsApp',
+  '/dashboard/reportes':        'Reportes',
+  '/dashboard/configuracion':   'Configuración',
+};
+
+export function TopBar({ onMobileMenu, onNewAppointment }) {
+  const location = useLocation();
+  const { clinic } = useAuth();
   const [q, setQ] = useState('');
+
+  const activeLabel  = ROUTE_LABELS[location.pathname] ?? 'Resumen';
+  const clinicName   = clinic?.name ?? '…';
 
   return (
     <header className="h-16 border-b border-[var(--cq-border)] bg-[var(--cq-bg)] flex items-center gap-3 px-5 lg:px-8 shrink-0">
@@ -15,9 +32,9 @@ export function TopBar({ onMobileMenu, onNewAppointment, clinicName, activeLabel
       </button>
 
       <div className="hidden md:flex items-center gap-2 text-[13.5px] text-[var(--cq-fg-muted)]">
-        <span className="hover:text-[var(--cq-fg)] cursor-pointer">{clinicName ?? '…'}</span>
+        <span className="hover:text-[var(--cq-fg)] cursor-pointer">{clinicName}</span>
         <span className="opacity-40">/</span>
-        <span className="text-[var(--cq-fg)]">{activeLabel ?? 'Resumen'}</span>
+        <span className="text-[var(--cq-fg)]">{activeLabel}</span>
       </div>
 
       <div className="flex-1 max-w-[420px] mx-auto">

@@ -1,42 +1,47 @@
 import { useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Icons, Badge, Avatar, MonoLabel } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 
 const NAV_ITEMS = [
-  { id: 'overview', label: 'Resumen', icon: Icons.Home },
-  { id: 'agenda', label: 'Agenda', icon: Icons.Calendar, badge: '14' },
-  { id: 'pacientes', label: 'Pacientes', icon: Icons.Users },
-  { id: 'automatizaciones', label: 'Automatizaciones', icon: Icons.Zap, badge: '6' },
-  { id: 'inbox', label: 'Inbox WhatsApp', icon: Icons.Chat, badge: '3', badgeTone: 'accent' },
-  { id: 'reportes', label: 'Reportes', icon: Icons.Chart },
+  { id: 'overview',        label: 'Resumen',          icon: Icons.Home,     path: '/dashboard'                  },
+  { id: 'agenda',          label: 'Agenda',            icon: Icons.Calendar, path: '/dashboard/agenda',   badge: '14'                     },
+  { id: 'pacientes',       label: 'Pacientes',         icon: Icons.Users,    path: '/dashboard/pacientes'        },
+  { id: 'automatizaciones',label: 'Automatizaciones',  icon: Icons.Zap,      path: '/dashboard/automatizaciones', badge: '6'                },
+  { id: 'inbox',           label: 'Inbox WhatsApp',    icon: Icons.Chat,     path: '/dashboard/inbox',    badge: '3', badgeTone: 'accent' },
+  { id: 'reportes',        label: 'Reportes',          icon: Icons.Chart,    path: '/dashboard/reportes'         },
 ];
 
-const SECONDARY_ITEMS = [{ id: 'config', label: 'Configuración', icon: Icons.Settings }];
+const SECONDARY_ITEMS = [
+  { id: 'config', label: 'Configuración', icon: Icons.Settings, path: '/dashboard/configuracion' },
+];
 
 const ROLE_LABEL = { owner: 'Propietario', staff: 'Staff', viewer: 'Observador' };
 
 function clinicInitials(name = '') {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join('');
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
 }
 
-export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
+export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { clinic, profile, role } = useAuth();
   const isFloating = variant === 'floating';
-
-  const handleNavClick = useCallback((id) => {
-    setActive(id);
-    setMobileOpen(false);
-  }, [setActive, setMobileOpen]);
   const isIconOnly = variant === 'icon' || collapsed;
   const width = isIconOnly ? 'w-[68px]' : 'w-[240px]';
   const base = isFloating
     ? `m-4 rounded-[16px] border border-[var(--cq-border)] bg-[var(--cq-surface)] ${width}`
     : `border-r border-[var(--cq-border)] bg-[var(--cq-surface)] ${width}`;
+
+  const isActive = useCallback((path) => {
+    if (path === '/dashboard') return location.pathname === '/dashboard';
+    return location.pathname.startsWith(path);
+  }, [location.pathname]);
+
+  const handleNavClick = useCallback((path) => {
+    navigate(path);
+    setMobileOpen(false);
+  }, [navigate, setMobileOpen]);
 
   return (
     <>
@@ -54,11 +59,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
         } ${base} flex flex-col shrink-0 h-screen lg:h-auto`}
       >
         {/* Brand */}
-        <div
-          className={`flex items-center ${
-            isIconOnly ? 'justify-center px-0' : 'justify-between px-4'
-          } h-16 ${!isFloating && 'border-b border-[var(--cq-border)]'}`}
-        >
+        <div className={`flex items-center ${isIconOnly ? 'justify-center px-0' : 'justify-between px-4'} h-16 ${!isFloating && 'border-b border-[var(--cq-border)]'}`}>
           <div className="flex items-center gap-2.5">
             <Icons.Logo size={22} />
             {!isIconOnly && <span className="text-[16px] font-semibold tracking-tight">Cliniq</span>}
@@ -85,11 +86,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
               </svg>
             </button>
           )}
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="lg:hidden w-11 h-11 flex items-center justify-center"
-            aria-label="Cerrar menú"
-          >
+          <button onClick={() => setMobileOpen(false)} className="lg:hidden w-11 h-11 flex items-center justify-center" aria-label="Cerrar menú">
             <Icons.Close size={16} />
           </button>
         </div>
@@ -102,9 +99,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
                 {clinic ? clinicInitials(clinic.name) : '…'}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-medium truncate">
-                  {clinic?.name ?? 'Cargando…'}
-                </div>
+                <div className="text-[13px] font-medium truncate">{clinic?.name ?? 'Cargando…'}</div>
                 <MonoLabel>Plan Pro · UY</MonoLabel>
               </div>
               <Icons.More size={14} />
@@ -112,36 +107,31 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
           </div>
         )}
 
-        {/* Nav — ocupa el espacio disponible, scroll interno solo si hay muchos ítems */}
+        {/* Nav */}
         <nav className="flex-1 p-3 overflow-y-auto min-h-0" aria-label="Secciones">
-          {!isIconOnly && (
-            <MonoLabel className="px-2.5 block mb-2 mt-2">Espacio de trabajo</MonoLabel>
-          )}
+          {!isIconOnly && <MonoLabel className="px-2.5 block mb-2 mt-2">Espacio de trabajo</MonoLabel>}
           <ul className="space-y-0.5">
             {NAV_ITEMS.map((it) => {
               const Icon = it.icon;
+              const active = isActive(it.path);
               return (
                 <li key={it.id}>
                   <button
-                    onClick={() => handleNavClick(it.id)}
-                    aria-current={active === it.id ? 'page' : undefined}
+                    onClick={() => handleNavClick(it.path)}
+                    aria-current={active ? 'page' : undefined}
                     title={isIconOnly ? it.label : undefined}
-                    className={`w-full flex items-center gap-2.5 ${
-                      isIconOnly ? 'justify-center px-0' : 'px-2.5'
-                    } h-11 rounded-[8px] text-[13.5px] transition-colors relative ${
-                      active === it.id
+                    className={`w-full flex items-center gap-2.5 ${isIconOnly ? 'justify-center px-0' : 'px-2.5'} h-11 rounded-[8px] text-[13.5px] transition-colors relative ${
+                      active
                         ? 'bg-[var(--cq-surface-2)] text-[var(--cq-fg)] font-medium'
                         : 'text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] hover:text-[var(--cq-fg)]'
                     }`}
                   >
-                    {active === it.id && !isIconOnly && (
+                    {active && !isIconOnly && (
                       <span className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-[var(--cq-accent)]" />
                     )}
                     <Icon size={16} />
                     {!isIconOnly && <span className="flex-1 text-left">{it.label}</span>}
-                    {!isIconOnly && it.badge && (
-                      <Badge tone={it.badgeTone || 'outline'}>{it.badge}</Badge>
-                    )}
+                    {!isIconOnly && it.badge && <Badge tone={it.badgeTone || 'outline'}>{it.badge}</Badge>}
                     {isIconOnly && it.badge && (
                       <span className="absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full bg-[var(--cq-accent)]" />
                     )}
@@ -151,21 +141,18 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
             })}
           </ul>
 
-          {!isIconOnly && (
-            <MonoLabel className="px-2.5 block mb-2 mt-6">Sistema</MonoLabel>
-          )}
+          {!isIconOnly && <MonoLabel className="px-2.5 block mb-2 mt-6">Sistema</MonoLabel>}
           <ul className="space-y-0.5">
             {SECONDARY_ITEMS.map((it) => {
               const Icon = it.icon;
+              const active = isActive(it.path);
               return (
                 <li key={it.id}>
                   <button
-                    onClick={() => setActive(it.id)}
+                    onClick={() => handleNavClick(it.path)}
                     title={isIconOnly ? it.label : undefined}
-                    className={`w-full flex items-center gap-2.5 ${
-                      isIconOnly ? 'justify-center px-0' : 'px-2.5'
-                    } h-11 rounded-[8px] text-[13.5px] transition-colors ${
-                      active === it.id
+                    className={`w-full flex items-center gap-2.5 ${isIconOnly ? 'justify-center px-0' : 'px-2.5'} h-11 rounded-[8px] text-[13.5px] transition-colors ${
+                      active
                         ? 'bg-[var(--cq-surface-2)] text-[var(--cq-fg)] font-medium'
                         : 'text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] hover:text-[var(--cq-fg)]'
                     }`}
@@ -185,9 +172,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
             <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-[var(--cq-accent)] opacity-40 blur-2xl" />
             <MonoLabel className="text-[var(--cq-bg)]/60">Plan Pro</MonoLabel>
             <div className="mt-2 text-[13px] font-medium leading-snug">Sumá Sistema Completo</div>
-            <p className="mt-1 text-[12px] text-[var(--cq-bg)]/70">
-              CRM, chatbot y facturación DGI.
-            </p>
+            <p className="mt-1 text-[12px] text-[var(--cq-bg)]/70">CRM, chatbot y facturación DGI.</p>
             <button className="mt-3 w-full h-8 rounded-[7px] bg-[var(--cq-bg)] text-[var(--cq-fg)] text-[12px] font-medium hover:bg-[var(--cq-accent)] hover:text-white transition-colors">
               Ver upgrade
             </button>
@@ -195,11 +180,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
         )}
 
         {/* User */}
-        <div
-          className={`${
-            isFloating ? '' : 'border-t border-[var(--cq-border)]'
-          } p-3 flex items-center gap-2.5 ${isIconOnly ? 'justify-center' : ''}`}
-        >
+        <div className={`${isFloating ? '' : 'border-t border-[var(--cq-border)]'} p-3 flex items-center gap-2.5 ${isIconOnly ? 'justify-center' : ''}`}>
           <Avatar name={profile ? `${profile.first_name} ${profile.last_name}` : '…'} size={32} tone="accent" />
           {!isIconOnly && (
             <>
@@ -209,10 +190,7 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
                 </div>
                 <MonoLabel>{ROLE_LABEL[role] ?? 'Usuario'}</MonoLabel>
               </div>
-              <button
-                className="text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)]"
-                aria-label="Más opciones"
-              >
+              <button className="text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)]" aria-label="Más opciones">
                 <Icons.More size={16} />
               </button>
             </>

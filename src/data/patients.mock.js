@@ -1,0 +1,16 @@
+export const PATIENTS_MOCK = [
+  { id: 'p1',  name: 'Camila Álvarez',   phone: '+598 91 234 567', lastVisit: '18 abr 2026', nextAppt: '2 may 2026',  status: 'activo'    },
+  { id: 'p2',  name: 'Martín Pérez',     phone: '+598 98 765 432', lastVisit: '10 abr 2026', nextAppt: '25 abr 2026', status: 'activo'    },
+  { id: 'p3',  name: 'Lucía Fernández',  phone: '+598 94 111 222', lastVisit: '5 mar 2026',  nextAppt: '—',           status: 'inactivo'  },
+  { id: 'p4',  name: 'Roberto Castro',   phone: '+598 99 333 444', lastVisit: '22 abr 2026', nextAppt: '6 may 2026',  status: 'activo'    },
+  { id: 'p5',  name: 'Ana Rodríguez',    phone: '+598 91 555 666', lastVisit: '—',           nextAppt: '25 abr 2026', status: 'nuevo'     },
+  { id: 'p6',  name: 'Diego Méndez',     phone: '+598 98 777 888', lastVisit: '1 feb 2026',  nextAppt: '—',           status: 'inactivo'  },
+  { id: 'p7',  name: 'Sofía Torres',     phone: '+598 94 999 000', lastVisit: '20 abr 2026', nextAppt: '4 may 2026',  status: 'activo'    },
+  { id: 'p8',  name: 'Pablo Ríos',       phone: '+598 92 111 333', lastVisit: '15 abr 2026', nextAppt: '25 abr 2026', status: 'activo'    },
+  { id: 'p9',  name: 'Valentina Núñez',  phone: '+598 95 444 666', lastVisit: '8 abr 2026',  nextAppt: '9 may 2026',  status: 'activo'    },
+  { id: 'p10', name: 'Ignacio Suárez',   phone: '+598 99 777 000', lastVisit: '—',           nextAppt: '25 abr 2026', status: 'nuevo'     },
+  { id: 'p11', name: 'Elena Vargas',     phone: '+598 91 222 444', lastVisit: '3 abr 2026',  nextAppt: '25 abr 2026', status: 'activo'    },
+  { id: 'p12', name: 'Carlos Acosta',    phone: '+598 98 555 777', lastVisit: '12 mar 2026', nextAppt: '25 abr 2026', status: 'activo'    },
+  { id: 'p13', name: 'Fernanda Laguna',  phone: '+598 94 888 111', lastVisit: '10 ene 2026', nextAppt: '—',           status: 'inactivo'  },
+  { id: 'p14', name: 'Tomás Ibáñez',     phone: '+598 92 333 555', lastVisit: '19 abr 2026', nextAppt: '3 may 2026',  status: 'activo'    },
+];
