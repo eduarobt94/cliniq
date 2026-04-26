@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getInviteByToken } from '../../lib/authService';
-import { Icons, MonoLabel, Divider } from '../../components/ui';
+import { Icons, MonoLabel, Divider, ToastContainer, useToast } from '../../components/ui';
 
 function Field({ label, icon, error, success, children }) {
   return (
@@ -45,8 +45,8 @@ export function Signup() {
     firstName: false, lastName: false, clinic: false, email: false, password: false,
   });
   const [submitting,   setSubmitting]   = useState(false);
-  const [error,        setError]        = useState('');
   const [invite,       setInvite]       = useState(null);   // { clinic_name, email, role }
+  const { toasts, push: pushToast, dismiss } = useToast();
   const [inviteLoading, setInviteLoading] = useState(!!inviteToken);
 
   // Cargar datos de la invitación si hay token en la URL
@@ -75,7 +75,6 @@ export function Signup() {
   const onSubmit = async (e) => {
     e.preventDefault();
     setTouched({ firstName: true, lastName: true, clinic: true, email: true, password: true });
-    setError('');
     if (!allValid) return;
 
     setSubmitting(true);
@@ -88,13 +87,15 @@ export function Signup() {
       }
       navigate(result.needsOnboarding ? '/onboarding' : '/dashboard');
     } catch (err) {
-      setError(
+      const msg =
         err.message.includes('already registered')
           ? 'Ya existe una cuenta con ese correo.'
+          : err.message.includes('Email signups are disabled')
+          ? 'El registro por correo está desactivado. Contactá al administrador.'
           : err.message.includes('sending confirmation email') || err.message.includes('unexpected_failure')
           ? 'No se pudo enviar el correo de confirmación. Verificá tu conexión o intentá de nuevo.'
-          : err.message
-      );
+          : err.message;
+      pushToast(msg, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -109,6 +110,8 @@ export function Signup() {
   }
 
   return (
+    <>
+    <ToastContainer toasts={toasts} onDismiss={dismiss} />
     <main className="min-h-screen bg-[var(--cq-bg)] text-[var(--cq-fg)] grid lg:grid-cols-[1.1fr_1fr]">
       {/* Panel izquierdo */}
       <aside aria-hidden="true" className="hidden lg:flex flex-col justify-between p-10 bg-[var(--cq-fg)] text-[var(--cq-bg)] relative overflow-hidden">
@@ -292,12 +295,6 @@ export function Signup() {
                   </button>
                 </Field>
 
-                {error && (
-                  <div role="alert" className="px-3 py-2 rounded-lg bg-[color-mix(in_oklch,var(--cq-danger)_12%,transparent)] text-[var(--cq-danger)] text-[13px] border border-[color-mix(in_oklch,var(--cq-danger)_30%,transparent)]">
-                    {error}
-                  </div>
-                )}
-
                 <button
                   type="submit"
                   className="w-full h-12 mt-4 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] font-medium hover:bg-[var(--cq-accent)] disabled:opacity-70 transition-all active:scale-[0.99] inline-flex items-center justify-center gap-2"
@@ -330,5 +327,6 @@ export function Signup() {
         </div>
       </section>
     </main>
+    </>
   );
 }
