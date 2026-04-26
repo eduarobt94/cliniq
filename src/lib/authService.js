@@ -146,8 +146,11 @@ export async function acceptInvite(token) {
   return data;
 }
 
-// ─── Get Session ─────────────────────────────────────────────────────────────
-export async function getSession() {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session;
+// ─── Send Invite Email ────────────────────────────────────────────────────────
+// Llama a la Edge Function que envía el correo de invitación via Resend.
+export async function sendInviteEmail(clinicId, email, clinicName, role, inviteUrl) {
+  const { error } = await supabase.functions.invoke('send-invite-email', {
+    body: { clinicId, email, clinicName, role, inviteUrl },
+  });
+  if (error) throw error;
 }

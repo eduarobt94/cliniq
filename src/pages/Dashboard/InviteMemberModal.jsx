@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Icons, MonoLabel } from '../../components/ui';
-import { inviteMember } from '../../lib/authService';
+import { inviteMember, sendInviteEmail } from '../../lib/authService';
+import { useClinic } from '../../hooks/useClinic';
 
 const ROLES = [
   { value: 'staff',  label: 'Staff',      desc: 'Puede ver y gestionar turnos y pacientes' },
@@ -8,12 +9,14 @@ const ROLES = [
 ];
 
 export function InviteMemberModal({ open, onClose, clinicId }) {
+  const { clinic } = useClinic();
   const [email,       setEmail]       = useState('');
   const [role,        setRole]        = useState('staff');
   const [submitting,  setSubmitting]  = useState(false);
   const [error,       setError]       = useState('');
   const [inviteLink,  setInviteLink]  = useState('');
   const [copied,      setCopied]      = useState(false);
+  const [emailSent,   setEmailSent]   = useState(false);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
@@ -23,6 +26,7 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
     setError('');
     setInviteLink('');
     setCopied(false);
+    setEmailSent(false);
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -33,8 +37,18 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
     setError('');
     setSubmitting(true);
     try {
-      const token = await inviteMember(clinicId, email, role);
-      setInviteLink(`${window.location.origin}/accept-invite?token=${token}`);
+      const token    = await inviteMember(clinicId, email, role);
+      const link     = `${window.location.origin}/accept-invite?token=${token}`;
+      setInviteLink(link);
+
+      // Enviar correo automáticamente
+      try {
+        await sendInviteEmail(clinicId, email, clinic?.name ?? 'la clínica', role, link);
+        setEmailSent(true);
+      } catch {
+        // Si el correo falla, igual mostramos el link para compartir manualmente
+        setEmailSent(false);
+      }
     } catch (err) {
       const msg = err.message?.includes('permission_denied')
         ? 'Solo los dueños pueden invitar miembros.'
@@ -92,7 +106,12 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
           <div className="space-y-4">
             <div className="flex items-center gap-2 p-3 rounded-[10px] bg-[color-mix(in_oklch,var(--cq-success)_10%,transparent)] border border-[color-mix(in_oklch,var(--cq-success)_25%,transparent)]">
               <Icons.Check size={15} />
-              <p className="text-[13px] text-[var(--cq-fg)]">Invitación creada para <strong>{email}</strong>.</p>
+              <p className="text-[13px] text-[var(--cq-fg)]">
+                {emailSent
+                  ? <>Correo enviado a <strong>{email}</strong>.</>
+                  : <>Invitación creada para <strong>{email}</strong>. Compartí el link manualmente.</>
+                }
+              </p>
             </div>
 
             <div>
