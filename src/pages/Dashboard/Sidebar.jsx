@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { Icons, Badge, Avatar, MonoLabel } from '../../components/ui';
+import { useAuth } from '../../context/AuthContext';
 
 const NAV_ITEMS = [
   { id: 'overview', label: 'Resumen', icon: Icons.Home },
@@ -12,7 +13,19 @@ const NAV_ITEMS = [
 
 const SECONDARY_ITEMS = [{ id: 'config', label: 'Configuración', icon: Icons.Settings }];
 
+const ROLE_LABEL = { owner: 'Propietario', staff: 'Staff', viewer: 'Observador' };
+
+function clinicInitials(name = '') {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join('');
+}
+
 export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
+  const { clinic, profile, role } = useAuth();
   const isFloating = variant === 'floating';
 
   const handleNavClick = useCallback((id) => {
@@ -85,11 +98,13 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
         {!isIconOnly && (
           <div className="px-3 pt-3">
             <button className="w-full flex items-center gap-2.5 px-2.5 h-11 rounded-[9px] hover:bg-[var(--cq-surface-2)] transition-colors border border-[var(--cq-border)] text-left">
-              <div className="w-7 h-7 rounded-[6px] bg-[var(--cq-fg)] text-[var(--cq-bg)] flex items-center justify-center text-[11px] font-semibold">
-                CB
+              <div className="w-7 h-7 rounded-[6px] bg-[var(--cq-fg)] text-[var(--cq-bg)] flex items-center justify-center text-[11px] font-semibold shrink-0">
+                {clinic ? clinicInitials(clinic.name) : '…'}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-medium truncate">Clínica Bonomi</div>
+                <div className="text-[13px] font-medium truncate">
+                  {clinic?.name ?? 'Cargando…'}
+                </div>
                 <MonoLabel>Plan Pro · UY</MonoLabel>
               </div>
               <Icons.More size={14} />
@@ -185,12 +200,14 @@ export function Sidebar({ active, setActive, variant, collapsed, setCollapsed, m
             isFloating ? '' : 'border-t border-[var(--cq-border)]'
           } p-3 flex items-center gap-2.5 ${isIconOnly ? 'justify-center' : ''}`}
         >
-          <Avatar name="María Bonomi" size={32} tone="accent" />
+          <Avatar name={profile ? `${profile.first_name} ${profile.last_name}` : '…'} size={32} tone="accent" />
           {!isIconOnly && (
             <>
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-medium truncate">Dra. María Bonomi</div>
-                <MonoLabel>Administradora</MonoLabel>
+                <div className="text-[13px] font-medium truncate">
+                  {profile ? `${profile.first_name} ${profile.last_name}` : '…'}
+                </div>
+                <MonoLabel>{ROLE_LABEL[role] ?? 'Usuario'}</MonoLabel>
               </div>
               <button
                 className="text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)]"
