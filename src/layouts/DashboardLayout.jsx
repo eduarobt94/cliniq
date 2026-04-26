@@ -8,16 +8,23 @@ import { useAuth } from '../context/AuthContext';
 
 export function DashboardLayout() {
   const { clinic } = useAuth();
-  const [collapsed,  setCollapsed]  = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [modalOpen,  setModalOpen]  = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
 
-  const openMobileMenu = useCallback(() => setMobileOpen(true),  []);
-  const openModal      = useCallback(() => setModalOpen(true),   []);
-  const closeModal     = useCallback(() => setModalOpen(false),  []);
-  const openInvite     = useCallback(() => setInviteOpen(true),  []);
-  const closeInvite    = useCallback(() => setInviteOpen(false), []);
+  const [collapsed,    setCollapsed]    = useState(false);
+  const [mobileOpen,   setMobileOpen]   = useState(false);
+  const [inviteOpen,   setInviteOpen]   = useState(false);
+  // modalConfig: { open: bool, defaultDate: string|null }
+  const [modalConfig,  setModalConfig]  = useState({ open: false, defaultDate: null });
+
+  const openMobileMenu = useCallback(() => setMobileOpen(true), []);
+
+  // Pages can call openModal({ date: 'YYYY-MM-DD' }) to pre-fill the date
+  const openModal  = useCallback((config = {}) =>
+    setModalConfig({ open: true, defaultDate: config?.date ?? null }), []);
+  const closeModal = useCallback(() =>
+    setModalConfig((c) => ({ ...c, open: false })), []);
+
+  const openInvite  = useCallback(() => setInviteOpen(true),  []);
+  const closeInvite = useCallback(() => setInviteOpen(false), []);
 
   return (
     <div className="min-h-screen bg-[var(--cq-surface-2)] text-[var(--cq-fg)] flex">
@@ -36,8 +43,18 @@ export function DashboardLayout() {
           <Outlet context={{ openModal, openInvite }} />
         </main>
       </div>
-      <NewAppointmentModal open={modalOpen}  onClose={closeModal}  />
-      <InviteMemberModal  open={inviteOpen} onClose={closeInvite} clinicId={clinic?.id} />
+
+      <NewAppointmentModal
+        open={modalConfig.open}
+        onClose={closeModal}
+        clinicId={clinic?.id}
+        defaultDate={modalConfig.defaultDate}
+      />
+      <InviteMemberModal
+        open={inviteOpen}
+        onClose={closeInvite}
+        clinicId={clinic?.id}
+      />
     </div>
   );
 }
