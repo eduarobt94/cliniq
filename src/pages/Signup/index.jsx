@@ -29,27 +29,22 @@ export function Signup() {
   const [params]     = useSearchParams();
   const inviteToken  = params.get('invite');
   const { signup, user, needsOnboarding, loading } = useAuth();
+  const { toasts, push: pushToast, dismiss } = useToast();
 
-  // Guard: si ya tiene sesión y clínica, ir al dashboard
-  if (!loading && user && !needsOnboarding) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  const [firstName,  setFirstName]  = useState('');
-  const [lastName,   setLastName]   = useState('');
-  const [clinicName, setClinicName] = useState('');
-  const [email,      setEmail]      = useState('');
-  const [password,   setPassword]   = useState('');
-  const [showPwd,    setShowPwd]    = useState(false);
-  const [touched,    setTouched]    = useState({
+  // ── Todos los hooks ANTES de cualquier return condicional ────────────────
+  const [firstName,     setFirstName]     = useState('');
+  const [lastName,      setLastName]      = useState('');
+  const [clinicName,    setClinicName]    = useState('');
+  const [email,         setEmail]         = useState('');
+  const [password,      setPassword]      = useState('');
+  const [showPwd,       setShowPwd]       = useState(false);
+  const [touched,       setTouched]       = useState({
     firstName: false, lastName: false, clinic: false, email: false, password: false,
   });
-  const [submitting,   setSubmitting]   = useState(false);
-  const [invite,       setInvite]       = useState(null);   // { clinic_name, email, role }
-  const { toasts, push: pushToast, dismiss } = useToast();
+  const [submitting,    setSubmitting]    = useState(false);
+  const [invite,        setInvite]        = useState(null);
   const [inviteLoading, setInviteLoading] = useState(!!inviteToken);
 
-  // Cargar datos de la invitación si hay token en la URL
   useEffect(() => {
     if (!inviteToken) return;
     getInviteByToken(inviteToken)
@@ -62,6 +57,11 @@ export function Signup() {
       .catch(() => {})
       .finally(() => setInviteLoading(false));
   }, [inviteToken]);
+
+  // ── Guard (después de todos los hooks) ───────────────────────────────────
+  if (!loading && user && !needsOnboarding) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const isInviteMode = !!invite;
   const firstNameValid = firstName.trim().length >= 2;
