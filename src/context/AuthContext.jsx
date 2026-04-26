@@ -21,7 +21,7 @@ export function AuthProvider({ children }) {
   // Fuente de verdad: clinic_members.
   // Fallback: si clinic_members no existe todavía (migración pendiente),
   // consulta clinics.owner_id directamente para no bloquear el login.
-  const loadMembership = useCallback(async (userId) => {
+  const loadMembership = useCallback(async (userId, userMeta = {}) => {
     const abortController = { cancelled: false };
     loadAbortRef.current = abortController;
 
@@ -42,6 +42,13 @@ export function AuthProvider({ children }) {
 
     if (abortController.cancelled) return;
 
+    // Perfil: DB first, luego metadata del signup como fallback
+    const resolvedProfile = profileData ?? (
+      userMeta?.first_name
+        ? { first_name: userMeta.first_name, last_name: userMeta.last_name ?? '' }
+        : null
+    );
+
     // clinic_members tabla no existe → fallback a clinics.owner_id
     const tableNotFound =
       memberError?.code === '42P01' ||
@@ -58,6 +65,7 @@ export function AuthProvider({ children }) {
       if (abortController.cancelled) return;
 
       setNetworkError(false);
+      if (resolvedProfile) setProfile(resolvedProfile);
       if (ownedClinic) {
         setClinic(ownedClinic);
         setRole('owner');
@@ -77,7 +85,7 @@ export function AuthProvider({ children }) {
     }
 
     setNetworkError(false);
-    if (profileData) setProfile(profileData);
+    if (resolvedProfile) setProfile(resolvedProfile);
 
     if (memberData?.clinics) {
       setClinic(memberData.clinics);
@@ -145,7 +153,7 @@ export function AuthProvider({ children }) {
 
     // Solo cargar membresía si el email está verificado
     if (confirmed) {
-      loadMembership(user.id);
+      loadMembership(user.id, user.user_metadata);
     }
   }, [user?.id, user?.email_confirmed_at, passwordRecoveryMode, loadMembership]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -188,13 +196,13 @@ export function AuthProvider({ children }) {
       profile?.last_name
     );
     if (error) throw error;
-    await loadMembership(user.id);
+    await loadMembership(user.id, user.user_metadata);
   }
 
   // ── refreshMembership ─────────────────────────────────────────────────────
   // Fuerza recarga de membresía (útil después de aceptar una invitación).
   async function refreshMembership() {
-    if (user?.id) await loadMembership(user.id);
+    if (user?.id) await loadMembership(user.id, user.user_metadata);
   }
 
   // ── resendConfirmation ────────────────────────────────────────────────────

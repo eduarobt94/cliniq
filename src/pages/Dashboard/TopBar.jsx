@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Icons, Button, MonoLabel } from '../../components/ui';
 
-export function TopBar({ onMobileMenu, onNewAppointment }) {
+export function TopBar({ onMobileMenu, onNewAppointment, clinicName, activeLabel }) {
   const [q, setQ] = useState('');
 
   return (
@@ -15,9 +15,9 @@ export function TopBar({ onMobileMenu, onNewAppointment }) {
       </button>
 
       <div className="hidden md:flex items-center gap-2 text-[13.5px] text-[var(--cq-fg-muted)]">
-        <span className="hover:text-[var(--cq-fg)] cursor-pointer">Clínica Bonomi</span>
+        <span className="hover:text-[var(--cq-fg)] cursor-pointer">{clinicName ?? '…'}</span>
         <span className="opacity-40">/</span>
-        <span className="text-[var(--cq-fg)]">Resumen</span>
+        <span className="text-[var(--cq-fg)]">{activeLabel ?? 'Resumen'}</span>
       </div>
 
       <div className="flex-1 max-w-[420px] mx-auto">

@@ -109,6 +109,12 @@ const GreetingStrip = memo(function GreetingStrip({ onNewAppointment, clinicName
   );
 });
 
+const NAV_LABELS = {
+  overview: 'Resumen', agenda: 'Agenda', pacientes: 'Pacientes',
+  automatizaciones: 'Automatizaciones', inbox: 'Inbox WhatsApp',
+  reportes: 'Reportes', config: 'Configuración',
+};
+
 export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable' }) {
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -153,6 +159,8 @@ export function Dashboard({ sidebarVariant = 'expanded', density = 'comfortable'
         <TopBar
           onMobileMenu={openMobileMenu}
           onNewAppointment={openModal}
+          clinicName={clinic?.name}
+          activeLabel={NAV_LABELS[active]}
         />
         <main className={`flex-1 overflow-y-auto ${padClass}`}>
           <GreetingStrip onNewAppointment={openModal} clinicName={clinic?.name} kpis={kpis} kpisLoading={kpisLoading} />
