@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { useOutletContext } from 'react-router-dom';
 import { Badge, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
 import { usePatients } from '../../hooks/usePatients';
@@ -50,7 +51,7 @@ const FILTERS = [
 ];
 
 // ─── Add patient modal ────────────────────────────────────────────────────────
-function AddPatientModal({ open, onClose, clinicId, push }) {
+function AddPatientModal({ open, onClose, clinicId, push, existingPatients = [] }) {
   const [name,       setName]       = useState('');
   const [phone,      setPhone]      = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -74,6 +75,12 @@ function AddPatientModal({ open, onClose, clinicId, push }) {
   const handleSubmit = async () => {
     if (!name.trim() || !phone.trim()) {
       setError('El nombre y el teléfono son obligatorios.');
+      return;
+    }
+    const nameLower = name.trim().toLowerCase();
+    const dupName = existingPatients.some(p => p.full_name.trim().toLowerCase() === nameLower);
+    if (dupName) {
+      setError('Ya existe un paciente con ese nombre en esta clínica.');
       return;
     }
     setError(null);
@@ -182,7 +189,7 @@ function AddPatientModal({ open, onClose, clinicId, push }) {
 }
 
 // ─── Edit patient modal ───────────────────────────────────────────────────────
-function EditPatientModal({ patient, onClose, onSuccess }) {
+function EditPatientModal({ patient, onClose, onSuccess, existingPatients = [] }) {
   const [name,       setName]       = useState(patient.full_name);
   const [phone,      setPhone]      = useState(patient.phone_number);
   const [submitting, setSubmitting] = useState(false);
@@ -204,6 +211,14 @@ function EditPatientModal({ patient, onClose, onSuccess }) {
       setError('El nombre y el teléfono son obligatorios.');
       return;
     }
+    const nameLower = name.trim().toLowerCase();
+    const dupName = existingPatients.some(
+      p => p.id !== patient.id && p.full_name.trim().toLowerCase() === nameLower
+    );
+    if (dupName) {
+      setError('Ya existe un paciente con ese nombre en esta clínica.');
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -212,7 +227,7 @@ function EditPatientModal({ patient, onClose, onSuccess }) {
     } catch (err) {
       const msg = err?.message ?? '';
       if (msg.includes('23505') || msg.includes('unique') || msg.includes('phone')) {
-        setError('Ya existe un paciente con ese teléfono.');
+        setError('Ya existe un paciente con ese número de teléfono.');
       } else {
         setError('No se pudo actualizar. Intentá más tarde.');
       }
@@ -306,16 +321,22 @@ function EditPatientModal({ patient, onClose, onSuccess }) {
   );
 }
 
-// ─── Patient actions menu ─────────────────────────────────────────────────────
+// ─── Patient actions menu (portal-based to escape overflow clipping) ──────────
 function PatientActionsMenu({ patient, onEdit, onDelete }) {
   const [open,          setOpen]          = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pos,           setPos]           = useState({ top: 0, right: 0 });
+  const btnRef  = useRef(null);
   const menuRef = useRef(null);
 
+  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const h = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
+      if (
+        menuRef.current  && !menuRef.current.contains(e.target) &&
+        btnRef.current   && !btnRef.current.contains(e.target)
+      ) {
         setOpen(false);
         setConfirmDelete(false);
       }
@@ -326,86 +347,75 @@ function PatientActionsMenu({ patient, onEdit, onDelete }) {
 
   const handleToggle = (e) => {
     e.stopPropagation();
+    if (!open) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+    }
     setOpen(v => !v);
     if (open) setConfirmDelete(false);
   };
 
-  const handleEdit = (e) => {
-    e.stopPropagation();
-    onEdit(patient);
-    setOpen(false);
-    setConfirmDelete(false);
-  };
+  const close = () => { setOpen(false); setConfirmDelete(false); };
 
-  const handleDeleteClick = (e) => {
-    e.stopPropagation();
-    setConfirmDelete(true);
-  };
-
-  const handleConfirmDelete = (e) => {
-    e.stopPropagation();
-    onDelete(patient.id);
-    setOpen(false);
-    setConfirmDelete(false);
-  };
-
-  const handleCancelDelete = (e) => {
-    e.stopPropagation();
-    setConfirmDelete(false);
-  };
+  const menu = open && createPortal(
+    <div
+      ref={menuRef}
+      className="fixed z-[200] w-44 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[10px] shadow-xl overflow-hidden py-1"
+      style={{ top: pos.top, right: pos.right }}
+    >
+      {confirmDelete ? (
+        <div className="px-3 py-2.5">
+          <p className="text-[12.5px] text-[var(--cq-fg-muted)] mb-2 leading-snug">
+            ¿Eliminar este paciente?
+          </p>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(patient.id); close(); }}
+              className="flex-1 h-7 rounded-[6px] bg-[var(--cq-danger)] text-white text-[12px] font-medium hover:opacity-90 transition-opacity"
+            >
+              Sí, eliminar
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
+              className="flex-1 h-7 rounded-[6px] text-[12px] font-medium text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] transition-colors"
+            >
+              No
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(patient); close(); }}
+            className="w-full text-left px-3 py-2 text-[13px] text-[var(--cq-fg)] hover:bg-[var(--cq-surface-2)] transition-colors"
+          >
+            Editar
+          </button>
+          <div className="h-px bg-[var(--cq-border)] mx-1 my-0.5" />
+          <button
+            onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+            className="w-full text-left px-3 py-2 text-[13px] text-[var(--cq-danger)] hover:bg-[var(--cq-surface-2)] transition-colors"
+          >
+            Eliminar
+          </button>
+        </>
+      )}
+    </div>,
+    document.body
+  );
 
   return (
-    <div ref={menuRef} className="relative">
+    <>
       <button
+        ref={btnRef}
         onClick={handleToggle}
         aria-label="Acciones del paciente"
         className="opacity-0 group-hover:opacity-100 w-8 h-8 rounded-[6px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center transition-opacity"
       >
         <Icons.More size={15} />
       </button>
-
-      {open && (
-        <div className="absolute right-0 top-[calc(100%+4px)] z-20 w-44 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[10px] shadow-lg overflow-hidden py-1">
-          {confirmDelete ? (
-            <div className="px-3 py-2">
-              <p className="text-[12.5px] text-[var(--cq-fg-muted)] mb-2 leading-snug">
-                ¿Eliminar este paciente?
-              </p>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={handleConfirmDelete}
-                  className="flex-1 h-7 rounded-[6px] bg-[var(--cq-danger)] text-white text-[12px] font-medium hover:opacity-90 transition-opacity"
-                >
-                  Sí, eliminar
-                </button>
-                <button
-                  onClick={handleCancelDelete}
-                  className="flex-1 h-7 rounded-[6px] text-[12px] font-medium text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] transition-colors"
-                >
-                  No
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <button
-                onClick={handleEdit}
-                className="w-full text-left px-3 py-2 text-[13px] text-[var(--cq-fg)] hover:bg-[var(--cq-surface-2)] transition-colors"
-              >
-                Editar
-              </button>
-              <div className="h-px bg-[var(--cq-border)] mx-1 my-0.5" />
-              <button
-                onClick={handleDeleteClick}
-                className="w-full text-left px-3 py-2 text-[13px] text-[var(--cq-danger)] hover:bg-[var(--cq-surface-2)] transition-colors"
-              >
-                Eliminar
-              </button>
-            </>
-          )}
-        </div>
-      )}
-    </div>
+      {menu}
+    </>
   );
 }
 
@@ -632,6 +642,7 @@ export function Pacientes() {
         onClose={() => setAddOpen(false)}
         clinicId={clinic?.id}
         push={push}
+        existingPatients={patients}
       />
 
       {editingPatient && (
@@ -639,6 +650,7 @@ export function Pacientes() {
           patient={editingPatient}
           onClose={() => setEditingPatient(null)}
           onSuccess={handleEditSuccess}
+          existingPatients={patients}
         />
       )}
     </>
