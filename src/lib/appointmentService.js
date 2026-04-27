@@ -46,3 +46,43 @@ export async function updateAppointmentStatus(appointmentId, status) {
     .eq('id', appointmentId);
   if (error) throw error;
 }
+
+export async function updateAppointment(appointmentId, { datetime, type, professionalName, notes }) {
+  const { error } = await supabase
+    .from('appointments')
+    .update({
+      appointment_datetime: datetime,
+      appointment_type:     type?.trim() || null,
+      professional_name:    professionalName?.trim() || null,
+      notes:                notes?.trim() || null,
+    })
+    .eq('id', appointmentId);
+  if (error) throw error;
+}
+
+export async function deleteAppointment(appointmentId) {
+  const { error } = await supabase
+    .from('appointments')
+    .delete()
+    .eq('id', appointmentId);
+  if (error) throw error;
+}
+
+export async function deletePatient(patientId) {
+  const { error } = await supabase
+    .from('patients')
+    .delete()
+    .eq('id', patientId);
+  if (error) throw error;
+}
+
+export async function updatePatient(patientId, { fullName, phoneNumber }) {
+  const { data, error } = await supabase
+    .from('patients')
+    .update({ full_name: fullName.trim(), phone_number: phoneNumber.trim() })
+    .eq('id', patientId)
+    .select('id, full_name, phone_number')
+    .single();
+  if (error) throw error;
+  return data;
+}

@@ -5,19 +5,19 @@ import { TopBar } from '../pages/Dashboard/TopBar';
 import { NewAppointmentModal } from '../pages/Dashboard/NewAppointmentModal';
 import { InviteMemberModal } from '../pages/Dashboard/InviteMemberModal';
 import { useAuth } from '../context/AuthContext';
+import { ToastContainer, useToast } from '../components/ui';
 
 export function DashboardLayout() {
   const { clinic } = useAuth();
+  const { toasts, push, dismiss } = useToast();
 
-  const [collapsed,    setCollapsed]    = useState(false);
-  const [mobileOpen,   setMobileOpen]   = useState(false);
-  const [inviteOpen,   setInviteOpen]   = useState(false);
-  // modalConfig: { open: bool, defaultDate: string|null }
-  const [modalConfig,  setModalConfig]  = useState({ open: false, defaultDate: null });
+  const [collapsed,   setCollapsed]   = useState(false);
+  const [mobileOpen,  setMobileOpen]  = useState(false);
+  const [inviteOpen,  setInviteOpen]  = useState(false);
+  const [modalConfig, setModalConfig] = useState({ open: false, defaultDate: null });
 
   const openMobileMenu = useCallback(() => setMobileOpen(true), []);
 
-  // Pages can call openModal({ date: 'YYYY-MM-DD' }) to pre-fill the date
   const openModal  = useCallback((config = {}) =>
     setModalConfig({ open: true, defaultDate: config?.date ?? null }), []);
   const closeModal = useCallback(() =>
@@ -25,6 +25,10 @@ export function DashboardLayout() {
 
   const openInvite  = useCallback(() => setInviteOpen(true),  []);
   const closeInvite = useCallback(() => setInviteOpen(false), []);
+
+  const handleAppointmentCreated = useCallback(() => {
+    push('Turno agendado correctamente.', 'success');
+  }, [push]);
 
   return (
     <div className="min-h-screen bg-[var(--cq-surface-2)] text-[var(--cq-fg)] flex">
@@ -40,7 +44,7 @@ export function DashboardLayout() {
           onNewAppointment={openModal}
         />
         <main className="flex-1 overflow-y-auto p-5 md:p-8">
-          <Outlet context={{ openModal, openInvite }} />
+          <Outlet context={{ openModal, openInvite, push }} />
         </main>
       </div>
 
@@ -49,12 +53,14 @@ export function DashboardLayout() {
         onClose={closeModal}
         clinicId={clinic?.id}
         defaultDate={modalConfig.defaultDate}
+        onSuccess={handleAppointmentCreated}
       />
       <InviteMemberModal
         open={inviteOpen}
         onClose={closeInvite}
         clinicId={clinic?.id}
       />
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }

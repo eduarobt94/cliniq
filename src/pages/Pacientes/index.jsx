@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect, useRef, memo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { Badge, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
 import { usePatients } from '../../hooks/usePatients';
 import { useClinic } from '../../hooks/useClinic';
-import { createPatient } from '../../lib/appointmentService';
+import { createPatient, deletePatient, updatePatient } from '../../lib/appointmentService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(iso) {
@@ -49,7 +50,7 @@ const FILTERS = [
 ];
 
 // ─── Add patient modal ────────────────────────────────────────────────────────
-function AddPatientModal({ open, onClose, clinicId }) {
+function AddPatientModal({ open, onClose, clinicId, push }) {
   const [name,       setName]       = useState('');
   const [phone,      setPhone]      = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -79,6 +80,7 @@ function AddPatientModal({ open, onClose, clinicId }) {
     setSubmitting(true);
     try {
       await createPatient(clinicId, name, phone);
+      push?.('Paciente agregado correctamente.', 'success');
       onClose();
     } catch (err) {
       const msg = err?.message ?? '';
@@ -179,6 +181,234 @@ function AddPatientModal({ open, onClose, clinicId }) {
   );
 }
 
+// ─── Edit patient modal ───────────────────────────────────────────────────────
+function EditPatientModal({ patient, onClose, onSuccess }) {
+  const [name,       setName]       = useState(patient.full_name);
+  const [phone,      setPhone]      = useState(patient.phone_number);
+  const [submitting, setSubmitting] = useState(false);
+  const [error,      setError]      = useState(null);
+  const nameRef = useRef(null);
+
+  useEffect(() => {
+    setTimeout(() => nameRef.current?.focus(), 60);
+  }, []);
+
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [onClose]);
+
+  const handleSubmit = async () => {
+    if (!name.trim() || !phone.trim()) {
+      setError('El nombre y el teléfono son obligatorios.');
+      return;
+    }
+    setError(null);
+    setSubmitting(true);
+    try {
+      await updatePatient(patient.id, { fullName: name, phoneNumber: phone });
+      onSuccess();
+    } catch (err) {
+      const msg = err?.message ?? '';
+      if (msg.includes('23505') || msg.includes('unique') || msg.includes('phone')) {
+        setError('Ya existe un paciente con ese teléfono.');
+      } else {
+        setError('No se pudo actualizar. Intentá más tarde.');
+      }
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-patient-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      <div
+        className="relative w-full max-w-[400px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6"
+        style={{ animation: 'cqModalIn 220ms cubic-bezier(.2,.7,.2,1)' }}
+      >
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <MonoLabel>Editar paciente</MonoLabel>
+            <h3 id="edit-patient-title" className="mt-1 text-[20px] font-semibold tracking-tight">
+              Editar datos
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-11 h-11 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
+            aria-label="Cerrar"
+          >
+            <Icons.Close size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <label className="block">
+            <MonoLabel>Nombre completo *</MonoLabel>
+            <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] transition-colors">
+              <input
+                ref={nameRef}
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
+                placeholder="Nombre Apellido"
+                className="flex-1 bg-transparent outline-none text-[13.5px]"
+                autoComplete="name"
+              />
+            </div>
+          </label>
+
+          <label className="block">
+            <MonoLabel>Teléfono *</MonoLabel>
+            <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] transition-colors">
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
+                placeholder="+598 99 123 456"
+                className="flex-1 bg-transparent outline-none text-[13.5px]"
+                autoComplete="tel"
+              />
+            </div>
+          </label>
+
+          {error && (
+            <p role="alert" className="text-[13px] text-[var(--cq-danger)]">{error}</p>
+          )}
+        </div>
+
+        <div className="mt-6 flex items-center gap-2 justify-end">
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="h-9 px-4 rounded-[8px] text-[13.5px] font-medium text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || !name.trim() || !phone.trim()}
+            className="h-9 px-4 rounded-[8px] bg-[var(--cq-fg)] text-[var(--cq-bg)] text-[13.5px] font-medium hover:opacity-90 transition-opacity disabled:opacity-40 inline-flex items-center gap-2"
+          >
+            {submitting ? 'Guardando…' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Patient actions menu ─────────────────────────────────────────────────────
+function PatientActionsMenu({ patient, onEdit, onDelete }) {
+  const [open,          setOpen]          = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false);
+        setConfirmDelete(false);
+      }
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const handleToggle = (e) => {
+    e.stopPropagation();
+    setOpen(v => !v);
+    if (open) setConfirmDelete(false);
+  };
+
+  const handleEdit = (e) => {
+    e.stopPropagation();
+    onEdit(patient);
+    setOpen(false);
+    setConfirmDelete(false);
+  };
+
+  const handleDeleteClick = (e) => {
+    e.stopPropagation();
+    setConfirmDelete(true);
+  };
+
+  const handleConfirmDelete = (e) => {
+    e.stopPropagation();
+    onDelete(patient.id);
+    setOpen(false);
+    setConfirmDelete(false);
+  };
+
+  const handleCancelDelete = (e) => {
+    e.stopPropagation();
+    setConfirmDelete(false);
+  };
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        onClick={handleToggle}
+        aria-label="Acciones del paciente"
+        className="opacity-0 group-hover:opacity-100 w-8 h-8 rounded-[6px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center transition-opacity"
+      >
+        <Icons.More size={15} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+4px)] z-20 w-44 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[10px] shadow-lg overflow-hidden py-1">
+          {confirmDelete ? (
+            <div className="px-3 py-2">
+              <p className="text-[12.5px] text-[var(--cq-fg-muted)] mb-2 leading-snug">
+                ¿Eliminar este paciente?
+              </p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={handleConfirmDelete}
+                  className="flex-1 h-7 rounded-[6px] bg-[var(--cq-danger)] text-white text-[12px] font-medium hover:opacity-90 transition-opacity"
+                >
+                  Sí, eliminar
+                </button>
+                <button
+                  onClick={handleCancelDelete}
+                  className="flex-1 h-7 rounded-[6px] text-[12px] font-medium text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] transition-colors"
+                >
+                  No
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={handleEdit}
+                className="w-full text-left px-3 py-2 text-[13px] text-[var(--cq-fg)] hover:bg-[var(--cq-surface-2)] transition-colors"
+              >
+                Editar
+              </button>
+              <div className="h-px bg-[var(--cq-border)] mx-1 my-0.5" />
+              <button
+                onClick={handleDeleteClick}
+                className="w-full text-left px-3 py-2 text-[13px] text-[var(--cq-danger)] hover:bg-[var(--cq-surface-2)] transition-colors"
+              >
+                Eliminar
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
 const SkeletonRow = memo(function SkeletonRow() {
   return (
@@ -194,15 +424,16 @@ const SkeletonRow = memo(function SkeletonRow() {
       <td className="px-5 py-3.5 hidden lg:table-cell"><div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-4 w-24" /></td>
       <td className="px-5 py-3.5 hidden xl:table-cell"><div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-4 w-8" /></td>
       <td className="px-5 py-3.5"><div className="animate-pulse bg-[var(--cq-surface-2)] rounded-full h-[22px] w-20" /></td>
+      <td className="px-5 py-3.5 w-10" />
     </tr>
   );
 });
 
 // ─── Patient row ──────────────────────────────────────────────────────────────
-const PatientRow = memo(function PatientRow({ patient }) {
+const PatientRow = memo(function PatientRow({ patient, onEdit, onDelete }) {
   const { tone, label } = STATUS_MAP[patient.status] ?? STATUS_MAP.activo;
   return (
-    <tr className="border-b border-[var(--cq-border)] last:border-0 hover:bg-[var(--cq-surface-2)] transition-colors">
+    <tr className="group border-b border-[var(--cq-border)] last:border-0 hover:bg-[var(--cq-surface-2)] transition-colors">
       <td className="px-5 py-3.5">
         <div className="flex items-center gap-3">
           <Avatar name={patient.full_name} size={36} />
@@ -226,17 +457,22 @@ const PatientRow = memo(function PatientRow({ patient }) {
       <td className="px-5 py-3.5">
         <Badge tone={tone} dot>{label}</Badge>
       </td>
+      <td className="px-5 py-3.5 w-10">
+        <PatientActionsMenu patient={patient} onEdit={onEdit} onDelete={onDelete} />
+      </td>
     </tr>
   );
 });
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function Pacientes() {
+  const { push } = useOutletContext() ?? {};
   const { patients: rawPatients, loading } = usePatients();
   const { clinic } = useClinic();
-  const [search,       setSearch]       = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [addOpen,      setAddOpen]      = useState(false);
+  const [search,         setSearch]         = useState('');
+  const [statusFilter,   setStatusFilter]   = useState('all');
+  const [addOpen,        setAddOpen]        = useState(false);
+  const [editingPatient, setEditingPatient] = useState(null);
 
   const patients = useMemo(() => rawPatients.map(derivePatient), [rawPatients]);
 
@@ -251,6 +487,25 @@ export function Pacientes() {
     }
     return list;
   }, [patients, statusFilter, search]);
+
+  const handleDelete = useCallback(async (patientId) => {
+    try {
+      await deletePatient(patientId);
+      push?.('Paciente eliminado.', 'success');
+    } catch (err) {
+      const msg = err?.message ?? '';
+      if (msg.includes('23503') || msg.includes('foreign key') || msg.includes('violates')) {
+        push?.('No se puede eliminar: el paciente tiene turnos registrados.', 'error');
+      } else {
+        push?.('No se pudo eliminar el paciente. Intentá más tarde.', 'error');
+      }
+    }
+  }, [push]);
+
+  const handleEditSuccess = useCallback(() => {
+    push?.('Datos del paciente actualizados.', 'success');
+    setEditingPatient(null);
+  }, [push]);
 
   return (
     <>
@@ -318,6 +573,7 @@ export function Pacientes() {
                   <th className="px-5 py-3 text-left hidden lg:table-cell"><MonoLabel>Próximo turno</MonoLabel></th>
                   <th className="px-5 py-3 text-left hidden xl:table-cell"><MonoLabel>Turnos</MonoLabel></th>
                   <th className="px-5 py-3 text-left"><MonoLabel>Estado</MonoLabel></th>
+                  <th className="px-5 py-3 w-10" />
                 </tr>
               </thead>
               <tbody>
@@ -325,7 +581,7 @@ export function Pacientes() {
                   Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>
+                    <td colSpan={7}>
                       <div className="flex flex-col items-center justify-center py-16 gap-3 text-[var(--cq-fg-muted)]">
                         <Icons.Users size={32} />
                         <div className="text-center">
@@ -347,7 +603,14 @@ export function Pacientes() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(p => <PatientRow key={p.id} patient={p} />)
+                  filtered.map(p => (
+                    <PatientRow
+                      key={p.id}
+                      patient={p}
+                      onEdit={setEditingPatient}
+                      onDelete={handleDelete}
+                    />
+                  ))
                 )}
               </tbody>
             </table>
@@ -368,7 +631,16 @@ export function Pacientes() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         clinicId={clinic?.id}
+        push={push}
       />
+
+      {editingPatient && (
+        <EditPatientModal
+          patient={editingPatient}
+          onClose={() => setEditingPatient(null)}
+          onSuccess={handleEditSuccess}
+        />
+      )}
     </>
   );
 }

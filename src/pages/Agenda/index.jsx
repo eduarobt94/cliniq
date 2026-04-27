@@ -1,8 +1,8 @@
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Badge, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
+import { Badge, Button, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
 import { useAgendaRange } from '../../hooks/useAgendaRange';
-import { updateAppointmentStatus } from '../../lib/appointmentService';
+import { updateAppointmentStatus, updateAppointment, deleteAppointment } from '../../lib/appointmentService';
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_MAP = {
@@ -28,6 +28,20 @@ const STATUS_ACTIONS = [
   { status: 'rescheduled', label: 'Reagendó'  },
   { status: 'cancelled',   label: 'Cancelar'  },
 ];
+
+const APPOINTMENT_TYPES = [
+  'Control', 'Primera consulta', 'Seguimiento', 'Urgencia', 'Procedimiento', 'Laboratorio',
+];
+
+const DELETABLE_STATUSES = ['new', 'cancelled'];
+
+const STATUS_LABELS = {
+  confirmed:   'Confirmado',
+  pending:     'Pendiente',
+  new:         'Nuevo',
+  rescheduled: 'Reagendó',
+  cancelled:   'Cancelado',
+};
 
 const FILTERS = [
   { key: 'all',       label: 'Todos'       },
@@ -135,6 +149,16 @@ function fmtMonthLabel(iso) {
     .replace(/\b\w/g, c => c.toUpperCase());
 }
 
+function toLocalDate(isoUtc) {
+  const d = new Date(isoUtc);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function toLocalTime(isoUtc) {
+  const d = new Date(isoUtc);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
 const SkeletonRow = memo(function SkeletonRow() {
   return (
@@ -151,40 +175,234 @@ const SkeletonRow = memo(function SkeletonRow() {
   );
 });
 
+// ─── Edit appointment modal ───────────────────────────────────────────────────
+function SpinnerIcon() {
+  return (
+    <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function EditApptModal({ appt, onClose, onSuccess }) {
+  const [date,         setDate]         = useState('');
+  const [time,         setTime]         = useState('');
+  const [type,         setType]         = useState('');
+  const [professional, setProfessional] = useState('');
+  const [notes,        setNotes]        = useState('');
+  const [submitting,   setSubmitting]   = useState(false);
+  const [error,        setError]        = useState(null);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!appt) return;
+    setDate(toLocalDate(appt.appointment_datetime));
+    setTime(toLocalTime(appt.appointment_datetime));
+    setType(appt.appointment_type ?? '');
+    setProfessional(appt.professional_name ?? '');
+    setNotes(appt.notes ?? '');
+    setError(null);
+    setSubmitting(false);
+  }, [appt]);
+
+  useEffect(() => {
+    if (!appt) return;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    containerRef.current?.querySelector('input,select,textarea,button')?.focus();
+    return () => document.removeEventListener('keydown', onKey);
+  }, [appt, onClose]);
+
+  if (!appt) return null;
+
+  const patientName = appt.patients?.full_name ?? '—';
+
+  const handleSubmit = async () => {
+    if (!date || !time) { setError('Completá la fecha y hora.'); return; }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const datetime = new Date(`${date}T${time}:00`).toISOString();
+      await updateAppointment(appt.id, { datetime, type, professionalName: professional, notes });
+      onSuccess?.();
+    } catch {
+      setError('No se pudo guardar el turno. Intentá de nuevo.');
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="edit-appt-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={containerRef}
+        className="relative w-full max-w-[480px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6 max-h-[90vh] overflow-y-auto"
+        style={{ animation: 'cqModalIn 220ms cubic-bezier(.2,.7,.2,1)' }}
+      >
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <MonoLabel>Editar turno</MonoLabel>
+            <h3 id="edit-appt-title" className="mt-1 text-[20px] font-semibold tracking-tight truncate max-w-[320px]">
+              {patientName}
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-10 h-10 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
+            aria-label="Cerrar"
+          >
+            <Icons.Close size={15} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block">
+                <MonoLabel>Fecha *</MonoLabel>
+                <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)]">
+                  <span className="text-[var(--cq-fg-muted)] shrink-0"><Icons.Calendar size={14} /></span>
+                  <input type="date" value={date} onChange={e => setDate(e.target.value)} className="flex-1 bg-transparent outline-none text-[13.5px]" />
+                </div>
+              </label>
+            </div>
+            <div>
+              <label className="block">
+                <MonoLabel>Hora *</MonoLabel>
+                <div className="mt-1.5 flex items-center h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)]">
+                  <input type="time" value={time} onChange={e => setTime(e.target.value)} className="flex-1 bg-transparent outline-none text-[13.5px]" />
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label className="block">
+              <MonoLabel>Tipo de consulta</MonoLabel>
+              <div className="mt-1.5 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] flex items-center">
+                <select value={type} onChange={e => setType(e.target.value)} className="flex-1 bg-transparent outline-none text-[13.5px] cursor-pointer">
+                  <option value="">Seleccionar…</option>
+                  {APPOINTMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </label>
+          </div>
+
+          <div>
+            <label className="block">
+              <MonoLabel>Profesional</MonoLabel>
+              <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)]">
+                <input type="text" value={professional} onChange={e => setProfessional(e.target.value)} placeholder="Dr. / Dra. …" className="flex-1 bg-transparent outline-none text-[13.5px]" />
+              </div>
+            </label>
+          </div>
+
+          <div>
+            <label className="block">
+              <MonoLabel>Notas</MonoLabel>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Observaciones internas…" rows={2} className="mt-1.5 w-full px-3 py-2.5 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus:border-[var(--cq-fg)] outline-none text-[13.5px] resize-none" />
+            </label>
+          </div>
+
+          {error && <p role="alert" className="text-[13px] text-[var(--cq-danger)]">{error}</p>}
+        </div>
+
+        <div className="mt-5 flex items-center gap-2 justify-end">
+          <Button variant="ghost" size="md" onClick={onClose} disabled={submitting}>Cancelar</Button>
+          <Button variant="primary" size="md" onClick={handleSubmit} disabled={submitting || !date || !time}>
+            {submitting ? <SpinnerIcon /> : <Icons.Check size={14} />}
+            {submitting ? 'Guardando…' : 'Guardar cambios'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Day-view actions dropdown ────────────────────────────────────────────────
-function ActionsMenu({ apptId, currentStatus, onStatusChange }) {
-  const [open, setOpen] = useState(false);
+function ActionsMenu({ appt, onStatusChange, onEdit, onDelete }) {
+  const [open,          setOpen]          = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const ref = useRef(null);
+  const canDelete = DELETABLE_STATUSES.includes(appt.status);
 
   useEffect(() => {
     if (!open) return;
-    const h = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const h = (e) => { if (!ref.current?.contains(e.target)) { setOpen(false); setConfirmDelete(false); } };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
+
+  const close = () => { setOpen(false); setConfirmDelete(false); };
 
   return (
     <div ref={ref} className="relative shrink-0">
       <button
         onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
-        className="w-8 h-8 rounded-[6px] flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[var(--cq-surface-3)] transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[var(--cq-accent)]"
+        className="w-8 h-8 rounded-[6px] flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[var(--cq-surface-2)] transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[var(--cq-accent)]"
         aria-label="Acciones del turno"
       >
         <Icons.More size={14} />
       </button>
       {open && (
-        <div className="absolute right-0 top-[calc(100%+4px)] z-20 w-44 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[10px] shadow-lg overflow-hidden py-1">
-          {STATUS_ACTIONS.filter(a => a.status !== currentStatus).map(a => (
-            <button
-              key={a.status}
-              onClick={(e) => { e.stopPropagation(); setOpen(false); onStatusChange(apptId, a.status); }}
-              className={`w-full text-left px-4 py-2 text-[13px] hover:bg-[var(--cq-surface-2)] transition-colors ${
-                a.status === 'cancelled' ? 'text-[var(--cq-danger)]' : ''
-              }`}
-            >
-              {a.label}
-            </button>
-          ))}
+        <div className="absolute right-0 top-[calc(100%+4px)] z-20 w-48 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[10px] shadow-lg overflow-hidden py-1">
+          {confirmDelete ? (
+            <div className="px-4 py-2.5">
+              <p className="text-[12.5px] text-[var(--cq-fg-muted)] mb-2">¿Eliminar este turno?</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); close(); onDelete(appt.id); }}
+                  className="flex-1 px-2 py-1 rounded-[6px] bg-[var(--cq-danger)] text-white text-[12px] font-medium hover:opacity-90 transition-opacity"
+                >
+                  Sí, eliminar
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
+                  className="flex-1 px-2 py-1 rounded-[6px] border border-[var(--cq-border)] text-[12px] hover:bg-[var(--cq-surface-2)] transition-colors"
+                >
+                  No
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); close(); onEdit(appt); }}
+                className="w-full text-left px-4 py-2 text-[13px] hover:bg-[var(--cq-surface-2)] transition-colors"
+              >
+                Editar
+              </button>
+              <div className="h-px bg-[var(--cq-border)] mx-2 my-1" />
+              {STATUS_ACTIONS.filter(a => a.status !== appt.status).map(a => (
+                <button
+                  key={a.status}
+                  onClick={(e) => { e.stopPropagation(); close(); onStatusChange(appt.id, a.status); }}
+                  className={`w-full text-left px-4 py-2 text-[13px] hover:bg-[var(--cq-surface-2)] transition-colors ${
+                    a.status === 'cancelled' ? 'text-[var(--cq-danger)]' : ''
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ))}
+              {canDelete && (
+                <>
+                  <div className="h-px bg-[var(--cq-border)] mx-2 my-1" />
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+                    className="w-full text-left px-4 py-2 text-[13px] text-[var(--cq-danger)] hover:bg-[var(--cq-surface-2)] transition-colors"
+                  >
+                    Eliminar turno
+                  </button>
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -254,7 +472,7 @@ function ApptTooltip({ appt, rect }) {
 }
 
 // ─── Day view ─────────────────────────────────────────────────────────────────
-function DayView({ appointments, loading, activeFilter, onFilterChange, onStatusChange, onNew }) {
+function DayView({ appointments, loading, activeFilter, onFilterChange, onStatusChange, onEdit, onDelete, onNew }) {
   const filtered = useMemo(() => {
     if (activeFilter === 'all') return appointments;
     return appointments.filter(a => a.status === activeFilter);
@@ -320,7 +538,7 @@ function DayView({ appointments, loading, activeFilter, onFilterChange, onStatus
                 </div>
                 <div className="hidden sm:block text-[13px] text-[var(--cq-fg-muted)] w-32 truncate shrink-0">{prof}</div>
                 <Badge tone={tone} dot>{label}</Badge>
-                <ActionsMenu apptId={appt.id} currentStatus={status} onStatusChange={onStatusChange} />
+                <ActionsMenu appt={appt} onStatusChange={onStatusChange} onEdit={onEdit} onDelete={onDelete} />
               </li>
             );
           })
@@ -492,11 +710,12 @@ function MonthView({ currentDate, appointments, loading, onNew }) {
 
 // ─── Main Agenda ──────────────────────────────────────────────────────────────
 export function Agenda() {
-  const { openModal } = useOutletContext() ?? {};
+  const { openModal, push } = useOutletContext() ?? {};
 
   const [currentDate,  setCurrentDate]  = useState(todayISO);
   const [view,         setView]         = useState('day');
   const [activeFilter, setActiveFilter] = useState('all');
+  const [editingAppt,  setEditingAppt]  = useState(null);
 
   // Compute the date range based on view mode
   const { startDate, endDate } = useMemo(() => {
@@ -515,8 +734,31 @@ export function Agenda() {
   const { appointments, loading } = useAgendaRange(startDate, endDate);
 
   const handleStatusChange = useCallback(async (apptId, newStatus) => {
-    try { await updateAppointmentStatus(apptId, newStatus); } catch { /* realtime will not update; silent */ }
+    try {
+      await updateAppointmentStatus(apptId, newStatus);
+      push?.(`Estado actualizado: ${STATUS_LABELS[newStatus] ?? newStatus}.`, 'success');
+    } catch {
+      push?.('No se pudo actualizar el estado. Intentá de nuevo.', 'error');
+    }
+  }, [push]);
+
+  const handleDelete = useCallback(async (apptId) => {
+    try {
+      await deleteAppointment(apptId);
+      push?.('Turno eliminado correctamente.', 'success');
+    } catch {
+      push?.('No se pudo eliminar el turno. Intentá más tarde.', 'error');
+    }
+  }, [push]);
+
+  const handleEdit = useCallback((appt) => {
+    setEditingAppt(appt);
   }, []);
+
+  const handleEditSuccess = useCallback(() => {
+    push?.('Turno actualizado correctamente.', 'success');
+    setEditingAppt(null);
+  }, [push]);
 
   const handleNew = useCallback((date) => {
     openModal?.({ date: date ?? currentDate });
@@ -636,6 +878,8 @@ export function Agenda() {
           activeFilter={activeFilter}
           onFilterChange={setActiveFilter}
           onStatusChange={handleStatusChange}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
           onNew={() => handleNew(currentDate)}
         />
       )}
@@ -657,6 +901,12 @@ export function Agenda() {
           onNew={handleNew}
         />
       )}
+
+      <EditApptModal
+        appt={editingAppt}
+        onClose={() => setEditingAppt(null)}
+        onSuccess={handleEditSuccess}
+      />
     </div>
   );
 }

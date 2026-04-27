@@ -34,7 +34,7 @@ function SpinnerIcon() {
   );
 }
 
-export function NewAppointmentModal({ open, onClose, clinicId, defaultDate }) {
+export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSuccess }) {
   const containerRef = useRef(null);
 
   const [query,          setQuery]          = useState('');
@@ -175,6 +175,7 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate }) {
       const datetime = new Date(`${date}T${time}:00`).toISOString();
       await createAppointment(clinicId, { patientId, datetime, type, professionalName: professional, notes });
 
+      onSuccess?.();
       setSuccess(true);
       setTimeout(onClose, 1400);
     } catch (err) {
