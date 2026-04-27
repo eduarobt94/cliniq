@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Badge, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
 import { usePatients } from '../../hooks/usePatients';
 import { useClinic } from '../../hooks/useClinic';
@@ -479,7 +479,13 @@ export function Pacientes() {
   const { push } = useOutletContext() ?? {};
   const { patients: rawPatients, loading } = usePatients();
   const { clinic } = useClinic();
-  const [search,         setSearch]         = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+
+  // Clear the URL param once applied so back-nav doesn't re-filter
+  useEffect(() => {
+    if (searchParams.get('q')) setSearchParams({}, { replace: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [statusFilter,   setStatusFilter]   = useState('all');
   const [addOpen,        setAddOpen]        = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Badge, Button, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
 import { useAgendaRange } from '../../hooks/useAgendaRange';
 import { updateAppointmentStatus, updateAppointment, deleteAppointment } from '../../lib/appointmentService';
@@ -472,11 +472,19 @@ function ApptTooltip({ appt, rect }) {
 }
 
 // ─── Day view ─────────────────────────────────────────────────────────────────
-function DayView({ appointments, loading, activeFilter, onFilterChange, onStatusChange, onEdit, onDelete, onNew }) {
+function DayView({ appointments, loading, activeFilter, onFilterChange, onStatusChange, onEdit, onDelete, onNew, textFilter, onTextFilterClear }) {
   const filtered = useMemo(() => {
-    if (activeFilter === 'all') return appointments;
-    return appointments.filter(a => a.status === activeFilter);
-  }, [appointments, activeFilter]);
+    let list = activeFilter === 'all' ? appointments : appointments.filter(a => a.status === activeFilter);
+    if (textFilter?.trim()) {
+      const q = textFilter.trim().toLowerCase();
+      list = list.filter(a =>
+        (a.patients?.full_name ?? '').toLowerCase().includes(q) ||
+        (a.appointment_type    ?? '').toLowerCase().includes(q) ||
+        (a.professional_name   ?? '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [appointments, activeFilter, textFilter]);
 
   return (
     <Card padded={false}>
@@ -494,9 +502,21 @@ function DayView({ appointments, loading, activeFilter, onFilterChange, onStatus
             {f.label}
           </button>
         ))}
+        {textFilter?.trim() && (
+          <button
+            onClick={onTextFilterClear}
+            className="ml-2 inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full bg-[color-mix(in_oklch,var(--cq-accent)_12%,transparent)] text-[var(--cq-accent)] text-[12px] font-medium hover:opacity-75 transition-opacity"
+          >
+            <Icons.Search size={11} />
+            {textFilter}
+            <Icons.Close size={10} />
+          </button>
+        )}
         {!loading && appointments.length > 0 && (
           <MonoLabel className="ml-auto pr-2 shrink-0">
-            {appointments.length} turno{appointments.length !== 1 ? 's' : ''}
+            {filtered.length !== appointments.length
+              ? `${filtered.length} de ${appointments.length}`
+              : `${appointments.length} turno${appointments.length !== 1 ? 's' : ''}`}
           </MonoLabel>
         )}
       </div>
@@ -712,10 +732,17 @@ function MonthView({ currentDate, appointments, loading, onNew }) {
 export function Agenda() {
   const { openModal, push } = useOutletContext() ?? {};
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [currentDate,  setCurrentDate]  = useState(todayISO);
   const [view,         setView]         = useState('day');
   const [activeFilter, setActiveFilter] = useState('all');
   const [editingAppt,  setEditingAppt]  = useState(null);
+  const [textFilter,   setTextFilter]   = useState(() => searchParams.get('q') ?? '');
+
+  // Clear URL param once applied
+  useEffect(() => {
+    if (searchParams.get('q')) setSearchParams({}, { replace: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Compute the date range based on view mode
   const { startDate, endDate } = useMemo(() => {
@@ -881,6 +908,8 @@ export function Agenda() {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onNew={() => handleNew(currentDate)}
+          textFilter={textFilter}
+          onTextFilterClear={() => setTextFilter('')}
         />
       )}
       {view === 'week' && (

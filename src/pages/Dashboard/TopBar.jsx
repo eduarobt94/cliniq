@@ -370,8 +370,12 @@ export function TopBar({ onMobileMenu, onNewAppointment, notifications = [], unr
               q={q}
               patients={patients}
               appointments={appointments}
-              onSelectPatient={() => { clearSearch(); navigate('/dashboard/pacientes'); }}
-              onSelectAppt={() => { clearSearch(); navigate('/dashboard/agenda'); }}
+              onSelectPatient={(p) => { clearSearch(); navigate(`/dashboard/pacientes?q=${encodeURIComponent(p.full_name)}`); }}
+              onSelectAppt={(a) => {
+                clearSearch();
+                const term = a.appointment_type || a.patients?.full_name || '';
+                navigate(`/dashboard/agenda?q=${encodeURIComponent(term)}`);
+              }}
             />
           </div>
         )}
