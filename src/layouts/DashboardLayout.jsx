@@ -6,10 +6,12 @@ import { NewAppointmentModal } from '../pages/Dashboard/NewAppointmentModal';
 import { InviteMemberModal } from '../pages/Dashboard/InviteMemberModal';
 import { useAuth } from '../context/AuthContext';
 import { ToastContainer, useToast } from '../components/ui';
+import { useNotifications } from '../hooks/useNotifications';
 
 export function DashboardLayout() {
   const { clinic } = useAuth();
   const { toasts, push, dismiss } = useToast();
+  const { notifications, unreadCount, markAllRead } = useNotifications(clinic?.id, push);
 
   const [collapsed,   setCollapsed]   = useState(false);
   const [mobileOpen,  setMobileOpen]  = useState(false);
@@ -42,6 +44,9 @@ export function DashboardLayout() {
         <TopBar
           onMobileMenu={openMobileMenu}
           onNewAppointment={openModal}
+          notifications={notifications}
+          unreadCount={unreadCount}
+          onMarkAllRead={markAllRead}
         />
         <main className="flex-1 overflow-y-auto p-5 md:p-8">
           <Outlet context={{ openModal, openInvite, push }} />

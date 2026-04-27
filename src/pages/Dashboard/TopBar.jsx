@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Icons, Badge, MonoLabel, Avatar } from '../../components/ui';
-import { Button } from '../../components/ui';
+import { Icons, Badge, MonoLabel, Avatar, Button } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 
@@ -15,8 +14,7 @@ const ROUTE_LABELS = {
   '/dashboard/configuracion':    'Configuración',
 };
 
-const NOTIF_SEEN_KEY = 'cq_notif_seen';
-
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function useDebounce(value, delay) {
   const [dv, setDv] = useState(value);
   useEffect(() => {
@@ -26,12 +24,22 @@ function useDebounce(value, delay) {
   return dv;
 }
 
+function fmtDate(iso) {
+  return new Date(iso).toLocaleDateString('es-UY', { day: 'numeric', month: 'short' });
+}
+
 function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
 }
 
-function fmtDate(iso) {
-  return new Date(iso).toLocaleDateString('es-UY', { day: 'numeric', month: 'short' });
+function timeAgo(date) {
+  const diff = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1)  return 'ahora';
+  if (mins < 60) return `hace ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs  < 24) return `hace ${hrs} h`;
+  return `hace ${Math.floor(hrs / 24)} d`;
 }
 
 function SpinnerIcon() {
@@ -43,16 +51,127 @@ function SpinnerIcon() {
   );
 }
 
-// ─── Search panel ─────────────────────────────────────────────────────────────
+// ─── Notification type config ─────────────────────────────────────────────────
+const NOTIF_CONFIG = {
+  success: {
+    dot:  'bg-[var(--cq-success)]',
+    text: 'text-[var(--cq-success)]',
+    Icon: () => (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    ),
+  },
+  error: {
+    dot:  'bg-[var(--cq-danger)]',
+    text: 'text-[var(--cq-danger)]',
+    Icon: () => (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    ),
+  },
+  info: {
+    dot:  'bg-[var(--cq-accent)]',
+    text: 'text-[var(--cq-accent)]',
+    Icon: () => (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="8" strokeWidth="3" /><line x1="12" y1="12" x2="12" y2="16" />
+      </svg>
+    ),
+  },
+  warn: {
+    dot:  'bg-[var(--cq-warn)]',
+    text: 'text-[var(--cq-warn)]',
+    Icon: () => (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" strokeWidth="3" />
+      </svg>
+    ),
+  },
+};
+
+// ─── Notification Center Panel ────────────────────────────────────────────────
+function NotifPanel({ notifications, onClose, onNavigate }) {
+  return (
+    <div
+      className="absolute right-0 top-[calc(100%+6px)] z-30 w-[340px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[14px] shadow-xl overflow-hidden"
+      style={{ animation: 'cqModalIn 200ms cubic-bezier(.2,.7,.2,1)' }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--cq-border)]">
+        <MonoLabel>Notificaciones</MonoLabel>
+        <button
+          onClick={onClose}
+          className="w-7 h-7 rounded-[6px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center text-[var(--cq-fg-muted)]"
+          aria-label="Cerrar"
+        >
+          <Icons.Close size={12} />
+        </button>
+      </div>
+
+      {notifications.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10 gap-2 text-[var(--cq-fg-muted)]">
+          <Icons.Bell size={26} />
+          <p className="text-[13px] font-medium">Sin notificaciones</p>
+          <p className="text-[11.5px] text-center px-6 leading-relaxed">
+            Los nuevos turnos y cambios de estado aparecerán aquí.
+          </p>
+        </div>
+      ) : (
+        <ul className="max-h-[380px] overflow-y-auto divide-y divide-[var(--cq-border)]">
+          {notifications.map(n => {
+            const cfg = NOTIF_CONFIG[n.type] ?? NOTIF_CONFIG.info;
+            return (
+              <li key={n.id} className="flex items-start gap-3 px-4 py-3 hover:bg-[var(--cq-surface-2)] transition-colors">
+                {/* Type indicator */}
+                <div className={`mt-0.5 w-[28px] h-[28px] rounded-full flex items-center justify-center shrink-0 ${cfg.text}`}
+                  style={{ background: `color-mix(in oklch, currentColor 12%, transparent)` }}>
+                  <cfg.Icon />
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <p className={`text-[13px] leading-snug ${!n.read ? 'font-medium' : ''}`}>
+                    {n.message}
+                  </p>
+                  <p className="text-[11.5px] text-[var(--cq-fg-muted)] mt-0.5">{timeAgo(n.timestamp)}</p>
+                </div>
+
+                {/* Unread dot */}
+                {!n.read && (
+                  <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} aria-label="No leída" />
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <div className="border-t border-[var(--cq-border)] px-4 py-3 text-center">
+        <button
+          onClick={() => { onClose(); onNavigate('/dashboard/agenda'); }}
+          className="text-[12.5px] text-[var(--cq-accent)] hover:underline"
+        >
+          Ver agenda completa →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Search dropdown ──────────────────────────────────────────────────────────
 function SearchPanel({ q, patients, appointments, onSelectPatient, onSelectAppt }) {
   const hasPatients = patients.length > 0;
   const hasAppts    = appointments.length > 0;
-  const hasAny      = hasPatients || hasAppts;
 
-  if (!hasAny) {
+  if (!hasPatients && !hasAppts) {
     return (
       <div className="px-4 py-7 text-center">
-        <p className="text-[13px] text-[var(--cq-fg-muted)]">Sin resultados para <span className="font-medium text-[var(--cq-fg)]">"{q}"</span></p>
+        <p className="text-[13px] text-[var(--cq-fg-muted)]">
+          Sin resultados para <span className="font-medium text-[var(--cq-fg)]">"{q}"</span>
+        </p>
       </div>
     );
   }
@@ -61,9 +180,7 @@ function SearchPanel({ q, patients, appointments, onSelectPatient, onSelectAppt 
     <>
       {hasPatients && (
         <section>
-          <div className="px-4 pt-3 pb-1.5">
-            <MonoLabel>Pacientes</MonoLabel>
-          </div>
+          <div className="px-4 pt-3 pb-1.5"><MonoLabel>Pacientes</MonoLabel></div>
           {patients.map(p => (
             <button
               key={p.id}
@@ -83,9 +200,7 @@ function SearchPanel({ q, patients, appointments, onSelectPatient, onSelectAppt 
 
       {hasAppts && (
         <section className={hasPatients ? 'border-t border-[var(--cq-border)]' : ''}>
-          <div className="px-4 pt-3 pb-1.5">
-            <MonoLabel>Turnos</MonoLabel>
-          </div>
+          <div className="px-4 pt-3 pb-1.5"><MonoLabel>Turnos</MonoLabel></div>
           {appointments.map(a => (
             <button
               key={a.id}
@@ -111,94 +226,24 @@ function SearchPanel({ q, patients, appointments, onSelectPatient, onSelectAppt 
   );
 }
 
-// ─── Notifications panel ──────────────────────────────────────────────────────
-function NotifPanel({ notifs, onClose, onNavigate }) {
-  const STATUS_TONE = { new: 'accent', pending: 'warn' };
-  const STATUS_LABEL = { new: 'Nuevo', pending: 'Pendiente' };
-
-  return (
-    <div
-      className="absolute right-0 top-[calc(100%+6px)] z-30 w-80 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[14px] shadow-xl overflow-hidden"
-      style={{ animation: 'cqModalIn 200ms cubic-bezier(.2,.7,.2,1)' }}
-    >
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--cq-border)]">
-        <MonoLabel>Notificaciones</MonoLabel>
-        <button
-          onClick={onClose}
-          className="w-7 h-7 rounded-[6px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center text-[var(--cq-fg-muted)]"
-          aria-label="Cerrar"
-        >
-          <Icons.Close size={12} />
-        </button>
-      </div>
-
-      {notifs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-10 gap-2 text-[var(--cq-fg-muted)]">
-          <Icons.Bell size={24} />
-          <p className="text-[13px]">Sin notificaciones pendientes</p>
-          <p className="text-[11.5px] text-center px-6">Los turnos nuevos y pendientes de hoy aparecerán aquí.</p>
-        </div>
-      ) : (
-        <>
-          <div className="px-4 pt-3 pb-1">
-            <p className="text-[12px] text-[var(--cq-fg-muted)]">Turnos de hoy sin confirmar — {notifs.length}</p>
-          </div>
-          <div className="max-h-[320px] overflow-y-auto divide-y divide-[var(--cq-border)]">
-            {notifs.map(n => (
-              <button
-                key={n.id}
-                onClick={() => { onClose(); onNavigate('/dashboard/agenda'); }}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--cq-surface-2)] transition-colors text-left"
-              >
-                <Avatar name={n.patients?.full_name ?? '?'} size={32} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium truncate">{n.patients?.full_name ?? '—'}</p>
-                  <p className="text-[11.5px] text-[var(--cq-fg-muted)]">
-                    {fmtTime(n.appointment_datetime)}
-                    {n.appointment_type ? ` · ${n.appointment_type}` : ''}
-                  </p>
-                </div>
-                <Badge tone={STATUS_TONE[n.status] ?? 'accent'} dot>
-                  {STATUS_LABEL[n.status] ?? n.status}
-                </Badge>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
-      <div className="border-t border-[var(--cq-border)] px-4 py-3 text-center">
-        <button
-          onClick={() => { onClose(); onNavigate('/dashboard/agenda'); }}
-          className="text-[12.5px] text-[var(--cq-accent)] hover:underline"
-        >
-          Ver agenda completa →
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── TopBar ───────────────────────────────────────────────────────────────────
-export function TopBar({ onMobileMenu, onNewAppointment }) {
+export function TopBar({ onMobileMenu, onNewAppointment, notifications = [], unreadCount = 0, onMarkAllRead }) {
   const location = useLocation();
   const navigate  = useNavigate();
   const { clinic } = useAuth();
 
   // Search state
-  const [q,           setQ]           = useState('');
-  const [patients,    setPatients]    = useState([]);
-  const [appointments,setAppointments]= useState([]);
-  const [searching,   setSearching]   = useState(false);
-  const [showSearch,  setShowSearch]  = useState(false);
+  const [q,            setQ]            = useState('');
+  const [patients,     setPatients]     = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [searching,    setSearching]    = useState(false);
+  const [showSearch,   setShowSearch]   = useState(false);
   const searchRef = useRef(null);
   const inputRef  = useRef(null);
   const dq = useDebounce(q, 260);
 
-  // Notifications state
-  const [notifs,     setNotifs]     = useState([]);
-  const [unread,     setUnread]     = useState(0);
-  const [notifOpen,  setNotifOpen]  = useState(false);
+  // Notifications panel state
+  const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
 
   const activeLabel = ROUTE_LABELS[location.pathname] ?? 'Resumen';
@@ -217,7 +262,7 @@ export function TopBar({ onMobileMenu, onNewAppointment }) {
     return () => document.removeEventListener('keydown', h);
   }, [q]);
 
-  // Debounced search against Supabase
+  // Debounced Supabase search
   useEffect(() => {
     if (!dq || dq.length < 2 || !clinic?.id) {
       setPatients([]);
@@ -259,34 +304,7 @@ export function TopBar({ onMobileMenu, onNewAppointment }) {
     return () => document.removeEventListener('mousedown', h);
   }, [showSearch]);
 
-  // Load today's unconfirmed appointments as notifications
-  const loadNotifs = useCallback(async () => {
-    if (!clinic?.id) return;
-    const now   = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const end   = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
-    const { data } = await supabase
-      .from('appointments')
-      .select('id, appointment_datetime, appointment_type, status, patients(full_name)')
-      .eq('clinic_id', clinic.id)
-      .in('status', ['new', 'pending'])
-      .gte('appointment_datetime', start)
-      .lt('appointment_datetime', end)
-      .order('appointment_datetime');
-    const list = data ?? [];
-    setNotifs(list);
-
-    const seenAt  = parseInt(localStorage.getItem(NOTIF_SEEN_KEY) ?? '0', 10);
-    const newCount = seenAt === 0 ? list.length : list.filter(n => {
-      const created = new Date(n.appointment_datetime).getTime();
-      return created > seenAt;
-    }).length;
-    setUnread(Math.min(newCount, list.length));
-  }, [clinic?.id]);
-
-  useEffect(() => { loadNotifs(); }, [loadNotifs]);
-
-  // Close notif on outside click
+  // Close notif panel on outside click
   useEffect(() => {
     if (!notifOpen) return;
     const h = (e) => { if (!notifRef.current?.contains(e.target)) setNotifOpen(false); };
@@ -297,26 +315,14 @@ export function TopBar({ onMobileMenu, onNewAppointment }) {
   const openNotifPanel = () => {
     const next = !notifOpen;
     setNotifOpen(next);
-    if (next) {
-      localStorage.setItem(NOTIF_SEEN_KEY, Date.now().toString());
-      setUnread(0);
-    }
+    if (next) onMarkAllRead?.();
   };
 
   const clearSearch = () => { setQ(''); setShowSearch(false); };
 
-  const handleSelectPatient = (p) => {
-    clearSearch();
-    navigate('/dashboard/pacientes');
-  };
-
-  const handleSelectAppt = (a) => {
-    clearSearch();
-    navigate('/dashboard/agenda');
-  };
-
   return (
     <header className="h-16 border-b border-[var(--cq-border)] bg-[var(--cq-bg)] flex items-center gap-3 px-5 lg:px-8 shrink-0">
+      {/* Mobile menu */}
       <button
         onClick={onMobileMenu}
         className="lg:hidden w-9 h-9 rounded-[8px] border border-[var(--cq-border)] flex items-center justify-center"
@@ -325,8 +331,9 @@ export function TopBar({ onMobileMenu, onNewAppointment }) {
         <Icons.Menu size={16} />
       </button>
 
+      {/* Breadcrumb */}
       <div className="hidden md:flex items-center gap-2 text-[13.5px] text-[var(--cq-fg-muted)]">
-        <span className="hover:text-[var(--cq-fg)] cursor-pointer">{clinicName}</span>
+        <span className="hover:text-[var(--cq-fg)] cursor-default">{clinicName}</span>
         <span className="opacity-40">/</span>
         <span className="text-[var(--cq-fg)]">{activeLabel}</span>
       </div>
@@ -334,7 +341,10 @@ export function TopBar({ onMobileMenu, onNewAppointment }) {
       {/* Search */}
       <div ref={searchRef} className="flex-1 max-w-[420px] mx-auto relative">
         <div className="flex items-center gap-2 h-9 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-surface)] hover:border-[var(--cq-fg-muted)] transition-colors focus-within:ring-2 focus-within:ring-[var(--cq-accent)] focus-within:border-[var(--cq-accent)]">
-          {searching ? <SpinnerIcon /> : <Icons.Search size={14} className="text-[var(--cq-fg-muted)] shrink-0" />}
+          {searching
+            ? <SpinnerIcon />
+            : <Icons.Search size={14} className="text-[var(--cq-fg-muted)] shrink-0" />
+          }
           <input
             ref={inputRef}
             value={q}
@@ -346,11 +356,7 @@ export function TopBar({ onMobileMenu, onNewAppointment }) {
             className="flex-1 bg-transparent outline-none text-[13.5px] placeholder:text-[var(--cq-fg-muted)]"
           />
           {q ? (
-            <button
-              onClick={clearSearch}
-              className="text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] shrink-0"
-              aria-label="Limpiar búsqueda"
-            >
+            <button onClick={clearSearch} className="text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] shrink-0" aria-label="Limpiar">
               <Icons.Close size={12} />
             </button>
           ) : (
@@ -364,32 +370,33 @@ export function TopBar({ onMobileMenu, onNewAppointment }) {
               q={q}
               patients={patients}
               appointments={appointments}
-              onSelectPatient={handleSelectPatient}
-              onSelectAppt={handleSelectAppt}
+              onSelectPatient={() => { clearSearch(); navigate('/dashboard/pacientes'); }}
+              onSelectAppt={() => { clearSearch(); navigate('/dashboard/agenda'); }}
             />
           </div>
         )}
       </div>
 
-      {/* Notifications + New appointment */}
+      {/* Actions */}
       <div className="flex items-center gap-1.5">
+        {/* Notification bell */}
         <div ref={notifRef} className="relative">
           <button
             onClick={openNotifPanel}
             className="w-10 h-10 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center relative transition-colors"
-            aria-label={`Notificaciones${unread > 0 ? ` (${unread} sin leer)` : ''}`}
+            aria-label={`Notificaciones${unreadCount > 0 ? ` — ${unreadCount} sin leer` : ''}`}
           >
             <Icons.Bell size={15} />
-            {unread > 0 && (
-              <span className="absolute top-1.5 right-1.5 min-w-[16px] h-[16px] px-[3px] rounded-full bg-[var(--cq-accent)] text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                {unread > 9 ? '9+' : unread}
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 min-w-[16px] h-[16px] px-[3px] rounded-full bg-[var(--cq-accent)] text-white text-[9px] font-bold flex items-center justify-center leading-none pointer-events-none">
+                {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
           </button>
 
           {notifOpen && (
             <NotifPanel
-              notifs={notifs}
+              notifications={notifications}
               onClose={() => setNotifOpen(false)}
               onNavigate={navigate}
             />

@@ -10,10 +10,13 @@ export function Toast({ message, type = 'error', duration = 4000, onDismiss }) {
     return () => { clearTimeout(hideTimer); clearTimeout(removeTimer); };
   }, [duration, onDismiss]);
 
-  const colors =
-    type === 'error'
-      ? 'bg-[var(--cq-danger)] text-white'
-      : 'bg-[var(--cq-success)] text-white';
+  const COLOR_MAP = {
+    error:   'bg-[var(--cq-danger)]  text-white',
+    success: 'bg-[var(--cq-success)] text-white',
+    info:    'bg-[var(--cq-accent)]  text-white',
+    warn:    'bg-[var(--cq-warn)]    text-[#1a1200]',
+  };
+  const colors = COLOR_MAP[type] ?? COLOR_MAP.success;
 
   return (
     <div
