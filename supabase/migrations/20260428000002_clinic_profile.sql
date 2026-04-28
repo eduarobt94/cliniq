@@ -19,7 +19,8 @@ CREATE TRIGGER trg_clinics_updated_at
   EXECUTE FUNCTION fn_set_updated_at();
 
 -- RLS policy: allow clinic owners (via clinic_members) to update
-CREATE POLICY IF NOT EXISTS "clinics: update as member owner"
+DROP POLICY IF EXISTS "clinics: update as member owner" ON clinics;
+CREATE POLICY "clinics: update as member owner"
   ON clinics FOR UPDATE
   USING (
     id IN (
