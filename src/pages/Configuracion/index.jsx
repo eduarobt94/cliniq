@@ -113,11 +113,12 @@ export function Configuracion() {
 
   // ── Clinic profile form ───────────────────────────────────────────────────
   const [profileForm, setProfileForm] = useState({
-    name:         '',
-    phone:        '',
-    address:      '',
-    emailContact: '',
-    timezone:     'America/Montevideo',
+    name:             '',
+    phone:            '',
+    address:          '',
+    emailContact:     '',
+    timezone:         'America/Montevideo',
+    waPhoneNumberId:  '',
   });
   const [profileDirty, setProfileDirty] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -125,11 +126,12 @@ export function Configuracion() {
   useEffect(() => {
     if (!clinic) return;
     setProfileForm({
-      name:         clinic.name         ?? '',
-      phone:        clinic.phone        ?? '',
-      address:      clinic.address      ?? '',
-      emailContact: clinic.email_contact ?? '',
-      timezone:     clinic.timezone      ?? 'America/Montevideo',
+      name:             clinic.name             ?? '',
+      phone:            clinic.phone            ?? '',
+      address:          clinic.address          ?? '',
+      emailContact:     clinic.email_contact    ?? '',
+      timezone:         clinic.timezone         ?? 'America/Montevideo',
+      waPhoneNumberId:  clinic.wa_phone_number_id ?? '',
     });
     setProfileDirty(false);
   }, [clinic?.id]);
@@ -444,17 +446,38 @@ export function Configuracion() {
           )}
         </div>
 
+        {/* Phone Number ID — campo editable para el owner */}
+        {isOwner && (
+          <div className="mb-5">
+            <MonoLabel className="block mb-1.5">Phone Number ID (Meta Business)</MonoLabel>
+            <input
+              className={inputCls}
+              value={profileForm.waPhoneNumberId}
+              onChange={e => handleProfileChange('waPhoneNumberId', e.target.value.trim())}
+              placeholder="123456789012345"
+              spellCheck={false}
+            />
+            <p className="mt-1.5 text-[11.5px] text-[var(--cq-fg-muted)]">
+              Lo encontrás en Meta Business Suite → WhatsApp → Configuración de API.
+              Los recordatorios se enviarán desde este número. Guardá el perfil para aplicar.
+            </p>
+          </div>
+        )}
+
+        {profileForm.waPhoneNumberId && !isOwner && (
+          <div className="mb-4 flex items-center gap-2 text-[13.5px] text-[var(--cq-fg)]">
+            <Icons.Whatsapp size={15} />
+            <span className="font-mono">{profileForm.waPhoneNumberId}</span>
+          </div>
+        )}
+
         {waLoading ? (
-          <div className="h-20 flex items-center justify-center">
+          <div className="h-12 flex items-center justify-center">
             <span className="w-5 h-5 border-2 border-[var(--cq-accent)] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : waConnected ? (
-          <>
-            <div className="bg-[var(--cq-surface-2)] rounded-[10px] p-4 flex flex-col gap-2 mb-4">
-              <div className="flex items-center gap-2 text-[13.5px] text-[var(--cq-fg)]">
-                <Icons.Whatsapp size={15} />
-                <span>Meta Business API</span>
-              </div>
+          <div className="flex flex-col gap-3">
+            <div className="bg-[var(--cq-surface-2)] rounded-[10px] p-4 flex flex-col gap-2">
               {waActiveAuto && (
                 <div className="text-[13px] text-[var(--cq-fg-muted)]">
                   Automatización activa:{' '}
@@ -463,7 +486,7 @@ export function Configuracion() {
               )}
               {lastSentAt && (
                 <div className="text-[13px] text-[var(--cq-fg-muted)]">
-                  Último mensaje enviado: <span className="font-mono text-[var(--cq-fg)]">{lastSentAt}</span>
+                  Último envío: <span className="font-mono text-[var(--cq-fg)]">{lastSentAt}</span>
                 </div>
               )}
               {stats?.total_sent != null && (
@@ -478,26 +501,18 @@ export function Configuracion() {
                 </div>
               )}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/dashboard/automatizaciones')}
-            >
+            <Button variant="outline" size="sm" onClick={() => navigate('/dashboard/automatizaciones')}>
               Ir a Automatizaciones
             </Button>
-          </>
+          </div>
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
             <p className="text-[13.5px] text-[var(--cq-fg-muted)]">
-              WhatsApp no está configurado. Activá una automatización para conectar tu número de
-              Meta Business API.
+              Ingresá el Phone Number ID y activá una automatización para que los recordatorios
+              se envíen desde el número de tu clínica.
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/dashboard/automatizaciones')}
-            >
-              Configurar WhatsApp
+            <Button variant="outline" size="sm" onClick={() => navigate('/dashboard/automatizaciones')}>
+              Configurar automatizaciones
             </Button>
           </div>
         )}

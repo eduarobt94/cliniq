@@ -2,12 +2,11 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // ─── Env ──────────────────────────────────────────────────────────────────────
-const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')              ?? '';
-const SUPABASE_KEY       = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-const WA_ACCESS_TOKEN    = Deno.env.get('WHATSAPP_ACCESS_TOKEN')     ?? '';
-const WA_PHONE_NUMBER_ID = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')  ?? '';
-
-const WA_API = `https://graph.facebook.com/v19.0/${WA_PHONE_NUMBER_ID}/messages`;
+const SUPABASE_URL            = Deno.env.get('SUPABASE_URL')              ?? '';
+const SUPABASE_KEY            = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const WA_ACCESS_TOKEN         = Deno.env.get('WHATSAPP_ACCESS_TOKEN')     ?? '';
+// Fallback phone number ID — used when the clinic has no wa_phone_number_id set
+const WA_PHONE_NUMBER_ID_GLOBAL = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') ?? '';
 
 // ─── Template renderer ────────────────────────────────────────────────────────
 function renderTemplate(
@@ -25,9 +24,9 @@ function formatForTimezone(iso: string, tz: string): { date: string; time: strin
   const dt = new Date(iso);
   const date = dt.toLocaleDateString('es-UY', {
     timeZone: tz,
-    weekday: 'long',
-    day:     'numeric',
-    month:   'long',
+    weekday:  'long',
+    day:      'numeric',
+    month:    'long',
   });
   const time = dt.toLocaleTimeString('es-UY', {
     timeZone: tz,
@@ -35,14 +34,21 @@ function formatForTimezone(iso: string, tz: string): { date: string; time: strin
     minute:   '2-digit',
     hour12:   false,
   });
-  // Capitalize weekday
   return { date: date.charAt(0).toUpperCase() + date.slice(1), time };
 }
 
-/** Send a text message via WhatsApp Cloud API. Returns wa_message_id or null. */
-async function sendWaText(to: string, text: string): Promise<string | null> {
+/**
+ * Send a text message via WhatsApp Cloud API.
+ * Uses the clinic's own phoneNumberId so the message comes from its number.
+ */
+async function sendWaText(
+  to: string,
+  text: string,
+  phoneNumberId: string,
+): Promise<string | null> {
+  const api = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
   try {
-    const res = await fetch(WA_API, {
+    const res = await fetch(api, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${WA_ACCESS_TOKEN}`,
@@ -59,7 +65,7 @@ async function sendWaText(to: string, text: string): Promise<string | null> {
 
     if (!res.ok) {
       const err = await res.text();
-      console.error(`WA API error sending to ${to}:`, err);
+      console.error(`WA API error sending to ${to} via ${phoneNumberId}:`, err);
       return null;
     }
 
@@ -77,10 +83,8 @@ serve(async (req: Request) => {
     return new Response('ok', { status: 200 });
   }
 
-  // Accept calls from pg_cron (no body required) or manual POST
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-  const results = { sent: 0, failed: 0, skipped: 0 };
+  const results  = { sent: 0, failed: 0, skipped: 0 };
 
   try {
     // ── 1. Load enabled automations ─────────────────────────────────────────
@@ -104,8 +108,6 @@ serve(async (req: Request) => {
     // ── 2. For each clinic, find appointments in the reminder window ────────
     for (const auto of automations) {
       const now         = new Date();
-      // Window: [now + hours_before - 30min, now + hours_before + 30min]
-      // Gives a 1-hour window to catch the cron even if it runs slightly late/early
       const windowStart = new Date(now.getTime() + (auto.hours_before * 60 - 30) * 60 * 1000);
       const windowEnd   = new Date(now.getTime() + (auto.hours_before * 60 + 30) * 60 * 1000);
 
@@ -123,12 +125,12 @@ serve(async (req: Request) => {
           ),
           clinics!inner (
             timezone,
-            whatsapp_number
+            wa_phone_number_id
           )
         `)
-        .eq('clinic_id',        auto.clinic_id)
-        .eq('status',           'new')
-        .is('reminder_sent_at', null)
+        .eq('clinic_id',             auto.clinic_id)
+        .eq('status',                'new')
+        .is('reminder_sent_at',      null)
         .gte('appointment_datetime', windowStart.toISOString())
         .lte('appointment_datetime', windowEnd.toISOString());
 
@@ -146,7 +148,14 @@ serve(async (req: Request) => {
           continue;
         }
 
-        // Format date/time in the clinic's timezone
+        // Use clinic's own WA number; fall back to global if not configured
+        const phoneNumberId = clinic?.wa_phone_number_id || WA_PHONE_NUMBER_ID_GLOBAL;
+        if (!phoneNumberId) {
+          console.error(`Clinic ${auto.clinic_id} has no WA phone number configured`);
+          results.skipped++;
+          continue;
+        }
+
         const tz = clinic?.timezone ?? 'America/Montevideo';
         const { date, time } = formatForTimezone(appt.appointment_datetime, tz);
 
@@ -156,20 +165,14 @@ serve(async (req: Request) => {
           time,
         });
 
-        // Send via WhatsApp API
-        const waId = await sendWaText(patient.phone_number, messageText);
+        const waId = await sendWaText(patient.phone_number, messageText, phoneNumberId);
 
         if (waId) {
-          // Update appointment: set status='pending' and reminder_sent_at
           await supabase
             .from('appointments')
-            .update({
-              status:           'pending',
-              reminder_sent_at: new Date().toISOString(),
-            })
+            .update({ status: 'pending', reminder_sent_at: new Date().toISOString() })
             .eq('id', appt.id);
 
-          // Log outbound message
           await supabase.from('whatsapp_message_log').insert({
             clinic_id:      auto.clinic_id,
             patient_id:     patient.id,
@@ -183,7 +186,6 @@ serve(async (req: Request) => {
 
           results.sent++;
         } else {
-          // Log failed attempt
           await supabase.from('whatsapp_message_log').insert({
             clinic_id:      auto.clinic_id,
             patient_id:     patient.id,

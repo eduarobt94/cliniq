@@ -1,14 +1,15 @@
 import { supabase } from './supabase';
 
-export async function updateClinicProfile(clinicId, { name, phone, address, emailContact, timezone }) {
+export async function updateClinicProfile(clinicId, { name, phone, address, emailContact, timezone, waPhoneNumberId }) {
   const { data, error } = await supabase
     .from('clinics')
     .update({
       name,
       phone,
       address,
-      email_contact: emailContact,
-      timezone
+      email_contact:      emailContact,
+      timezone,
+      wa_phone_number_id: waPhoneNumberId ?? null,
     })
     .eq('id', clinicId)
     .select()

@@ -2,29 +2,23 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // ─── Env ──────────────────────────────────────────────────────────────────────
-const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')               ?? '';
-const SUPABASE_KEY       = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')  ?? '';
-const VERIFY_TOKEN       = Deno.env.get('WHATSAPP_VERIFY_TOKEN')      ?? '';
-const WA_ACCESS_TOKEN    = Deno.env.get('WHATSAPP_ACCESS_TOKEN')      ?? '';
-const WA_PHONE_NUMBER_ID = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')   ?? '';
-
-// ─── Meta Graph API ───────────────────────────────────────────────────────────
-const WA_API = `https://graph.facebook.com/v19.0/${WA_PHONE_NUMBER_ID}/messages`;
+const SUPABASE_URL            = Deno.env.get('SUPABASE_URL')               ?? '';
+const SUPABASE_KEY            = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')  ?? '';
+const VERIFY_TOKEN            = Deno.env.get('WHATSAPP_VERIFY_TOKEN')      ?? '';
+const WA_ACCESS_TOKEN         = Deno.env.get('WHATSAPP_ACCESS_TOKEN')      ?? '';
+// Fallback — used when clinic has no wa_phone_number_id configured
+const WA_PHONE_NUMBER_ID_GLOBAL = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') ?? '';
 
 // ─── Keyword maps ──────────────────────────────────────────────────────────────
-const CONFIRM_KEYWORDS  = new Set(['1', 'si', 'sí', 'confirmo', 'confirmar', 'ok']);
-const CANCEL_KEYWORDS   = new Set(['2', 'no', 'cancelo', 'cancelar', 'cancelacion', 'cancelación']);
+const CONFIRM_KEYWORDS = new Set(['1', 'si', 'sí', 'confirmo', 'confirmar', 'ok']);
+const CANCEL_KEYWORDS  = new Set(['2', 'no', 'cancelo', 'cancelar', 'cancelacion', 'cancelación']);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Normaliza número de teléfono a E.164 sin '+' para comparar */
-function normalizePhone(raw: string): string {
-  return raw.replace(/\D/g, '');
-}
-
-/** Envía un mensaje de texto simple via WhatsApp Cloud API */
-async function sendWaText(to: string, text: string): Promise<string | null> {
-  const res = await fetch(WA_API, {
+/** Envía un mensaje de texto simple via WhatsApp Cloud API desde el número de la clínica */
+async function sendWaText(to: string, text: string, phoneNumberId: string): Promise<string | null> {
+  const api = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
+  const res = await fetch(api, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${WA_ACCESS_TOKEN}`,
@@ -71,22 +65,27 @@ serve(async (req: Request) => {
       return new Response('Bad Request', { status: 400 });
     }
 
-    // Extract message from Meta payload structure
     const entry    = (body?.entry as unknown[])?.[0] as Record<string, unknown>;
     const changes  = (entry?.changes as unknown[])?.[0] as Record<string, unknown>;
     const value    = changes?.value as Record<string, unknown>;
     const messages = value?.messages as Record<string, unknown>[];
     const message  = messages?.[0];
 
-    // Always acknowledge Meta immediately (avoid retries)
+    // Acknowledge Meta immediately to avoid retries
     if (!message) {
       return new Response(JSON.stringify({ ok: true }), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       });
     }
 
+    // ── Identify which clinic this message is for via phone_number_id ────────
+    // Meta includes metadata.phone_number_id — the WA number that received the message.
+    // We use it to find the clinic and reply from the same number.
+    const metadata            = value?.metadata as Record<string, string>;
+    const incomingPhoneNumId  = metadata?.phone_number_id ?? '';
+
     const waMessageId = message.id as string;
-    const fromPhone   = message.from as string;            // E.164 without '+'
+    const fromPhone   = message.from as string;   // E.164 without '+'
     const msgType     = message.type as string;
     const msgText     = msgType === 'text'
       ? ((message.text as Record<string, string>)?.body ?? '').trim().toLowerCase()
@@ -107,16 +106,28 @@ serve(async (req: Request) => {
       });
     }
 
-    // ── Find patient by phone number ──────────────────────────────────────
-    const normalizedFrom = normalizePhone(fromPhone);
+    // ── Resolve the clinic's phoneNumberId for replies ───────────────────────
+    // Try to match by wa_phone_number_id; fall back to global.
+    let replyPhoneNumberId = WA_PHONE_NUMBER_ID_GLOBAL;
+    if (incomingPhoneNumId) {
+      const { data: clinicByPhone } = await supabase
+        .from('clinics')
+        .select('id, wa_phone_number_id')
+        .eq('wa_phone_number_id', incomingPhoneNumId)
+        .maybeSingle();
 
+      if (clinicByPhone?.wa_phone_number_id) {
+        replyPhoneNumberId = clinicByPhone.wa_phone_number_id;
+      }
+    }
+
+    // ── Find patient by phone number ──────────────────────────────────────
     const { data: patient } = await supabase
       .from('patients')
       .select('id, full_name, clinic_id, phone_number')
       .or(`phone_number.eq.${fromPhone},phone_number.eq.+${fromPhone}`)
       .maybeSingle();
 
-    // Log inbound message regardless of whether we know the patient
     const logEntry = {
       clinic_id:      patient?.clinic_id ?? null,
       patient_id:     patient?.id ?? null,
@@ -133,6 +144,19 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ ok: true }), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       });
+    }
+
+    // If patient's clinic has its own number, prefer it over the incoming lookup
+    if (patient.clinic_id) {
+      const { data: patientClinic } = await supabase
+        .from('clinics')
+        .select('wa_phone_number_id')
+        .eq('id', patient.clinic_id)
+        .maybeSingle();
+
+      if (patientClinic?.wa_phone_number_id) {
+        replyPhoneNumberId = patientClinic.wa_phone_number_id;
+      }
     }
 
     // ── Find next pending appointment for this patient ────────────────────
@@ -153,7 +177,6 @@ serve(async (req: Request) => {
     // ── Process keyword ────────────────────────────────────────────────────
     if (appointment && msgText) {
       if (CONFIRM_KEYWORDS.has(msgText)) {
-        // Confirm appointment
         await supabase
           .from('appointments')
           .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
@@ -161,10 +184,8 @@ serve(async (req: Request) => {
 
         await supabase.from('whatsapp_message_log').insert(logEntry);
 
-        const replyId = await sendWaText(
-          fromPhone,
-          `¡Perfecto, ${patient.full_name}! ✅ Tu turno quedó *confirmado*. Te esperamos.`
-        );
+        const replyText = `¡Perfecto, ${patient.full_name}! ✅ Tu turno quedó *confirmado*. Te esperamos.`;
+        const replyId = await sendWaText(fromPhone, replyText, replyPhoneNumberId);
         if (replyId) {
           await supabase.from('whatsapp_message_log').insert({
             clinic_id:      patient.clinic_id,
@@ -172,14 +193,13 @@ serve(async (req: Request) => {
             appointment_id: appointment.id,
             direction:      'outbound',
             phone_number:   fromPhone,
-            message:        `¡Perfecto, ${patient.full_name}! ✅ Tu turno quedó *confirmado*. Te esperamos.`,
+            message:        replyText,
             wa_message_id:  replyId,
             status:         'sent',
           });
         }
 
       } else if (CANCEL_KEYWORDS.has(msgText)) {
-        // Cancel appointment
         await supabase
           .from('appointments')
           .update({ status: 'cancelled' })
@@ -187,10 +207,8 @@ serve(async (req: Request) => {
 
         await supabase.from('whatsapp_message_log').insert(logEntry);
 
-        const replyId = await sendWaText(
-          fromPhone,
-          `Entendido, ${patient.full_name}. Tu turno fue *cancelado*. Cuando quieras reagendar, contactá al consultorio.`
-        );
+        const replyText = `Entendido, ${patient.full_name}. Tu turno fue *cancelado*. Cuando quieras reagendar, contactá al consultorio.`;
+        const replyId = await sendWaText(fromPhone, replyText, replyPhoneNumberId);
         if (replyId) {
           await supabase.from('whatsapp_message_log').insert({
             clinic_id:      patient.clinic_id,
@@ -198,21 +216,20 @@ serve(async (req: Request) => {
             appointment_id: appointment.id,
             direction:      'outbound',
             phone_number:   fromPhone,
-            message:        `Entendido, ${patient.full_name}. Tu turno fue *cancelado*. Cuando quieras reagendar, contactá al consultorio.`,
+            message:        replyText,
             wa_message_id:  replyId,
             status:         'sent',
           });
         }
 
       } else {
-        // Unknown keyword — send help
         await supabase.from('whatsapp_message_log').insert(logEntry);
 
         const helpText =
           `Hola ${patient.full_name} 👋 No entendí tu mensaje.\n\n` +
           `Respondé:\n*1* para confirmar tu turno\n*2* para cancelar tu turno`;
 
-        const replyId = await sendWaText(fromPhone, helpText);
+        const replyId = await sendWaText(fromPhone, helpText, replyPhoneNumberId);
         if (replyId) {
           await supabase.from('whatsapp_message_log').insert({
             clinic_id:      patient.clinic_id,
@@ -227,7 +244,6 @@ serve(async (req: Request) => {
         }
       }
     } else {
-      // No pending appointment or non-text message
       await supabase.from('whatsapp_message_log').insert(logEntry);
     }
 
