@@ -134,7 +134,8 @@ export function Configuracion() {
   }, [clinic?.id]);
 
   function handleProfileChange(field, value) {
-    setProfileForm(prev => ({ ...prev, [field]: value }));
+    const normalized = field === 'phone' ? value.replace(/\s+/g, '') : value;
+    setProfileForm(prev => ({ ...prev, [field]: normalized }));
     setProfileDirty(true);
   }
 
@@ -144,9 +145,9 @@ export function Configuracion() {
       await updateClinicProfile(clinic.id, profileForm);
       await refreshMembership();
       setProfileDirty(false);
-      push?.({ type: 'success', message: 'Perfil actualizado.' });
+      push?.('Perfil actualizado.', 'success');
     } catch (err) {
-      push?.({ type: 'error', message: err.message ?? 'No se pudo guardar.' });
+      push?.('No se pudo guardar: ' + (err.message ?? 'error desconocido'), 'error');
     } finally {
       setSavingProfile(false);
     }
@@ -177,6 +178,7 @@ export function Configuracion() {
 
     if (key === 'compact_mode') {
       localStorage.setItem('cq_compact_mode', String(value));
+      window.dispatchEvent(new Event('cq_compact_mode'));
       return;
     }
 
@@ -188,7 +190,7 @@ export function Configuracion() {
         [key]: value,
       });
     } catch (err) {
-      push?.({ type: 'error', message: 'No se pudo guardar la preferencia.' });
+      push?.('No se pudo guardar la preferencia.', 'error');
       setPrefs(prev => ({ ...prev, [key]: !value }));
     } finally {
       setSavingPrefs(false);

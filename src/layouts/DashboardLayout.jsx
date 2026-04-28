@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from '../pages/Dashboard/Sidebar';
 import { TopBar } from '../pages/Dashboard/TopBar';
@@ -12,6 +12,14 @@ export function DashboardLayout() {
   const { clinic } = useAuth();
   const { toasts, push, dismiss } = useToast();
   const { notifications, unreadCount, markAllRead } = useNotifications(clinic?.id, push);
+
+  const [compact, setCompact] = useState(() => localStorage.getItem('cq_compact_mode') === 'true');
+
+  useEffect(() => {
+    const sync = () => setCompact(localStorage.getItem('cq_compact_mode') === 'true');
+    window.addEventListener('cq_compact_mode', sync);
+    return () => window.removeEventListener('cq_compact_mode', sync);
+  }, []);
 
   const [collapsed,   setCollapsed]   = useState(false);
   const [mobileOpen,  setMobileOpen]  = useState(false);
@@ -48,7 +56,7 @@ export function DashboardLayout() {
           unreadCount={unreadCount}
           onMarkAllRead={markAllRead}
         />
-        <main className="flex-1 overflow-y-auto p-5 md:p-8">
+        <main className={`flex-1 overflow-y-auto transition-[padding] ${compact ? 'p-3 md:p-4' : 'p-5 md:p-8'}`}>
           <Outlet context={{ openModal, openInvite, push }} />
         </main>
       </div>
