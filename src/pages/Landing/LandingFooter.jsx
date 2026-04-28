@@ -49,7 +49,7 @@ export function LandingFooter({ onSignup }) {
             <MonoLabel>Producto</MonoLabel>
             <ul className="mt-3 space-y-2 text-[13.5px]">
               <li>
-                <a href="#" className="hover:text-[var(--cq-accent)]">Automatizaciones</a>
+                <a href="#producto" className="hover:text-[var(--cq-accent)]">Automatizaciones</a>
               </li>
               <li>
                 <a href="#" className="hover:text-[var(--cq-accent)]">Dashboard</a>

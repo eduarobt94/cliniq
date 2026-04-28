@@ -3,20 +3,21 @@
 ## ⚡ INICIO RÁPIDO DE SESIÓN
 > Leé esta sección primero. Resume el estado actual y qué hacer a continuación.
 
-**Último trabajo completado (2026-04-25):**
-- Flujo completo de invitación de staff: token UUID, RPCs en Supabase, página /accept-invite, modal en Dashboard
-- Auth: emailConfirmed state, VerifyEmail page, ProtectedRoute con pathname check, fix onboarding loop
-- Email templates: confirm-signup y reset-password con tema blanco siempre
-- ResetPassword: fix focus ring, espaciado botón
+**Último trabajo completado (2026-04-28):**
+- WhatsApp automations: tablas `clinic_automations` + `whatsapp_message_log`, vista `v_automation_stats`, Edge Functions `send-whatsapp-reminders` y `whatsapp-webhook`
+- `AutomationsBlock` (dashboard widget) conectado a `useAutomations` hook — datos reales
+- `InboxBlock` (dashboard widget) conectado a nuevo hook `useWhatsappInbox` — lee `whatsapp_message_log` (inbound messages con Realtime)
+- `NewAppointmentModal` conectado a Supabase via `appointmentService.js`
 
 **Próximas tareas priorizadas:**
-1. 🔴 Ejecutar migraciones en Supabase en orden:
+1. 🔴 Ejecutar migraciones pendientes en Supabase (SQL Editor del dashboard):
    - `20260423000000_clinic_members.sql` (tabla multi-usuario)
-   - `20260425000000_invite_flow.sql` (columna invite_token + RPCs)
-2. 🟡 Conectar `NewAppointmentModal` a Supabase (actualmente es mock, no guarda)
-3. 🟡 Conectar `AutomationsBlock` a datos reales
-4. 🟡 Conectar `InboxBlock` a datos reales
-5. 🟢 Pantalla de gestión de miembros del equipo (usa `useMembers` ya implementado)
+   - `20260424000000_profiles_and_rpc.sql`
+   - `20260425000000_invite_flow.sql` (invite_token + RPCs)
+   - `20260428000000_whatsapp_automations.sql` (clinic_automations + whatsapp_message_log)
+2. 🔴 Configurar WhatsApp en Supabase: secrets `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` + cron job pg_cron
+3. 🟡 Pantalla de gestión de miembros del equipo (usa `useMembers` ya implementado)
+4. 🟢 Conectar página Inbox a datos reales (actualmente usa `CHATS_MOCK`)
 
 **Usuario de prueba:** `maria@bonomi.uy` / `demo1234`
 **Dev server:** `cd /home/claude/repo && npm run dev`
@@ -137,10 +138,10 @@ Todos leen de Supabase. Retornan `{ data, loading, error }`.
 | KPI cards | ✅ Real | useKpis → v_clinic_kpis_today |
 | Saludo + nombre clínica | ✅ Real | useClinic |
 | AgendaBlock | ✅ Real | useAppointments + skeleton + Realtime |
-| NewAppointmentModal | ⚠️ Mock | Abre/cierra pero no guarda en Supabase |
-| AutomationsBlock | ⏳ Mock | Datos hardcodeados |
+| NewAppointmentModal | ✅ Real | appointmentService.js → patients + appointments |
+| AutomationsBlock | ✅ Real | useAutomations → clinic_automations + v_automation_stats |
+| InboxBlock | ✅ Real | useWhatsappInbox → whatsapp_message_log (inbound) + Realtime |
 | RevenueBlock | ⏳ Mock | Datos hardcodeados |
-| InboxBlock | ⏳ Mock | Datos hardcodeados |
 | RiskBlock | ⏳ Mock | Datos hardcodeados |
 | QuickActionsBlock | ⏳ Mock | Datos hardcodeados |
 | SystemBlock | ⏳ Mock | Datos hardcodeados |

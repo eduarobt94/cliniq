@@ -43,7 +43,7 @@ const LandingNav = ({ onLogin, onSignup }) => {
         </a>
         <div className="hidden md:flex items-center gap-7 text-[14px] text-[var(--cq-fg-muted)]">
           <a href="#producto" className="hover:text-[var(--cq-fg)] transition-colors">Producto</a>
-          <a href="#automatizaciones" className="hover:text-[var(--cq-fg)] transition-colors">Automatizaciones</a>
+          <a href="#producto" className="hover:text-[var(--cq-fg)] transition-colors">Automatizaciones</a>
           <a href="#precios" className="hover:text-[var(--cq-fg)] transition-colors">Precios</a>
           <a href="#historias" className="hover:text-[var(--cq-fg)] transition-colors">Historias</a>
         </div>
@@ -205,7 +205,7 @@ const LandingPreviewCard = () => {
             </div>
             <div className="flex-1 bg-[var(--cq-surface-2)] border border-[var(--cq-border)] rounded-[10px] rounded-tl-sm p-3">
               <div className="text-[12.5px] leading-relaxed text-[var(--cq-fg)]">
-                Hola Camila 👋 Te recordamos tu turno de <strong>mañana 15:30 con Dr. Bonomi</strong>. Respondé <strong>1</strong> para confirmar o <strong>2</strong> para reagendar.
+                Hola Camila 👋 Te recordamos tu turno de <strong>mañana 15:30 con Dr. Santos</strong>. Respondé <strong>1</strong> para confirmar o <strong>2</strong> para reagendar.
               </div>
               <MonoLabel className="block mt-2">09:02 · enviado por Cliniq</MonoLabel>
             </div>

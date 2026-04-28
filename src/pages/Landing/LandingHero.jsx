@@ -76,7 +76,7 @@ function PreviewCard() {
             <div className="flex-1 bg-[var(--cq-surface-2)] border border-[var(--cq-border)] rounded-[10px] rounded-tl-sm p-3">
               <div className="text-[12.5px] leading-relaxed text-[var(--cq-fg)]">
                 Hola Camila 👋 Te recordamos tu turno de{' '}
-                <strong>mañana 15:30 con Dr. Bonomi</strong>. Respondé{' '}
+                <strong>mañana 15:30 con Dr. Santos</strong>. Respondé{' '}
                 <strong>1</strong> para confirmar o <strong>2</strong> para reagendar.
               </div>
               <MonoLabel className="block mt-2">09:02 · enviado por Cliniq</MonoLabel>

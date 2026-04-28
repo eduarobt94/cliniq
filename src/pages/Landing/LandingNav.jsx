@@ -20,7 +20,7 @@ export function LandingNav({ onLogin, onSignup }) {
 
         <div className="hidden md:flex items-center gap-7 text-[14px] text-[var(--cq-fg-muted)]">
           <a href="#producto" className="hover:text-[var(--cq-fg)] transition-colors">Producto</a>
-          <a href="#automatizaciones" className="hover:text-[var(--cq-fg)] transition-colors">Automatizaciones</a>
+          <a href="#producto" className="hover:text-[var(--cq-fg)] transition-colors">Automatizaciones</a>
           <a href="#precios" className="hover:text-[var(--cq-fg)] transition-colors">Precios</a>
           <a href="#historias" className="hover:text-[var(--cq-fg)] transition-colors">Historias</a>
         </div>
