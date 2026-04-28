@@ -1,20 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Button, Badge, Avatar, Icons, MonoLabel, Divider } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { useMembers } from '../../hooks/useMembers';
+import { useAutomations } from '../../hooks/useAutomations';
 import { InviteMemberModal } from '../Dashboard/InviteMemberModal';
+import { updateClinicProfile, updateClinicSettings } from '../../lib/clinicService';
 
-const roleBadgeTone = {
-  owner: 'outline',
-  staff: 'accent',
-  viewer: 'outline',
-};
+const TIMEZONES = [
+  { value: 'America/Montevideo', label: 'America/Montevideo (UTC-3)' },
+  { value: 'America/Argentina/Buenos_Aires', label: 'America/Buenos_Aires (UTC-3)' },
+  { value: 'America/Sao_Paulo', label: 'America/Sao_Paulo (UTC-3)' },
+  { value: 'America/Santiago', label: 'America/Santiago (UTC-4)' },
+  { value: 'America/Bogota', label: 'America/Bogota (UTC-5)' },
+  { value: 'America/Lima', label: 'America/Lima (UTC-5)' },
+  { value: 'America/Caracas', label: 'America/Caracas (UTC-4)' },
+  { value: 'America/Mexico_City', label: 'America/Mexico_City (UTC-6)' },
+  { value: 'America/New_York', label: 'America/New_York (UTC-5)' },
+];
 
-const roleLabel = {
-  owner: 'Propietario',
-  staff: 'Staff',
-  viewer: 'Lectura',
-};
+const DURATIONS = [15, 20, 30, 45, 60];
+
+const roleBadgeTone = { owner: 'outline', staff: 'accent', viewer: 'outline' };
+const roleLabel     = { owner: 'Propietario', staff: 'Staff', viewer: 'Lectura' };
+
+// ── Small UI helpers ─────────────────────────────────────────────────────────
+
+function SectionCard({ children }) {
+  return (
+    <div className="bg-[var(--cq-bg)] border border-[var(--cq-border)] rounded-[14px] p-6">
+      {children}
+    </div>
+  );
+}
 
 function FieldGroup({ label, children, fullWidth = false }) {
   return (
@@ -25,19 +43,31 @@ function FieldGroup({ label, children, fullWidth = false }) {
   );
 }
 
-function DisabledInput({ value }) {
+const inputCls =
+  'h-10 px-3 rounded-[8px] border border-[var(--cq-border)] bg-[var(--cq-surface-2)] text-[13.5px] text-[var(--cq-fg)] w-full focus:outline-none focus:ring-1 focus:ring-[var(--cq-accent)] transition-shadow disabled:opacity-60 disabled:cursor-default';
+
+function Toggle({ on, onChange, disabled }) {
   return (
-    <input
-      type="text"
-      value={value}
-      readOnly
-      disabled
-      className="h-10 px-3 rounded-[8px] border border-[var(--cq-border)] bg-[var(--cq-surface-2)] text-[13.5px] text-[var(--cq-fg)] w-full disabled:opacity-70 cursor-default focus:outline-none"
-    />
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      disabled={disabled}
+      onClick={() => !disabled && onChange(!on)}
+      className={`w-10 h-5 rounded-full flex items-center px-0.5 transition-colors disabled:opacity-50 disabled:cursor-default ${
+        on ? 'bg-[var(--cq-success)]' : 'bg-[var(--cq-surface-3)]'
+      }`}
+    >
+      <span
+        className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+          on ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
   );
 }
 
-function ToggleRow({ label, on, last = false }) {
+function ToggleRow({ label, on, onChange, disabled, last = false }) {
   return (
     <div
       className={`flex items-center justify-between h-12 ${
@@ -45,17 +75,7 @@ function ToggleRow({ label, on, last = false }) {
       }`}
     >
       <span className="text-[13.5px] text-[var(--cq-fg)]">{label}</span>
-      <div
-        className={`w-10 h-5 rounded-full flex items-center px-0.5 transition-colors ${
-          on ? 'bg-[var(--cq-success)]' : 'bg-[var(--cq-surface-3)]'
-        }`}
-      >
-        <div
-          className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
-            on ? 'translate-x-5' : 'translate-x-0'
-          }`}
-        />
-      </div>
+      <Toggle on={on} onChange={onChange} disabled={disabled} />
     </div>
   );
 }
@@ -73,32 +93,125 @@ function SkeletonRow() {
   );
 }
 
-function SectionCard({ children }) {
-  return (
-    <div className="bg-[var(--cq-bg)] border border-[var(--cq-border)] rounded-[14px] p-6">
-      {children}
-    </div>
-  );
-}
+// ── Main component ───────────────────────────────────────────────────────────
 
 export function Configuracion() {
-  const { clinic, role } = useAuth();
-  const { members, loading, removeMember } = useMembers(clinic?.id);
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [removing, setRemoving] = useState(null);
+  const { clinic, role, refreshMembership } = useAuth();
+  const { push } = useOutletContext() ?? {};
+  const navigate = useNavigate();
+
+  const { members, loading: membersLoading, removeMember, refetch: refetchMembers } =
+    useMembers(clinic?.id);
+  const { automations, stats, loading: waLoading } = useAutomations(clinic?.id);
 
   const isOwner = role === 'owner';
 
-  const clinicEmail = clinic
-    ? `contacto@${clinic.name?.toLowerCase().replace(/\s+/g, '')}.uy`
-    : '';
+  // ── Team ──────────────────────────────────────────────────────────────────
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [removing, setRemoving]     = useState(null);
 
+  // ── Clinic profile form ───────────────────────────────────────────────────
+  const [profileForm, setProfileForm] = useState({
+    name:         '',
+    phone:        '',
+    address:      '',
+    emailContact: '',
+    timezone:     'America/Montevideo',
+  });
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  useEffect(() => {
+    if (!clinic) return;
+    setProfileForm({
+      name:         clinic.name         ?? '',
+      phone:        clinic.phone        ?? '',
+      address:      clinic.address      ?? '',
+      emailContact: clinic.email_contact ?? '',
+      timezone:     clinic.timezone      ?? 'America/Montevideo',
+    });
+    setProfileDirty(false);
+  }, [clinic?.id]);
+
+  function handleProfileChange(field, value) {
+    setProfileForm(prev => ({ ...prev, [field]: value }));
+    setProfileDirty(true);
+  }
+
+  async function handleSaveProfile() {
+    setSavingProfile(true);
+    try {
+      await updateClinicProfile(clinic.id, profileForm);
+      await refreshMembership();
+      setProfileDirty(false);
+      push?.({ type: 'success', message: 'Perfil actualizado.' });
+    } catch (err) {
+      push?.({ type: 'error', message: err.message ?? 'No se pudo guardar.' });
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  // ── Preferences ───────────────────────────────────────────────────────────
+  const [prefs, setPrefs] = useState(() => ({
+    email_notifications:          clinic?.settings?.email_notifications          ?? true,
+    auto_reminders:               clinic?.settings?.auto_reminders               ?? true,
+    default_appointment_duration: clinic?.settings?.default_appointment_duration ?? 30,
+    compact_mode:                 localStorage.getItem('cq_compact_mode') === 'true',
+  }));
+  const [savingPrefs, setSavingPrefs] = useState(false);
+
+  // Sync prefs when clinic loads
+  useEffect(() => {
+    if (!clinic) return;
+    setPrefs(prev => ({
+      ...prev,
+      email_notifications:          clinic.settings?.email_notifications          ?? true,
+      auto_reminders:               clinic.settings?.auto_reminders               ?? true,
+      default_appointment_duration: clinic.settings?.default_appointment_duration ?? 30,
+    }));
+  }, [clinic?.id]);
+
+  async function handlePrefChange(key, value) {
+    setPrefs(prev => ({ ...prev, [key]: value }));
+
+    if (key === 'compact_mode') {
+      localStorage.setItem('cq_compact_mode', String(value));
+      return;
+    }
+
+    if (!clinic?.id) return;
+    setSavingPrefs(true);
+    try {
+      await updateClinicSettings(clinic.id, {
+        ...clinic?.settings,
+        [key]: value,
+      });
+    } catch (err) {
+      push?.({ type: 'error', message: 'No se pudo guardar la preferencia.' });
+      setPrefs(prev => ({ ...prev, [key]: !value }));
+    } finally {
+      setSavingPrefs(false);
+    }
+  }
+
+  // ── WhatsApp status ───────────────────────────────────────────────────────
+  const waConnected  = automations.length > 0;
+  const waActiveAuto = automations.find(a => a.enabled) ?? null;
+  const lastSentAt   = stats?.last_sent_at
+    ? new Date(stats.last_sent_at).toLocaleString('es-UY', {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+      })
+    : null;
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleRemove = async (memberId) => {
     setRemoving(memberId);
     await removeMember(memberId);
     setRemoving(null);
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-6 p-6 max-w-[860px] mx-auto">
       {/* Page header */}
@@ -109,37 +222,91 @@ export function Configuracion() {
         </p>
       </div>
 
-      {/* ── SECTION 1: Perfil de la clínica ── */}
+      {/* ── SECTION 1: Perfil de la clínica ────────────────────────────────── */}
       <SectionCard>
-        <h2 className="text-[16px] font-semibold text-[var(--cq-fg)] mb-5">
-          Perfil de la clínica
-        </h2>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-[16px] font-semibold text-[var(--cq-fg)]">Perfil de la clínica</h2>
+          {!isOwner && (
+            <Badge tone="outline">Solo propietarios pueden editar</Badge>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FieldGroup label="Nombre de la clínica">
-            <DisabledInput value={clinic?.name ?? ''} />
+            <input
+              className={inputCls}
+              value={profileForm.name}
+              onChange={e => handleProfileChange('name', e.target.value)}
+              disabled={!isOwner}
+              placeholder="Mi Clínica"
+            />
           </FieldGroup>
 
           <FieldGroup label="Teléfono">
-            <DisabledInput value="+598 2 900 0000" />
+            <input
+              className={inputCls}
+              value={profileForm.phone}
+              onChange={e => handleProfileChange('phone', e.target.value)}
+              disabled={!isOwner}
+              placeholder="+598 2 900 0000"
+            />
           </FieldGroup>
 
           <FieldGroup label="Dirección" fullWidth>
-            <DisabledInput value="Av. 18 de Julio 1234, Montevideo" />
+            <input
+              className={inputCls}
+              value={profileForm.address}
+              onChange={e => handleProfileChange('address', e.target.value)}
+              disabled={!isOwner}
+              placeholder="Av. 18 de Julio 1234, Montevideo"
+            />
           </FieldGroup>
 
           <FieldGroup label="Email de contacto">
-            <DisabledInput value={clinicEmail} />
+            <input
+              type="email"
+              className={inputCls}
+              value={profileForm.emailContact}
+              onChange={e => handleProfileChange('emailContact', e.target.value)}
+              disabled={!isOwner}
+              placeholder="contacto@clinica.uy"
+            />
           </FieldGroup>
 
-          <FieldGroup label="Zona horaria" fullWidth>
-            <DisabledInput value="America/Montevideo (UTC-3)" />
+          <FieldGroup label="Zona horaria">
+            <select
+              className={inputCls}
+              value={profileForm.timezone}
+              onChange={e => handleProfileChange('timezone', e.target.value)}
+              disabled={!isOwner}
+            >
+              {TIMEZONES.map(tz => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
           </FieldGroup>
         </div>
+
+        {isOwner && (
+          <div className="mt-5 flex items-center gap-3">
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!profileDirty || savingProfile}
+              onClick={handleSaveProfile}
+            >
+              {savingProfile ? 'Guardando…' : 'Guardar perfil'}
+            </Button>
+            {profileDirty && (
+              <span className="text-[12px] text-[var(--cq-fg-muted)]">Hay cambios sin guardar</span>
+            )}
+          </div>
+        )}
       </SectionCard>
 
       <Divider />
 
-      {/* ── SECTION 2: Equipo ── */}
+      {/* ── SECTION 2: Equipo ───────────────────────────────────────────────── */}
       <SectionCard>
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-[16px] font-semibold text-[var(--cq-fg)]">Equipo</h2>
@@ -156,9 +323,9 @@ export function Configuracion() {
           )}
         </div>
 
-        {loading ? (
+        {membersLoading ? (
           <div className="flex flex-col divide-y divide-[var(--cq-border)]">
-            {[0, 1, 2].map((i) => <SkeletonRow key={i} />)}
+            {[0, 1, 2].map(i => <SkeletonRow key={i} />)}
           </div>
         ) : members.length === 0 ? (
           <p className="text-[13px] text-[var(--cq-fg-muted)] py-2">
@@ -166,22 +333,14 @@ export function Configuracion() {
           </p>
         ) : (
           <div className="flex flex-col divide-y divide-[var(--cq-border)]">
-            {members.map((m) => (
+            {members.map(m => (
               <div key={m.id} className="flex items-center gap-3 py-2.5">
                 <Avatar name={m.displayName} size={32} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13.5px] text-[var(--cq-fg)] truncate">
-                    {m.displayName}
-                  </div>
-                  {m.profile && (
-                    <div className="text-[11.5px] text-[var(--cq-fg-muted)] truncate">
-                      {m.email}
-                    </div>
-                  )}
+                  <div className="text-[13.5px] text-[var(--cq-fg)] truncate">{m.displayName}</div>
+                  <div className="text-[11.5px] text-[var(--cq-fg-muted)] truncate">{m.email}</div>
                 </div>
-                <Badge tone={roleBadgeTone[m.role] ?? 'outline'}>
-                  {roleLabel[m.role] ?? m.role}
-                </Badge>
+                <Badge tone={roleBadgeTone[m.role] ?? 'outline'}>{roleLabel[m.role] ?? m.role}</Badge>
                 {m.status === 'active' ? (
                   <Badge tone="success" dot>Activo</Badge>
                 ) : (
@@ -209,67 +368,132 @@ export function Configuracion() {
 
       <Divider />
 
-      {/* ── SECTION 3: Conexión WhatsApp ── */}
+      {/* ── SECTION 3: Preferencias ─────────────────────────────────────────── */}
       <SectionCard>
-        <h2 className="text-[16px] font-semibold text-[var(--cq-fg)] mb-5">
-          Conexión WhatsApp
-        </h2>
-
-        <div className="flex items-center gap-3 mb-4">
-          <span className="w-2 h-2 rounded-full bg-[var(--cq-success)] shrink-0" />
-          <Badge tone="success">Conectado</Badge>
-          <span className="text-[13px] text-[var(--cq-fg-muted)]">Meta Business API</span>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-[16px] font-semibold text-[var(--cq-fg)]">Preferencias</h2>
+          {savingPrefs && (
+            <span className="text-[11.5px] text-[var(--cq-fg-muted)]">Guardando…</span>
+          )}
         </div>
 
-        <div className="bg-[var(--cq-surface-2)] rounded-[10px] p-4 flex flex-col gap-2 mb-4">
-          <div className="flex items-center gap-2 text-[13.5px] text-[var(--cq-fg)]">
-            <Icons.Whatsapp size={15} />
-            <span>Número: <span className="font-mono">+598 98 000 000</span></span>
-          </div>
-          <div className="text-[13px] text-[var(--cq-fg-muted)]">
-            Última sincronización: hace 2 min
-          </div>
-          <div className="text-[13px] text-[var(--cq-fg-muted)]">
-            Mensajes enviados hoy:{' '}
-            <span className="font-mono text-[var(--cq-fg)]">47</span>
-          </div>
-        </div>
-
-        <Button variant="outline" size="sm" disabled>
-          Reconectar
-        </Button>
-      </SectionCard>
-
-      <Divider />
-
-      {/* ── SECTION 4: Preferencias ── */}
-      <SectionCard>
-        <h2 className="text-[16px] font-semibold text-[var(--cq-fg)] mb-2">Preferencias</h2>
-
-        <ToggleRow label="Recordatorios automáticos" on={true} />
-        <ToggleRow label="Notificaciones por email" on={true} />
-        <ToggleRow label="Modo compacto del dashboard" on={false} />
+        <ToggleRow
+          label="Recordatorios automáticos por WhatsApp"
+          on={prefs.auto_reminders}
+          onChange={v => handlePrefChange('auto_reminders', v)}
+          disabled={!isOwner}
+        />
+        <ToggleRow
+          label="Notificaciones por email"
+          on={prefs.email_notifications}
+          onChange={v => handlePrefChange('email_notifications', v)}
+          disabled={!isOwner}
+        />
+        <ToggleRow
+          label="Modo compacto del dashboard"
+          on={prefs.compact_mode}
+          onChange={v => handlePrefChange('compact_mode', v)}
+        />
 
         <div className="flex items-center justify-between h-12">
+          <span className="text-[13.5px] text-[var(--cq-fg)]">
+            Duración predeterminada de turnos
+          </span>
+          <select
+            className="h-8 pl-2 pr-7 rounded-[7px] border border-[var(--cq-border)] bg-[var(--cq-surface-2)] text-[13px] text-[var(--cq-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--cq-accent)] disabled:opacity-60"
+            value={prefs.default_appointment_duration}
+            onChange={e => handlePrefChange('default_appointment_duration', Number(e.target.value))}
+            disabled={!isOwner}
+          >
+            {DURATIONS.map(d => (
+              <option key={d} value={d}>{d} min</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center justify-between h-12 border-t border-[var(--cq-border)]">
           <span className="text-[13.5px] text-[var(--cq-fg)]">Idioma</span>
-          <div className="h-8 px-3 rounded-[7px] border border-[var(--cq-border)] bg-[var(--cq-surface-2)] text-[13px] text-[var(--cq-fg)] flex items-center cursor-default select-none">
+          <div className="h-8 px-3 rounded-[7px] border border-[var(--cq-border)] bg-[var(--cq-surface-2)] text-[13px] text-[var(--cq-fg)] flex items-center select-none">
             Español (Uruguay)
           </div>
         </div>
       </SectionCard>
 
-      <div className="flex flex-col items-stretch gap-2">
-        <Button variant="primary" disabled className="w-full">
-          Guardar cambios
-        </Button>
-        <MonoLabel className="text-center">
-          Los cambios se guardan automáticamente.
-        </MonoLabel>
-      </div>
+      <Divider />
+
+      {/* ── SECTION 4: Conexión WhatsApp ─────────────────────────────────────── */}
+      <SectionCard>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-[16px] font-semibold text-[var(--cq-fg)]">Conexión WhatsApp</h2>
+          {!waLoading && (
+            <Badge tone={waConnected ? 'success' : 'outline'} dot={waConnected}>
+              {waConnected ? 'Configurado' : 'Sin configurar'}
+            </Badge>
+          )}
+        </div>
+
+        {waLoading ? (
+          <div className="h-20 flex items-center justify-center">
+            <span className="w-5 h-5 border-2 border-[var(--cq-accent)] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : waConnected ? (
+          <>
+            <div className="bg-[var(--cq-surface-2)] rounded-[10px] p-4 flex flex-col gap-2 mb-4">
+              <div className="flex items-center gap-2 text-[13.5px] text-[var(--cq-fg)]">
+                <Icons.Whatsapp size={15} />
+                <span>Meta Business API</span>
+              </div>
+              {waActiveAuto && (
+                <div className="text-[13px] text-[var(--cq-fg-muted)]">
+                  Automatización activa:{' '}
+                  <span className="text-[var(--cq-fg)]">{waActiveAuto.hours_before}h antes del turno</span>
+                </div>
+              )}
+              {lastSentAt && (
+                <div className="text-[13px] text-[var(--cq-fg-muted)]">
+                  Último mensaje enviado: <span className="font-mono text-[var(--cq-fg)]">{lastSentAt}</span>
+                </div>
+              )}
+              {stats?.total_sent != null && (
+                <div className="text-[13px] text-[var(--cq-fg-muted)]">
+                  Total enviados:{' '}
+                  <span className="font-mono text-[var(--cq-fg)]">{stats.total_sent}</span>
+                  {stats.success_rate != null && (
+                    <span className="ml-2 text-[var(--cq-success)]">
+                      ({Math.round(stats.success_rate * 100)}% éxito)
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/dashboard/automatizaciones')}
+            >
+              Ir a Automatizaciones
+            </Button>
+          </>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <p className="text-[13.5px] text-[var(--cq-fg-muted)]">
+              WhatsApp no está configurado. Activá una automatización para conectar tu número de
+              Meta Business API.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/dashboard/automatizaciones')}
+            >
+              Configurar WhatsApp
+            </Button>
+          </div>
+        )}
+      </SectionCard>
 
       <InviteMemberModal
         open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
+        onClose={() => { setInviteOpen(false); refetchMembers(); }}
         clinicId={clinic?.id}
       />
     </div>
