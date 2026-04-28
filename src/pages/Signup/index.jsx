@@ -94,7 +94,7 @@ export function Signup() {
           ? 'El registro por correo está desactivado. Contactá al administrador.'
           : err.message.includes('sending confirmation email') || err.message.includes('unexpected_failure')
           ? 'No se pudo enviar el correo de confirmación. Verificá tu conexión o intentá de nuevo.'
-          : err.message;
+          : 'No se pudo crear la cuenta. Intentá de nuevo.';
       pushToast(msg, 'error');
     } finally {
       setSubmitting(false);

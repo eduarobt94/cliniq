@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { normalizePhone } from './phoneUtils';
 
 export async function searchPatients(clinicId, query) {
   const { data, error } = await supabase
@@ -14,7 +15,7 @@ export async function searchPatients(clinicId, query) {
 export async function createPatient(clinicId, fullName, phoneNumber) {
   const { data, error } = await supabase
     .from('patients')
-    .insert({ clinic_id: clinicId, full_name: fullName.trim(), phone_number: phoneNumber.trim() })
+    .insert({ clinic_id: clinicId, full_name: fullName.trim(), phone_number: normalizePhone(phoneNumber) })
     .select('id, full_name, phone_number')
     .single();
   if (error) throw error;
@@ -79,7 +80,7 @@ export async function deletePatient(patientId) {
 export async function updatePatient(patientId, { fullName, phoneNumber }) {
   const { data, error } = await supabase
     .from('patients')
-    .update({ full_name: fullName.trim(), phone_number: phoneNumber.trim() })
+    .update({ full_name: fullName.trim(), phone_number: normalizePhone(phoneNumber) })
     .eq('id', patientId)
     .select('id, full_name, phone_number')
     .single();

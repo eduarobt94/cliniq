@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Icons, Button, MonoLabel } from '../../components/ui';
 import { searchPatients, createPatient, createAppointment } from '../../lib/appointmentService';
+import { isValidPhone } from '../../lib/phoneUtils';
 
 const APPOINTMENT_TYPES = [
   'Control',
@@ -159,6 +160,11 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
       if (creatingPatient) {
         if (!newPhone.trim()) {
           setError('El teléfono es requerido para crear un paciente.');
+          setSubmitting(false);
+          return;
+        }
+        if (!isValidPhone(newPhone)) {
+          setError('El teléfono debe estar en formato internacional: +598XXXXXXXX');
           setSubmitting(false);
           return;
         }

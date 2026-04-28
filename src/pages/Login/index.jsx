@@ -52,7 +52,6 @@ export function Login() {
   const [email,       setEmail]       = useState('');
   const [password,    setPassword]    = useState('');
   const [showPwd,     setShowPwd]     = useState(false);
-  const [remember,    setRemember]    = useState(true);
   const [touched,     setTouched]     = useState({ email: false, password: false });
   const [submitting,  setSubmitting]  = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -92,7 +91,7 @@ export function Login() {
       pushToast(
         err.message === 'Invalid login credentials'
           ? 'Email o contraseña incorrectos. ¿Accedés con Google? Probá el botón de arriba.'
-          : err.message,
+          : 'No se pudo iniciar sesión. Intentá de nuevo.',
         'error'
       );
     } finally {
@@ -283,18 +282,7 @@ export function Login() {
                     />
                   </Field>
 
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={remember}
-                        onChange={(e) => setRemember(e.target.checked)}
-                        className="w-4 h-4 rounded-[4px] accent-[var(--cq-fg)] cursor-pointer"
-                      />
-                      <span className="text-[13.5px] text-[var(--cq-fg-muted)]">
-                        Mantener sesión
-                      </span>
-                    </label>
+                  <div className="flex items-center justify-end">
                     <Link
                       to="/forgot-password"
                       className="text-[13px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-accent)] underline-offset-4 hover:underline transition-colors"

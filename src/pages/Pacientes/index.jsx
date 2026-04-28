@@ -5,6 +5,7 @@ import { Badge, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
 import { usePatients } from '../../hooks/usePatients';
 import { useClinic } from '../../hooks/useClinic';
 import { createPatient, deletePatient, updatePatient } from '../../lib/appointmentService';
+import { isValidPhone } from '../../lib/phoneUtils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(iso) {
@@ -75,6 +76,10 @@ function AddPatientModal({ open, onClose, clinicId, push, existingPatients = [] 
   const handleSubmit = async () => {
     if (!name.trim() || !phone.trim()) {
       setError('El nombre y el teléfono son obligatorios.');
+      return;
+    }
+    if (!isValidPhone(phone)) {
+      setError('El teléfono debe estar en formato internacional: +598XXXXXXXX');
       return;
     }
     const nameLower = name.trim().toLowerCase();
@@ -209,6 +214,10 @@ function EditPatientModal({ patient, onClose, onSuccess, existingPatients = [] }
   const handleSubmit = async () => {
     if (!name.trim() || !phone.trim()) {
       setError('El nombre y el teléfono son obligatorios.');
+      return;
+    }
+    if (!isValidPhone(phone)) {
+      setError('El teléfono debe estar en formato internacional: +598XXXXXXXX');
       return;
     }
     const nameLower = name.trim().toLowerCase();
