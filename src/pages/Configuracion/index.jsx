@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Button, Badge, Avatar, Icons, MonoLabel, Divider } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { useMembers } from '../../hooks/useMembers';
+import { InviteMemberModal } from '../Dashboard/InviteMemberModal';
 
 const roleBadgeTone = {
   owner: 'outline',
@@ -64,6 +66,7 @@ function SkeletonRow() {
       <div className="w-8 h-8 rounded-full bg-[var(--cq-surface-3)] animate-pulse shrink-0" />
       <div className="flex-1">
         <div className="h-3 w-32 bg-[var(--cq-surface-3)] rounded animate-pulse" />
+        <div className="h-2.5 w-20 bg-[var(--cq-surface-3)] rounded animate-pulse mt-1" />
       </div>
       <div className="h-[22px] w-16 bg-[var(--cq-surface-3)] rounded-full animate-pulse" />
     </div>
@@ -79,26 +82,22 @@ function SectionCard({ children }) {
 }
 
 export function Configuracion() {
-  const { clinic, profile, role } = useAuth();
-  const { members, loading } = useMembers(clinic?.id);
+  const { clinic, role } = useAuth();
+  const { members, loading, removeMember } = useMembers(clinic?.id);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [removing, setRemoving] = useState(null);
+
+  const isOwner = role === 'owner';
 
   const clinicEmail = clinic
     ? `contacto@${clinic.name?.toLowerCase().replace(/\s+/g, '')}.uy`
     : '';
 
-  const mockMembers = [
-    {
-      name: `${profile?.first_name ?? 'Usuario'} ${profile?.last_name ?? ''}`.trim(),
-      role: role ?? 'owner',
-    },
-    { name: 'Dra. Silva', role: 'staff' },
-    { name: 'Recepción', role: 'viewer' },
-  ];
-
-  const displayMembers =
-    !loading && members.length > 0
-      ? members.map((m) => ({ name: m.user_id, role: m.role }))
-      : mockMembers;
+  const handleRemove = async (memberId) => {
+    setRemoving(memberId);
+    await removeMember(memberId);
+    setRemoving(null);
+  };
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-[860px] mx-auto">
@@ -142,31 +141,70 @@ export function Configuracion() {
 
       {/* ── SECTION 2: Equipo ── */}
       <SectionCard>
-        <h2 className="text-[16px] font-semibold text-[var(--cq-fg)] mb-5">Equipo</h2>
-        <div className="flex flex-col divide-y divide-[var(--cq-border)]">
-          {loading
-            ? [0, 1, 2].map((i) => <SkeletonRow key={i} />)
-            : displayMembers.map((m, i) => (
-                <div key={i} className="flex items-center gap-3 py-2.5">
-                  <Avatar name={m.name} size={32} />
-                  <span className="flex-1 text-[13.5px] text-[var(--cq-fg)] truncate">
-                    {m.name}
-                  </span>
-                  <Badge tone={roleBadgeTone[m.role] ?? 'outline'}>
-                    {roleLabel[m.role] ?? m.role}
-                  </Badge>
-                  <Badge tone="success" dot>
-                    Activo
-                  </Badge>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-[16px] font-semibold text-[var(--cq-fg)]">Equipo</h2>
+          {isOwner && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInviteOpen(true)}
+              className="gap-1.5"
+            >
+              <Icons.UserPlus size={14} />
+              Invitar miembro
+            </Button>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="flex flex-col divide-y divide-[var(--cq-border)]">
+            {[0, 1, 2].map((i) => <SkeletonRow key={i} />)}
+          </div>
+        ) : members.length === 0 ? (
+          <p className="text-[13px] text-[var(--cq-fg-muted)] py-2">
+            No hay miembros en el equipo todavía.
+          </p>
+        ) : (
+          <div className="flex flex-col divide-y divide-[var(--cq-border)]">
+            {members.map((m) => (
+              <div key={m.id} className="flex items-center gap-3 py-2.5">
+                <Avatar name={m.displayName} size={32} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13.5px] text-[var(--cq-fg)] truncate">
+                    {m.displayName}
+                  </div>
+                  {m.profile && (
+                    <div className="text-[11.5px] text-[var(--cq-fg-muted)] truncate">
+                      {m.email}
+                    </div>
+                  )}
                 </div>
-              ))}
-        </div>
-        <div className="mt-4">
-          <Button variant="outline" size="sm" disabled className="gap-1.5">
-            <Icons.UserPlus size={14} />
-            + Invitar miembro
-          </Button>
-        </div>
+                <Badge tone={roleBadgeTone[m.role] ?? 'outline'}>
+                  {roleLabel[m.role] ?? m.role}
+                </Badge>
+                {m.status === 'active' ? (
+                  <Badge tone="success" dot>Activo</Badge>
+                ) : (
+                  <Badge tone="outline">Pendiente</Badge>
+                )}
+                {isOwner && m.role !== 'owner' && (
+                  <button
+                    onClick={() => handleRemove(m.id)}
+                    disabled={removing === m.id}
+                    className="ml-1 text-[var(--cq-fg-muted)] hover:text-[var(--cq-danger)] transition-colors disabled:opacity-40"
+                    aria-label={`Eliminar a ${m.displayName}`}
+                  >
+                    {removing === m.id ? (
+                      <span className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin inline-block" />
+                    ) : (
+                      <Icons.Close size={14} />
+                    )}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </SectionCard>
 
       <Divider />
@@ -177,14 +215,12 @@ export function Configuracion() {
           Conexión WhatsApp
         </h2>
 
-        {/* Status row */}
         <div className="flex items-center gap-3 mb-4">
           <span className="w-2 h-2 rounded-full bg-[var(--cq-success)] shrink-0" />
           <Badge tone="success">Conectado</Badge>
           <span className="text-[13px] text-[var(--cq-fg-muted)]">Meta Business API</span>
         </div>
 
-        {/* Info card */}
         <div className="bg-[var(--cq-surface-2)] rounded-[10px] p-4 flex flex-col gap-2 mb-4">
           <div className="flex items-center gap-2 text-[13.5px] text-[var(--cq-fg)]">
             <Icons.Whatsapp size={15} />
@@ -214,7 +250,6 @@ export function Configuracion() {
         <ToggleRow label="Notificaciones por email" on={true} />
         <ToggleRow label="Modo compacto del dashboard" on={false} />
 
-        {/* Language row */}
         <div className="flex items-center justify-between h-12">
           <span className="text-[13.5px] text-[var(--cq-fg)]">Idioma</span>
           <div className="h-8 px-3 rounded-[7px] border border-[var(--cq-border)] bg-[var(--cq-surface-2)] text-[13px] text-[var(--cq-fg)] flex items-center cursor-default select-none">
@@ -223,7 +258,6 @@ export function Configuracion() {
         </div>
       </SectionCard>
 
-      {/* Save button */}
       <div className="flex flex-col items-stretch gap-2">
         <Button variant="primary" disabled className="w-full">
           Guardar cambios
@@ -232,6 +266,12 @@ export function Configuracion() {
           Los cambios se guardan automáticamente.
         </MonoLabel>
       </div>
+
+      <InviteMemberModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        clinicId={clinic?.id}
+      />
     </div>
   );
 }

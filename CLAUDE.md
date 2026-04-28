@@ -4,10 +4,10 @@
 > Leé esta sección primero. Resume el estado actual y qué hacer a continuación.
 
 **Último trabajo completado (2026-04-28):**
-- WhatsApp automations: tablas `clinic_automations` + `whatsapp_message_log`, vista `v_automation_stats`, Edge Functions `send-whatsapp-reminders` y `whatsapp-webhook`
-- `AutomationsBlock` (dashboard widget) conectado a `useAutomations` hook — datos reales
-- `InboxBlock` (dashboard widget) conectado a nuevo hook `useWhatsappInbox` — lee `whatsapp_message_log` (inbound messages con Realtime)
-- `NewAppointmentModal` conectado a Supabase via `appointmentService.js`
+- `useMembers` — ahora incluye `email`, `status` y join de `profiles` (displayName)
+- `Configuracion` — miembros reales con nombres/emails; botón "Invitar miembro" funcional para owners; botón de eliminar miembro (solo owners, no owner-members); badge de estado Activo/Pendiente
+- `useInbox` (nuevo hook) — agrupa mensajes de `whatsapp_message_log` por phone_number; timestamps localizados; Realtime
+- Página `Inbox` — conectada a `useInbox`; loading skeletons; hilo por conversación; empty state si no hay mensajes WA configurados
 
 **Próximas tareas priorizadas:**
 1. 🔴 Ejecutar migraciones pendientes en Supabase (SQL Editor del dashboard):
@@ -16,8 +16,8 @@
    - `20260425000000_invite_flow.sql` (invite_token + RPCs)
    - `20260428000000_whatsapp_automations.sql` (clinic_automations + whatsapp_message_log)
 2. 🔴 Configurar WhatsApp en Supabase: secrets `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` + cron job pg_cron
-3. 🟡 Pantalla de gestión de miembros del equipo (usa `useMembers` ya implementado)
-4. 🟢 Conectar página Inbox a datos reales (actualmente usa `CHATS_MOCK`)
+3. 🟡 Conectar `RevenueBlock` a datos reales (tabla `appointments` con precio/ingreso)
+4. 🟢 Envío real de mensajes desde el Inbox (actualmente solo UI — requiere Edge Function outbound)
 
 **Usuario de prueba:** `maria@bonomi.uy` / `demo1234`
 **Dev server:** `cd /home/claude/repo && npm run dev`
@@ -141,6 +141,7 @@ Todos leen de Supabase. Retornan `{ data, loading, error }`.
 | NewAppointmentModal | ✅ Real | appointmentService.js → patients + appointments |
 | AutomationsBlock | ✅ Real | useAutomations → clinic_automations + v_automation_stats |
 | InboxBlock | ✅ Real | useWhatsappInbox → whatsapp_message_log (inbound) + Realtime |
+| Página Inbox | ✅ Real | useInbox → whatsapp_message_log (todas direcciones) + Realtime |
 | RevenueBlock | ⏳ Mock | Datos hardcodeados |
 | RiskBlock | ⏳ Mock | Datos hardcodeados |
 | QuickActionsBlock | ⏳ Mock | Datos hardcodeados |
@@ -153,7 +154,15 @@ Todos leen de Supabase. Retornan `{ data, loading, error }`.
 |---|---|
 | RLS (Row Level Security) | ✅ 23 políticas, todas las tablas |
 | CORS | ✅ Gestionado por Supabase (verificar Allowed Origins en dashboard) |
-| Security Headers | ✅ CSP + HSTS + X-Frame-Options en netlify.toml / vercel.json / index.html |
+| Security Headers | ✅ CSP + HSTS + X-Frame-Options + Permissions-Policy en netlify.toml / vercel.json |
+| CSP script-src | ✅ `'self'` solo — `'unsafe-inline'` removido de producción (netlify + vercel) |
+| CSP index.html | ⚠️ Mantiene `'unsafe-inline'` en script-src solo para Vite HMR en dev — sobrescrito por headers en prod |
+| Error disclosure | ✅ Mensajes de error genéricos en Login y Signup — sin filtración de detalles internos |
+| Phone validation | ✅ Validación E.164 en formularios de pacientes; normalización antes de persistir |
+| Dependencias | ✅ npm audit: 0 vulnerabilidades conocidas |
+| XSS | ✅ Sin dangerouslySetInnerHTML; React escapa todo; no hay concatenación de HTML |
+| CSRF | ✅ No aplica — Supabase usa Bearer tokens en headers, no cookies |
+| SQL injection | ✅ No aplica — PostgREST parametriza todas las queries |
 
 ---
 

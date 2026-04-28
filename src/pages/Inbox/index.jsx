@@ -1,10 +1,25 @@
-import { useState } from 'react';
-import { CHATS_MOCK } from '../../data/chats.mock.js';
+import { useState, useMemo } from 'react';
 import { Avatar, Badge, Icons } from '../../components/ui';
+import { useAuth } from '../../context/AuthContext';
+import { useInbox } from '../../hooks/useInbox';
 
-function ChatListItem({ chat, isActive, onClick }) {
-  const { name, time, unread, online, lastMsg, tag } = chat;
+function SkeletonList() {
+  return (
+    <div className="flex flex-col gap-0">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="px-3 py-3 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-[var(--cq-surface-3)] animate-pulse shrink-0" />
+          <div className="flex-1 flex flex-col gap-1.5 pt-0.5">
+            <div className="h-3 w-24 bg-[var(--cq-surface-3)] rounded animate-pulse" />
+            <div className="h-2.5 w-36 bg-[var(--cq-surface-3)] rounded animate-pulse" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
+function ChatListItem({ conv, isActive, onClick }) {
   return (
     <button
       onClick={onClick}
@@ -12,38 +27,31 @@ function ChatListItem({ chat, isActive, onClick }) {
         isActive ? 'bg-[var(--cq-surface-2)]' : ''
       }`}
     >
-      {/* Avatar with online dot */}
       <div className="relative shrink-0">
-        <Avatar name={name} size={36} />
-        {online && (
-          <span
-            className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-[var(--cq-bg)]"
-            style={{ backgroundColor: 'var(--cq-success)' }}
-          />
-        )}
+        <Avatar name={conv.patientName} size={36} />
       </div>
-
-      {/* Chat info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-1 mb-0.5">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[13px] font-medium text-[var(--cq-fg)] truncate">{name}</span>
-            {tag && (
-              <Badge tone="outline" className="shrink-0 text-[10px] h-[18px] px-1.5">
-                {tag}
-              </Badge>
-            )}
-          </div>
-          <span className="text-[11px] text-[var(--cq-fg-muted)] shrink-0">{time}</span>
+          <span className="text-[13px] font-medium text-[var(--cq-fg)] truncate">
+            {conv.patientName}
+          </span>
+          <span className="text-[11px] text-[var(--cq-fg-muted)] shrink-0">
+            {conv.lastTimeFormatted}
+          </span>
         </div>
         <div className="flex items-center justify-between gap-1">
-          <span className="text-[12px] text-[var(--cq-fg-muted)] truncate">{lastMsg}</span>
-          {unread > 0 && (
+          <span className="text-[12px] text-[var(--cq-fg-muted)] truncate">
+            {conv.lastDirection === 'outbound' && (
+              <span className="text-[var(--cq-fg-muted)] mr-0.5">↗</span>
+            )}
+            {conv.lastMsg}
+          </span>
+          {conv.unread > 0 && (
             <span
-              className="shrink-0 w-[18px] h-[18px] rounded-full text-white text-[10px] font-semibold flex items-center justify-center"
+              className="shrink-0 min-w-[18px] h-[18px] rounded-full text-white text-[10px] font-semibold flex items-center justify-center px-1"
               style={{ backgroundColor: 'var(--cq-accent)' }}
             >
-              {unread}
+              {conv.unread}
             </span>
           )}
         </div>
@@ -52,7 +60,7 @@ function ChatListItem({ chat, isActive, onClick }) {
   );
 }
 
-function EmptyState() {
+function EmptyConversationState() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center p-8">
       <div
@@ -71,33 +79,44 @@ function EmptyState() {
   );
 }
 
-function ConversationView({ chat }) {
+function NoMessagesState() {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center p-8">
+      <div
+        className="w-12 h-12 rounded-full flex items-center justify-center"
+        style={{ backgroundColor: 'var(--cq-surface-2)' }}
+      >
+        <Icons.Whatsapp size={20} />
+      </div>
+      <div>
+        <p className="text-[14px] font-medium text-[var(--cq-fg)]">Sin mensajes todavía</p>
+        <p className="text-[12.5px] text-[var(--cq-fg-muted)] mt-1 max-w-[240px]">
+          Los mensajes de WhatsApp de tus pacientes aparecerán acá.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ConversationView({ conv, thread }) {
   const [inputValue, setInputValue] = useState('');
 
   return (
     <div className="flex flex-col h-full">
-      {/* Conversation header */}
+      {/* Header */}
       <div
         className="flex items-center gap-3 px-4 py-3 border-b shrink-0"
         style={{ borderColor: 'var(--cq-border)' }}
       >
-        <div className="relative">
-          <Avatar name={chat.name} size={36} />
-          {chat.online && (
-            <span
-              className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-[var(--cq-bg)]"
-              style={{ backgroundColor: 'var(--cq-success)' }}
-            />
-          )}
-        </div>
+        <Avatar name={conv.patientName} size={36} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[14px] font-semibold text-[var(--cq-fg)]">{chat.name}</span>
+            <span className="text-[14px] font-semibold text-[var(--cq-fg)]">
+              {conv.patientName}
+            </span>
             <Badge tone="success">BOT ACTIVO</Badge>
           </div>
-          <span className="text-[11.5px] text-[var(--cq-fg-muted)]">
-            {chat.online ? 'En línea' : 'Desconectado'}
-          </span>
+          <span className="text-[11.5px] font-mono text-[var(--cq-fg-muted)]">{conv.phone}</span>
         </div>
         <button className="p-1.5 rounded-md hover:bg-[var(--cq-surface-2)] transition-colors text-[var(--cq-fg-muted)]">
           <Icons.More size={16} />
@@ -106,35 +125,30 @@ function ConversationView({ chat }) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto flex flex-col gap-2 p-4">
-        {chat.messages.map((msg) => {
-          const isBot = msg.from === 'bot';
-          return (
-            <div
-              key={msg.id}
-              className={`flex ${isBot ? 'justify-start' : 'justify-end'}`}
-            >
-              <div
-                className={`max-w-[72%] rounded-[10px] p-3 ${
-                  isBot ? '' : 'text-white'
-                }`}
-                style={{
-                  backgroundColor: isBot
-                    ? 'var(--cq-surface-2)'
-                    : 'var(--cq-accent)',
-                }}
-              >
-                <p className="text-[13px] leading-relaxed">{msg.text}</p>
-                <p
-                  className={`text-[11px] mt-1 opacity-60 ${
-                    isBot ? '' : 'text-right'
-                  }`}
+        {thread.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-[12.5px] text-[var(--cq-fg-muted)]">Sin mensajes en esta conversación.</p>
+          </div>
+        ) : (
+          thread.map((msg) => {
+            const isOutbound = msg.direction === 'outbound';
+            return (
+              <div key={msg.id} className={`flex ${isOutbound ? 'justify-start' : 'justify-end'}`}>
+                <div
+                  className={`max-w-[72%] rounded-[10px] p-3 ${isOutbound ? '' : 'text-white'}`}
+                  style={{
+                    backgroundColor: isOutbound ? 'var(--cq-surface-2)' : 'var(--cq-accent)',
+                  }}
                 >
-                  {msg.time}
-                </p>
+                  <p className="text-[13px] leading-relaxed">{msg.message}</p>
+                  <p className={`text-[11px] mt-1 opacity-60 ${isOutbound ? '' : 'text-right'}`}>
+                    {msg.time}
+                  </p>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       {/* Input row */}
@@ -163,18 +177,29 @@ function ConversationView({ chat }) {
 }
 
 export function Inbox() {
-  const [selectedId, setSelectedId] = useState(CHATS_MOCK[0]?.id ?? null);
+  const { clinic } = useAuth();
+  const { conversations, getThread, loading } = useInbox(clinic?.id);
+  const [selectedPhone, setSelectedPhone] = useState(null);
   const [search, setSearch] = useState('');
 
-  const totalUnread = CHATS_MOCK.reduce((acc, c) => acc + c.unread, 0);
-  const selectedChat = CHATS_MOCK.find((c) => c.id === selectedId) ?? null;
+  const totalUnread = conversations.reduce((acc, c) => acc + c.unread, 0);
 
-  const filteredChats = search.trim()
-    ? CHATS_MOCK.filter((c) =>
-        c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.lastMsg.toLowerCase().includes(search.toLowerCase())
-      )
-    : CHATS_MOCK;
+  const filteredConversations = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter(
+      (c) =>
+        c.patientName.toLowerCase().includes(q) ||
+        c.phone.includes(q) ||
+        c.lastMsg.toLowerCase().includes(q)
+    );
+  }, [conversations, search]);
+
+  // Auto-select first conversation when data loads
+  const firstPhone = conversations[0]?.phone ?? null;
+  const activePhone = selectedPhone ?? firstPhone;
+  const selectedConv = conversations.find((c) => c.phone === activePhone) ?? null;
+  const thread = selectedConv ? getThread(selectedConv.phone) : [];
 
   return (
     <div
@@ -186,7 +211,7 @@ export function Inbox() {
         className="w-[280px] shrink-0 border-r flex flex-col"
         style={{ borderColor: 'var(--cq-border)', backgroundColor: 'var(--cq-surface)' }}
       >
-        {/* Left header */}
+        {/* Header */}
         <div
           className="px-4 pt-4 pb-3 border-b shrink-0"
           style={{ borderColor: 'var(--cq-border)' }}
@@ -202,7 +227,6 @@ export function Inbox() {
               <Badge tone="accent">{totalUnread} sin leer</Badge>
             )}
           </div>
-          {/* Search */}
           <div className="relative">
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--cq-fg-muted)] pointer-events-none">
               <Icons.Search size={14} />
@@ -219,23 +243,35 @@ export function Inbox() {
 
         {/* Chat list */}
         <div className="flex-1 overflow-y-auto">
-          {filteredChats.map((chat) => (
-            <ChatListItem
-              key={chat.id}
-              chat={chat}
-              isActive={selectedId === chat.id}
-              onClick={() => setSelectedId(chat.id)}
-            />
-          ))}
+          {loading ? (
+            <SkeletonList />
+          ) : filteredConversations.length === 0 ? (
+            <div className="px-4 py-6 text-center">
+              <p className="text-[12.5px] text-[var(--cq-fg-muted)]">
+                {search ? 'Sin resultados.' : 'Sin mensajes todavía.'}
+              </p>
+            </div>
+          ) : (
+            filteredConversations.map((conv) => (
+              <ChatListItem
+                key={conv.phone}
+                conv={conv}
+                isActive={activePhone === conv.phone}
+                onClick={() => setSelectedPhone(conv.phone)}
+              />
+            ))
+          )}
         </div>
       </div>
 
       {/* Right column */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {selectedChat ? (
-          <ConversationView chat={selectedChat} />
+        {loading ? null : conversations.length === 0 ? (
+          <NoMessagesState />
+        ) : selectedConv ? (
+          <ConversationView conv={selectedConv} thread={thread} />
         ) : (
-          <EmptyState />
+          <EmptyConversationState />
         )}
       </div>
     </div>
