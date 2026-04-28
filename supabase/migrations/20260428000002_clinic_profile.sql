@@ -13,6 +13,7 @@ ALTER TABLE clinics
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 -- Create trigger for updated_at
+DROP TRIGGER IF EXISTS trg_clinics_updated_at ON clinics;
 CREATE TRIGGER trg_clinics_updated_at
   BEFORE UPDATE ON clinics
   FOR EACH ROW
