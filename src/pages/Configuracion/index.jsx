@@ -6,6 +6,7 @@ import { useMembers } from '../../hooks/useMembers';
 import { useAutomations } from '../../hooks/useAutomations';
 import { InviteMemberModal } from '../Dashboard/InviteMemberModal';
 import { updateClinicProfile, updateClinicSettings } from '../../lib/clinicService';
+import { filterPhoneInput } from '../../lib/phoneUtils';
 
 const TIMEZONES = [
   { value: 'America/Montevideo', label: 'America/Montevideo (UTC-3)' },
@@ -134,12 +135,16 @@ export function Configuracion() {
   }, [clinic?.id]);
 
   function handleProfileChange(field, value) {
-    const normalized = field === 'phone' ? value.replace(/\s+/g, '') : value;
+    const normalized = field === 'phone' ? filterPhoneInput(value) : value;
     setProfileForm(prev => ({ ...prev, [field]: normalized }));
     setProfileDirty(true);
   }
 
   async function handleSaveProfile() {
+    if (profileForm.emailContact && !profileForm.emailContact.includes('@')) {
+      push?.('El email de contacto debe contener "@".', 'error');
+      return;
+    }
     setSavingProfile(true);
     try {
       await updateClinicProfile(clinic.id, profileForm);
@@ -147,7 +152,12 @@ export function Configuracion() {
       setProfileDirty(false);
       push?.('Perfil actualizado.', 'success');
     } catch (err) {
-      push?.('No se pudo guardar: ' + (err.message ?? 'error desconocido'), 'error');
+      const msg = err.message ?? '';
+      if (msg.includes('address') || msg.includes('schema cache') || msg.includes('column')) {
+        push?.('Columnas faltantes: ejecutá la migración 20260428000002 en el dashboard de Supabase.', 'error');
+      } else {
+        push?.('No se pudo guardar: ' + (msg || 'error desconocido'), 'error');
+      }
     } finally {
       setSavingProfile(false);
     }

@@ -8,6 +8,17 @@ export function normalizePhone(raw = '') {
 }
 
 /**
+ * Input filter for phone fields: only allows digits and a leading +.
+ * Call this inside onChange so the user can never type invalid chars.
+ */
+export function filterPhoneInput(val = '') {
+  if (val.startsWith('+')) {
+    return '+' + val.slice(1).replace(/[^0-9]/g, '');
+  }
+  return val.replace(/[^0-9]/g, '');
+}
+
+/**
  * Returns true if the string looks like a valid E.164 phone number.
  * E.164: starts with +, followed by 7–15 digits, no other characters.
  *

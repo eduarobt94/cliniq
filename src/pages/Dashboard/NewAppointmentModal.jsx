@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Icons, Button, MonoLabel } from '../../components/ui';
 import { searchPatients, createPatient, createAppointment } from '../../lib/appointmentService';
-import { isValidPhone } from '../../lib/phoneUtils';
+import { isValidPhone, filterPhoneInput } from '../../lib/phoneUtils';
 
 const APPOINTMENT_TYPES = [
   'Control',
@@ -314,8 +314,8 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                       <input
                         type="tel"
                         value={newPhone}
-                        onChange={(e) => setNewPhone(e.target.value)}
-                        placeholder="+598 99 123 456"
+                        onChange={(e) => setNewPhone(filterPhoneInput(e.target.value))}
+                        placeholder="+59899123456"
                         className="flex-1 bg-transparent outline-none text-[13.5px]"
                         autoComplete="tel"
                       />

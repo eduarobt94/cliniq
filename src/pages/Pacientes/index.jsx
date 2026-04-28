@@ -5,7 +5,7 @@ import { Badge, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
 import { usePatients } from '../../hooks/usePatients';
 import { useClinic } from '../../hooks/useClinic';
 import { createPatient, deletePatient, updatePatient } from '../../lib/appointmentService';
-import { isValidPhone } from '../../lib/phoneUtils';
+import { isValidPhone, filterPhoneInput } from '../../lib/phoneUtils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(iso) {
@@ -158,9 +158,9 @@ function AddPatientModal({ open, onClose, clinicId, push, existingPatients = [] 
               <input
                 type="tel"
                 value={phone}
-                onChange={e => setPhone(e.target.value)}
+                onChange={e => setPhone(filterPhoneInput(e.target.value))}
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
-                placeholder="+598 99 123 456"
+                placeholder="+59899123456"
                 className="flex-1 bg-transparent outline-none text-[13.5px]"
                 autoComplete="tel"
               />
@@ -295,9 +295,9 @@ function EditPatientModal({ patient, onClose, onSuccess, existingPatients = [] }
               <input
                 type="tel"
                 value={phone}
-                onChange={e => setPhone(e.target.value)}
+                onChange={e => setPhone(filterPhoneInput(e.target.value))}
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
-                placeholder="+598 99 123 456"
+                placeholder="+59899123456"
                 className="flex-1 bg-transparent outline-none text-[13.5px]"
                 autoComplete="tel"
               />
