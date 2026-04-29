@@ -2,49 +2,35 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // ─── Env ──────────────────────────────────────────────────────────────────────
-const SUPABASE_URL            = Deno.env.get('SUPABASE_URL')              ?? '';
-const SUPABASE_KEY            = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-const WA_ACCESS_TOKEN         = Deno.env.get('WHATSAPP_ACCESS_TOKEN')     ?? '';
-// Fallback phone number ID — used when the clinic has no wa_phone_number_id set
-const WA_PHONE_NUMBER_ID_GLOBAL = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') ?? '';
+const SUPABASE_URL              = Deno.env.get('SUPABASE_URL')              ?? '';
+const SUPABASE_KEY              = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const WA_ACCESS_TOKEN           = Deno.env.get('WHATSAPP_ACCESS_TOKEN')     ?? '';
+const WA_PHONE_NUMBER_ID_GLOBAL = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')  ?? '';
+const WA_TEMPLATE_NAME          = Deno.env.get('WHATSAPP_TEMPLATE_NAME')    ?? 'recordatorio_turno';
+const WA_TEMPLATE_LANG          = Deno.env.get('WHATSAPP_TEMPLATE_LANG')    ?? 'es';
 
-// ─── Template renderer ────────────────────────────────────────────────────────
-function renderTemplate(
-  template: string,
-  vars: { patient_name: string; date: string; time: string }
-): string {
-  return template
-    .replace(/\{patient_name\}/g, vars.patient_name)
-    .replace(/\{date\}/g,         vars.date)
-    .replace(/\{time\}/g,         vars.time);
-}
-
-/** Format appointment_datetime for a given timezone */
+// ─── Format date/time for a timezone ─────────────────────────────────────────
 function formatForTimezone(iso: string, tz: string): { date: string; time: string } {
   const dt = new Date(iso);
   const date = dt.toLocaleDateString('es-UY', {
-    timeZone: tz,
-    weekday:  'long',
-    day:      'numeric',
-    month:    'long',
+    timeZone: tz, weekday: 'long', day: 'numeric', month: 'long',
   });
   const time = dt.toLocaleTimeString('es-UY', {
-    timeZone: tz,
-    hour:     '2-digit',
-    minute:   '2-digit',
-    hour12:   false,
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
   });
   return { date: date.charAt(0).toUpperCase() + date.slice(1), time };
 }
 
 /**
- * Send a text message via WhatsApp Cloud API.
- * Uses the clinic's own phoneNumberId so the message comes from its number.
+ * Send a WhatsApp template message.
+ * Template params: {{1}} = patient_name, {{2}} = time, {{3}} = clinic_name
  */
-async function sendWaText(
+async function sendWaTemplate(
   to: string,
-  text: string,
   phoneNumberId: string,
+  patientName: string,
+  time: string,
+  clinicName: string,
 ): Promise<string | null> {
   const api = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
   try {
@@ -58,8 +44,21 @@ async function sendWaText(
         messaging_product: 'whatsapp',
         recipient_type:    'individual',
         to,
-        type:              'text',
-        text:              { preview_url: false, body: text },
+        type: 'template',
+        template: {
+          name:     WA_TEMPLATE_NAME,
+          language: { code: WA_TEMPLATE_LANG },
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                { type: 'text', text: patientName },
+                { type: 'text', text: time        },
+                { type: 'text', text: clinicName  },
+              ],
+            },
+          ],
+        },
       }),
     });
 
@@ -90,7 +89,7 @@ serve(async (req: Request) => {
     // ── 1. Load enabled automations ─────────────────────────────────────────
     const { data: automations, error: autoError } = await supabase
       .from('clinic_automations')
-      .select('clinic_id, hours_before, message_template')
+      .select('clinic_id, hours_before')
       .eq('type',    'appointment_reminder')
       .eq('enabled', true);
 
@@ -116,17 +115,8 @@ serve(async (req: Request) => {
         .select(`
           id,
           appointment_datetime,
-          appointment_type,
-          patients!inner (
-            id,
-            full_name,
-            phone_number,
-            clinic_id
-          ),
-          clinics!inner (
-            timezone,
-            wa_phone_number_id
-          )
+          patients!inner ( id, full_name, phone_number, clinic_id ),
+          clinics!inner  ( name, timezone, wa_phone_number_id )
         `)
         .eq('clinic_id',             auto.clinic_id)
         .eq('status',                'new')
@@ -143,12 +133,8 @@ serve(async (req: Request) => {
         const patient = appt.patients as Record<string, string>;
         const clinic  = appt.clinics  as Record<string, string>;
 
-        if (!patient?.phone_number) {
-          results.skipped++;
-          continue;
-        }
+        if (!patient?.phone_number) { results.skipped++; continue; }
 
-        // Use clinic's own WA number; fall back to global if not configured
         const phoneNumberId = clinic?.wa_phone_number_id || WA_PHONE_NUMBER_ID_GLOBAL;
         if (!phoneNumberId) {
           console.error(`Clinic ${auto.clinic_id} has no WA phone number configured`);
@@ -157,15 +143,20 @@ serve(async (req: Request) => {
         }
 
         const tz = clinic?.timezone ?? 'America/Montevideo';
-        const { date, time } = formatForTimezone(appt.appointment_datetime, tz);
+        const { time } = formatForTimezone(appt.appointment_datetime, tz);
 
-        const messageText = renderTemplate(auto.message_template, {
-          patient_name: patient.full_name,
-          date,
+        const waId = await sendWaTemplate(
+          patient.phone_number,
+          phoneNumberId,
+          patient.full_name,
           time,
-        });
+          clinic.name ?? 'el consultorio',
+        );
 
-        const waId = await sendWaText(patient.phone_number, messageText, phoneNumberId);
+        // Build readable message for the log
+        const logMessage =
+          `[Template: ${WA_TEMPLATE_NAME}] ` +
+          `Hola ${patient.full_name}, turno mañana a las ${time} en ${clinic.name}.`;
 
         if (waId) {
           await supabase
@@ -179,7 +170,7 @@ serve(async (req: Request) => {
             appointment_id: appt.id,
             direction:      'outbound',
             phone_number:   patient.phone_number,
-            message:        messageText,
+            message:        logMessage,
             wa_message_id:  waId,
             status:         'sent',
           });
@@ -192,7 +183,7 @@ serve(async (req: Request) => {
             appointment_id: appt.id,
             direction:      'outbound',
             phone_number:   patient.phone_number,
-            message:        messageText,
+            message:        logMessage,
             wa_message_id:  null,
             status:         'failed',
           });
