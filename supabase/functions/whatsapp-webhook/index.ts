@@ -8,6 +8,11 @@ const VERIFY_TOKEN              = Deno.env.get('WHATSAPP_VERIFY_TOKEN')      ?? 
 const WA_ACCESS_TOKEN           = Deno.env.get('WHATSAPP_ACCESS_TOKEN')      ?? '';
 const WA_PHONE_NUMBER_ID_GLOBAL = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')   ?? '';
 
+// ─── Normalize phone: always store with + prefix ──────────────────────────────
+function normalizePhone(phone: string): string {
+  return phone.startsWith('+') ? phone : `+${phone}`;
+}
+
 // ─── Send text reply ──────────────────────────────────────────────────────────
 async function sendWaText(to: string, text: string, phoneNumberId: string): Promise<string | null> {
   const api = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
@@ -36,7 +41,6 @@ async function resolvePhoneNumberId(
   incomingPhoneNumId: string,
   clinicId: string | null,
 ): Promise<string> {
-  // Prefer patient's clinic number
   if (clinicId) {
     const { data } = await supabase
       .from('clinics')
@@ -45,29 +49,76 @@ async function resolvePhoneNumberId(
       .maybeSingle();
     if (data?.wa_phone_number_id) return data.wa_phone_number_id;
   }
-  // Fall back to incoming number or global
   return incomingPhoneNumId || WA_PHONE_NUMBER_ID_GLOBAL;
 }
 
-// ─── Log outbound reply ───────────────────────────────────────────────────────
-async function logOutbound(
+// ─── Upsert conversation ──────────────────────────────────────────────────────
+async function upsertConversation(
   supabase: ReturnType<typeof createClient>,
   clinicId: string,
-  patientId: string,
-  appointmentId: string | null,
+  patientId: string | null,
   phone: string,
-  message: string,
-  waId: string | null,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('conversations')
+    .upsert(
+      { clinic_id: clinicId, patient_id: patientId, phone_number: phone },
+      { onConflict: 'clinic_id,phone_number', ignoreDuplicates: false },
+    )
+    .select('id')
+    .single();
+  if (error) { console.error('upsertConversation error:', error); return null; }
+  return data?.id ?? null;
+}
+
+// ─── Insert into messages ─────────────────────────────────────────────────────
+async function insertMessage(
+  supabase: ReturnType<typeof createClient>,
+  opts: {
+    conversationId: string;
+    clinicId:       string;
+    patientId:      string | null;
+    direction:      'inbound' | 'outbound' | 'system_template';
+    content:        string;
+    status:         string;
+    metaMessageId:  string | null;
+  },
+) {
+  const { error } = await supabase.from('messages').insert({
+    conversation_id: opts.conversationId,
+    clinic_id:       opts.clinicId,
+    patient_id:      opts.patientId,
+    direction:       opts.direction,
+    content:         opts.content,
+    status:          opts.status,
+    meta_message_id: opts.metaMessageId,
+  });
+  if (error) console.error('insertMessage error:', error);
+}
+
+// ─── Audit log ────────────────────────────────────────────────────────────────
+async function logAudit(
+  supabase: ReturnType<typeof createClient>,
+  opts: {
+    clinicId:      string | null;
+    patientId:     string | null;
+    appointmentId: string | null;
+    direction:     string;
+    phone:         string;
+    message:       string;
+    waMessageId:   string | null;
+    status:        string;
+  },
 ) {
   await supabase.from('whatsapp_message_log').insert({
-    clinic_id:      clinicId,
-    patient_id:     patientId,
-    appointment_id: appointmentId,
-    direction:      'outbound',
-    phone_number:   phone,
-    message,
-    wa_message_id:  waId,
-    status:         waId ? 'sent' : 'failed',
+    clinic_id:      opts.clinicId,
+    patient_id:     opts.patientId,
+    appointment_id: opts.appointmentId,
+    direction:      opts.direction,
+    phone_number:   opts.phone,
+    message:        opts.message,
+    wa_message_id:  opts.waMessageId,
+    status:         opts.status,
   });
 }
 
@@ -75,7 +126,7 @@ async function logOutbound(
 serve(async (req: Request) => {
   const url = new URL(req.url);
 
-  // ── GET: Meta webhook verification ─────────────────────────────────────────
+  // ── GET: webhook verification ───────────────────────────────────────────────
   if (req.method === 'GET') {
     const mode      = url.searchParams.get('hub.mode');
     const token     = url.searchParams.get('hub.verify_token');
@@ -107,28 +158,30 @@ serve(async (req: Request) => {
     const metadata           = value?.metadata as Record<string, string>;
     const incomingPhoneNumId = metadata?.phone_number_id ?? '';
     const waMessageId        = message.id as string;
-    const fromPhone          = message.from as string;
-    const msgType            = message.type as string;  // 'text' | 'interactive'
+    const fromPhoneRaw       = message.from as string;
+    const fromPhone          = normalizePhone(fromPhoneRaw);  // always +prefix
+    const msgType            = message.type as string;
 
-    // ── Extract intent from text OR button reply ───────────────────────────
-    let intent = '';  // 'confirm' | 'cancel' | 'reschedule' | ''
+    // ── Extract intent ────────────────────────────────────────────────────
+    let intent = '';
     let rawText = '';
 
     if (msgType === 'text') {
-      rawText = ((message.text as Record<string, string>)?.body ?? '').trim().toLowerCase();
-      if (['1', 'si', 'sí', 'confirmo', 'confirmar', 'ok'].includes(rawText)) intent = 'confirm';
-      else if (['2', 'no', 'cancelo', 'cancelar', 'cancelacion', 'cancelación'].includes(rawText)) intent = 'cancel';
-      else if (['3', 'reagendar', 'reagendo', 'cambiar'].includes(rawText)) intent = 'reschedule';
+      rawText = ((message.text as Record<string, string>)?.body ?? '').trim();
+      const lower = rawText.toLowerCase();
+      if (['1', 'si', 'sí', 'confirmo', 'confirmar', 'ok'].includes(lower)) intent = 'confirm';
+      else if (['2', 'no', 'cancelo', 'cancelar', 'cancelacion', 'cancelación'].includes(lower)) intent = 'cancel';
+      else if (['3', 'reagendar', 'reagendo', 'cambiar'].includes(lower)) intent = 'reschedule';
     } else if (msgType === 'interactive') {
       const interactive = message.interactive as Record<string, unknown>;
       const buttonReply = interactive?.button_reply as Record<string, string>;
-      intent  = buttonReply?.id ?? '';    // 'confirm' | 'cancel' | 'reschedule'
+      intent  = buttonReply?.id ?? '';
       rawText = buttonReply?.title ?? '';
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // ── Dedup ──────────────────────────────────────────────────────────────
+    // ── Dedup ─────────────────────────────────────────────────────────────
     const { data: existingLog } = await supabase
       .from('whatsapp_message_log')
       .select('id')
@@ -141,32 +194,45 @@ serve(async (req: Request) => {
       });
     }
 
-    // ── Find patient ───────────────────────────────────────────────────────
+    // ── Find patient (search with and without +) ──────────────────────────
     const { data: patient } = await supabase
       .from('patients')
       .select('id, full_name, clinic_id, phone_number')
-      .or(`phone_number.eq.${fromPhone},phone_number.eq.+${fromPhone}`)
+      .or(`phone_number.eq.${fromPhone},phone_number.eq.${fromPhoneRaw}`)
       .maybeSingle();
 
-    const logEntry = {
-      clinic_id:      patient?.clinic_id ?? null,
-      patient_id:     patient?.id ?? null,
-      appointment_id: null as string | null,
-      direction:      'inbound',
-      phone_number:   fromPhone,
-      message:        rawText || `[${msgType}]`,
-      wa_message_id:  waMessageId,
-      status:         'received',
-    };
+    const displayText = rawText || `[${msgType}]`;
 
     if (!patient) {
-      await supabase.from('whatsapp_message_log').insert(logEntry);
+      await logAudit(supabase, {
+        clinicId: null, patientId: null, appointmentId: null,
+        direction: 'inbound', phone: fromPhone,
+        message: displayText, waMessageId, status: 'received',
+      });
       return new Response(JSON.stringify({ ok: true }), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       });
     }
 
     const replyPhoneNumberId = await resolvePhoneNumberId(supabase, incomingPhoneNumId, patient.clinic_id);
+
+    // ── Upsert conversation (using normalized phone) ───────────────────────
+    const conversationId = await upsertConversation(
+      supabase, patient.clinic_id, patient.id, fromPhone,
+    );
+
+    // ── Insert inbound message ─────────────────────────────────────────────
+    if (conversationId) {
+      await insertMessage(supabase, {
+        conversationId,
+        clinicId:      patient.clinic_id,
+        patientId:     patient.id,
+        direction:     'inbound',
+        content:       displayText,
+        status:        'received',
+        metaMessageId: waMessageId,
+      });
+    }
 
     // ── Find pending appointment ───────────────────────────────────────────
     const { data: appointment } = await supabase
@@ -180,66 +246,78 @@ serve(async (req: Request) => {
       .limit(1)
       .maybeSingle();
 
-    logEntry.appointment_id = appointment?.id ?? null;
+    // ── Audit log: inbound ─────────────────────────────────────────────────
+    await logAudit(supabase, {
+      clinicId:      patient.clinic_id,
+      patientId:     patient.id,
+      appointmentId: appointment?.id ?? null,
+      direction:     'inbound',
+      phone:         fromPhone,
+      message:       displayText,
+      waMessageId,
+      status:        'received',
+    });
 
-    // ── Get clinic phone for reschedule message ────────────────────────────
+    // ── Bot only responds to appointment intents — NOT generic messages ────
+    // If the patient sends a free-form message with no intent, the staff
+    // replies manually from the Inbox. Bot only handles confirm/cancel/reschedule.
+    const shouldBotReply = !!(appointment && intent);
+    const noAppointmentIntent = !appointment && intent; // intent but no appt
+
     const { data: clinicData } = await supabase
       .from('clinics')
       .select('name, phone')
       .eq('id', patient.clinic_id)
       .maybeSingle();
 
-    // ── Process intent ─────────────────────────────────────────────────────
-    if (appointment && intent) {
+    const sendReply = async (replyText: string) => {
+      const replyId = await sendWaText(fromPhone, replyText, replyPhoneNumberId);
+      if (conversationId) {
+        await insertMessage(supabase, {
+          conversationId,
+          clinicId:      patient.clinic_id,
+          patientId:     patient.id,
+          direction:     'outbound',
+          content:       replyText,
+          status:        replyId ? 'sent' : 'failed',
+          metaMessageId: replyId,
+        });
+      }
+      await logAudit(supabase, {
+        clinicId:      patient.clinic_id,
+        patientId:     patient.id,
+        appointmentId: appointment?.id ?? null,
+        direction:     'outbound',
+        phone:         fromPhone,
+        message:       replyText,
+        waMessageId:   replyId,
+        status:        replyId ? 'sent' : 'failed',
+      });
+    };
 
+    if (shouldBotReply) {
       if (intent === 'confirm') {
         await supabase
           .from('appointments')
           .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
-          .eq('id', appointment.id);
-
-        await supabase.from('whatsapp_message_log').insert(logEntry);
-
-        const replyText = `¡Perfecto, ${patient.full_name}! ✅ Tu turno quedó *confirmado*. Te esperamos.`;
-        const replyId = await sendWaText(fromPhone, replyText, replyPhoneNumberId);
-        await logOutbound(supabase, patient.clinic_id, patient.id, appointment.id, fromPhone, replyText, replyId);
+          .eq('id', appointment!.id);
+        await sendReply(`¡Perfecto, ${patient.full_name}! ✅ Tu turno quedó *confirmado*. Te esperamos.`);
 
       } else if (intent === 'cancel') {
         await supabase
           .from('appointments')
           .update({ status: 'cancelled' })
-          .eq('id', appointment.id);
-
-        await supabase.from('whatsapp_message_log').insert(logEntry);
-
-        const replyText = `Entendido, ${patient.full_name}. Tu turno fue *cancelado*. Cuando quieras reagendar, contactá al consultorio.`;
-        const replyId = await sendWaText(fromPhone, replyText, replyPhoneNumberId);
-        await logOutbound(supabase, patient.clinic_id, patient.id, appointment.id, fromPhone, replyText, replyId);
+          .eq('id', appointment!.id);
+        await sendReply(`Entendido, ${patient.full_name}. Tu turno fue *cancelado*. Cuando quieras reagendar, contactá al consultorio.`);
 
       } else if (intent === 'reschedule') {
-        // Keep appointment as pending — staff will reschedule manually
-        await supabase.from('whatsapp_message_log').insert(logEntry);
-
         const clinicPhone = clinicData?.phone ? ` o llamanos al ${clinicData.phone}` : '';
-        const replyText =
-          `Entendido, ${patient.full_name}. 📅 Para reagendar tu turno escribinos al consultorio${clinicPhone} y con gusto te buscamos un nuevo horario. ¡Hasta pronto!`;
-        const replyId = await sendWaText(fromPhone, replyText, replyPhoneNumberId);
-        await logOutbound(supabase, patient.clinic_id, patient.id, appointment.id, fromPhone, replyText, replyId);
-
-      }
-
-    } else {
-      // No pending appointment or unknown message
-      await supabase.from('whatsapp_message_log').insert(logEntry);
-
-      if (msgType === 'text' && rawText) {
-        const helpText =
-          `Hola ${patient.full_name} 👋 No encontramos ningún turno pendiente para confirmar.\n\n` +
-          `Si querés sacar un turno, contactá al consultorio.`;
-        const replyId = await sendWaText(fromPhone, helpText, replyPhoneNumberId);
-        await logOutbound(supabase, patient.clinic_id, patient.id, null, fromPhone, helpText, replyId);
+        await sendReply(
+          `Entendido, ${patient.full_name}. 📅 Para reagendar tu turno escribinos al consultorio${clinicPhone} y con gusto te buscamos un nuevo horario. ¡Hasta pronto!`,
+        );
       }
     }
+    // Generic messages (no intent) → staff replies manually from Inbox. No bot response.
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200, headers: { 'Content-Type': 'application/json' },

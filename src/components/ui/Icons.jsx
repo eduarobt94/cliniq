@@ -141,6 +141,11 @@ export const Icons = {
       <circle cx="12" cy="8" r="1" fill="currentColor" />
     </svg>
   ),
+  Trash: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M2 4h12M6 4V2.5h4V4M5 4l.5 8.5h5L11 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
   Pulse: ({ size = 16 }) => (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path d="M1 8H4L5.5 3.5L8.5 12.5L10.5 8H15" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />

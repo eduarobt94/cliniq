@@ -1,16 +1,53 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Icons, Badge, Avatar, MonoLabel } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
 
 const NAV_ITEMS = [
-  { id: 'overview',        label: 'Resumen',          icon: Icons.Home,     path: '/dashboard'                  },
-  { id: 'agenda',          label: 'Agenda',            icon: Icons.Calendar, path: '/dashboard/agenda',   badge: '14'                     },
-  { id: 'pacientes',       label: 'Pacientes',         icon: Icons.Users,    path: '/dashboard/pacientes'        },
-  { id: 'automatizaciones',label: 'Automatizaciones',  icon: Icons.Zap,      path: '/dashboard/automatizaciones', badge: '6'                },
-  { id: 'inbox',           label: 'Inbox WhatsApp',    icon: Icons.Chat,     path: '/dashboard/inbox',    badge: '3', badgeTone: 'accent' },
-  { id: 'reportes',        label: 'Reportes',          icon: Icons.Chart,    path: '/dashboard/reportes'         },
+  { id: 'overview',        label: 'Resumen',          icon: Icons.Home,     path: '/dashboard'                                           },
+  { id: 'agenda',          label: 'Agenda',            icon: Icons.Calendar, path: '/dashboard/agenda',           badge: '14'            },
+  { id: 'pacientes',       label: 'Pacientes',         icon: Icons.Users,    path: '/dashboard/pacientes'                                 },
+  { id: 'automatizaciones',label: 'Automatizaciones',  icon: Icons.Zap,      path: '/dashboard/automatizaciones',  badge: '6'             },
+  { id: 'inbox',           label: 'Inbox WhatsApp',    icon: Icons.Chat,     path: '/dashboard/inbox',            dynamic: 'inboxCount'  },
+  { id: 'reportes',        label: 'Reportes',          icon: Icons.Chart,    path: '/dashboard/reportes'                                  },
 ];
+
+/**
+ * Count conversations where the last message is inbound (patient wrote last,
+ * staff hasn't replied yet) — these are the "unread / needs attention" chats.
+ */
+function useInboxBadge(clinicId) {
+  const [count, setCount] = useState(null);
+
+  useEffect(() => {
+    if (!clinicId) return;
+
+    async function load() {
+      const { count: n } = await supabase
+        .from('conversations')
+        .select('id', { count: 'exact', head: true })
+        .eq('clinic_id', clinicId)
+        .eq('last_message_direction', 'inbound');
+      setCount(n > 0 ? Math.min(n, 99) : null);
+    }
+
+    load();
+
+    // Re-count whenever a conversation is updated (last_message_direction changes)
+    const channel = supabase
+      .channel(`inbox-badge-${clinicId}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'conversations',
+        filter: `clinic_id=eq.${clinicId}`,
+      }, load)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [clinicId]);
+
+  return count;
+}
 
 const SECONDARY_ITEMS = [
   { id: 'config', label: 'Configuración', icon: Icons.Settings, path: '/dashboard/configuracion' },
@@ -26,7 +63,13 @@ export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobil
   const navigate = useNavigate();
   const location = useLocation();
   const { clinic, profile, role } = useAuth();
+  const inboxCount = useInboxBadge(clinic?.id);
   const isFloating = variant === 'floating';
+
+  const getDynamicBadge = (item) => {
+    if (item.dynamic === 'inboxCount') return inboxCount ? String(inboxCount) : null;
+    return item.badge ?? null;
+  };
   const isIconOnly = variant === 'icon' || collapsed;
   const width = isIconOnly ? 'w-[68px]' : 'w-[240px]';
   const base = isFloating
@@ -131,8 +174,10 @@ export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobil
                     )}
                     <Icon size={16} />
                     {!isIconOnly && <span className="flex-1 text-left">{it.label}</span>}
-                    {!isIconOnly && it.badge && <Badge tone={it.badgeTone || 'outline'}>{it.badge}</Badge>}
-                    {isIconOnly && it.badge && (
+                    {!isIconOnly && getDynamicBadge(it) && (
+                      <Badge tone={it.badgeTone || 'accent'}>{getDynamicBadge(it)}</Badge>
+                    )}
+                    {isIconOnly && getDynamicBadge(it) && (
                       <span className="absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full bg-[var(--cq-accent)]" />
                     )}
                   </button>
