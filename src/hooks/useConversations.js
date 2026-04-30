@@ -5,6 +5,9 @@ import { supabase } from '../lib/supabase';
  * Loads and subscribes to the conversations list for a clinic.
  * UPDATE events are applied in-place (no full refetch) to avoid flicker.
  * INSERT events trigger a full refetch to get joined patient data.
+ *
+ * Includes AI handoff fields: agent_mode, agent_context, agent_last_human_reply_at.
+ * Patient join now includes ai_enabled, last_human_interaction.
  */
 export function useConversations(clinicId) {
   const [conversations, setConversations] = useState([]);
@@ -25,8 +28,12 @@ export function useConversations(clinicId) {
         phone_number,
         last_message,
         last_message_at,
+        last_message_direction,
+        agent_mode,
+        agent_context,
+        agent_last_human_reply_at,
         created_at,
-        patients ( id, full_name, phone_number )
+        patients ( id, full_name, phone_number, ai_enabled, last_human_interaction )
       `)
       .eq('clinic_id', clinicId)
       .order('last_message_at', { ascending: false, nullsFirst: false });
@@ -57,15 +64,18 @@ export function useConversations(clinicId) {
           filter: `clinic_id=eq.${clinicId}`,
         },
         (payload) => {
-          // Update last_message fields in-place and re-sort
+          // Update all known scalar fields in-place and re-sort
           setConversations((prev) => {
             const updated = prev.map((c) =>
               c.id === payload.new.id
                 ? {
                     ...c,
-                    last_message:           payload.new.last_message,
-                    last_message_at:        payload.new.last_message_at,
-                    last_message_direction: payload.new.last_message_direction,
+                    last_message:              payload.new.last_message,
+                    last_message_at:           payload.new.last_message_at,
+                    last_message_direction:    payload.new.last_message_direction,
+                    agent_mode:                payload.new.agent_mode,
+                    agent_context:             payload.new.agent_context,
+                    agent_last_human_reply_at: payload.new.agent_last_human_reply_at,
                   }
                 : c,
             );

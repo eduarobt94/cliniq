@@ -52,23 +52,23 @@ async function resolvePhoneNumberId(
   return incomingPhoneNumId || WA_PHONE_NUMBER_ID_GLOBAL;
 }
 
-// ─── Upsert conversation ──────────────────────────────────────────────────────
+// ─── Upsert conversation — returns full object for AI handoff logic ───────────
 async function upsertConversation(
   supabase: ReturnType<typeof createClient>,
   clinicId: string,
   patientId: string | null,
   phone: string,
-): Promise<string | null> {
+): Promise<{ id: string; agent_mode: string; agent_last_human_reply_at: string | null } | null> {
   const { data, error } = await supabase
     .from('conversations')
     .upsert(
       { clinic_id: clinicId, patient_id: patientId, phone_number: phone },
       { onConflict: 'clinic_id,phone_number', ignoreDuplicates: false },
     )
-    .select('id')
+    .select('id, agent_mode, agent_last_human_reply_at')
     .single();
   if (error) { console.error('upsertConversation error:', error); return null; }
-  return data?.id ?? null;
+  return data ?? null;
 }
 
 // ─── Insert into messages ─────────────────────────────────────────────────────
@@ -82,6 +82,7 @@ async function insertMessage(
     content:        string;
     status:         string;
     metaMessageId:  string | null;
+    senderType?:    'bot' | 'staff' | 'system' | null;
   },
 ) {
   const { error } = await supabase.from('messages').insert({
@@ -92,6 +93,7 @@ async function insertMessage(
     content:         opts.content,
     status:          opts.status,
     meta_message_id: opts.metaMessageId,
+    sender_type:     opts.senderType ?? null,
   });
   if (error) console.error('insertMessage error:', error);
 }
@@ -120,6 +122,31 @@ async function logAudit(
     wa_message_id:  opts.waMessageId,
     status:         opts.status,
   });
+}
+
+// ─── AI handoff: decide if the agent should reply ─────────────────────────────
+function shouldAgentReply(
+  conv: { agent_mode: string; agent_last_human_reply_at: string | null } | null,
+  patient: { ai_enabled: boolean } | null,
+): boolean {
+  // REGLA DE ORO 1: paciente con IA deshabilitada → nunca responder
+  if (patient && patient.ai_enabled === false) return false;
+
+  // Sin conversación todavía → el agente puede responder
+  if (!conv) return true;
+
+  // Modo bot → siempre responder
+  if (conv.agent_mode === 'bot') return true;
+
+  // Modo human → solo responder si el humano lleva más de 2 minutos sin escribir
+  if (conv.agent_mode === 'human') {
+    const lastHuman = conv.agent_last_human_reply_at;
+    if (!lastHuman) return true; // nunca hubo respuesta humana
+    const minutesSince = (Date.now() - new Date(lastHuman).getTime()) / 60000;
+    return minutesSince > 2;
+  }
+
+  return false;
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
@@ -194,21 +221,77 @@ serve(async (req: Request) => {
       });
     }
 
-    // ── Find patient (search with and without +) ──────────────────────────
+    // ── Find patient (search with and without +) — include ai_enabled ──────
     const { data: patient } = await supabase
       .from('patients')
-      .select('id, full_name, clinic_id, phone_number')
+      .select('id, full_name, clinic_id, phone_number, ai_enabled')
       .or(`phone_number.eq.${fromPhone},phone_number.eq.${fromPhoneRaw}`)
       .maybeSingle();
 
     const displayText = rawText || `[${msgType}]`;
 
     if (!patient) {
+      // Número desconocido — buscar a qué clínica pertenece este WA phone number ID
+      // Meta envía phone_number_id como ID numérico; la DB puede guardar el número real
+      // → intentamos ambos: el ID entrante y el env var global como fallback
+      console.log('[webhook] Guest message — incomingPhoneNumId:', incomingPhoneNumId, 'globalId:', WA_PHONE_NUMBER_ID_GLOBAL);
+
+      let clinicForGuest: { id: string } | null = null;
+
+      // Intento 1: coincidencia exacta con lo que envía Meta
+      const { data: c1 } = await supabase
+        .from('clinics')
+        .select('id')
+        .eq('wa_phone_number_id', incomingPhoneNumId)
+        .maybeSingle();
+      clinicForGuest = c1;
+
+      // Intento 2: fallback usando el env var global (por si hay diferencia de formato)
+      if (!clinicForGuest && WA_PHONE_NUMBER_ID_GLOBAL) {
+        const { data: c2 } = await supabase
+          .from('clinics')
+          .select('id')
+          .eq('wa_phone_number_id', WA_PHONE_NUMBER_ID_GLOBAL)
+          .maybeSingle();
+        clinicForGuest = c2;
+      }
+
+      console.log('[webhook] clinicForGuest found:', !!clinicForGuest);
+
       await logAudit(supabase, {
-        clinicId: null, patientId: null, appointmentId: null,
+        clinicId: clinicForGuest?.id ?? null, patientId: null, appointmentId: null,
         direction: 'inbound', phone: fromPhone,
         message: displayText, waMessageId, status: 'received',
       });
+
+      if (clinicForGuest) {
+        // Crear/reutilizar conversación sin paciente vinculado (guest)
+        const guestConv = await upsertConversation(supabase, clinicForGuest.id, null, fromPhone);
+        if (guestConv) {
+          await insertMessage(supabase, {
+            conversationId: guestConv.id,
+            clinicId:       clinicForGuest.id,
+            patientId:      null,
+            direction:      'inbound',
+            content:        displayText,
+            status:         'received',
+            metaMessageId:  waMessageId,
+          });
+          // El agente da la bienvenida y registra al nuevo paciente
+          if (shouldAgentReply(guestConv, null)) {
+            try {
+              await fetch(`${SUPABASE_URL}/functions/v1/ai-agent-reply`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}` },
+                body:    JSON.stringify({ conversationId: guestConv.id, clinicId: clinicForGuest.id }),
+              });
+            } catch (err) {
+              console.error('[webhook] Error invoking ai-agent-reply for guest:', err);
+            }
+          }
+        }
+      }
+
       return new Response(JSON.stringify({ ok: true }), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       });
@@ -217,9 +300,10 @@ serve(async (req: Request) => {
     const replyPhoneNumberId = await resolvePhoneNumberId(supabase, incomingPhoneNumId, patient.clinic_id);
 
     // ── Upsert conversation (using normalized phone) ───────────────────────
-    const conversationId = await upsertConversation(
+    const convData = await upsertConversation(
       supabase, patient.clinic_id, patient.id, fromPhone,
     );
+    const conversationId = convData?.id ?? null;
 
     // ── Insert inbound message ─────────────────────────────────────────────
     if (conversationId) {
@@ -231,6 +315,7 @@ serve(async (req: Request) => {
         content:       displayText,
         status:        'received',
         metaMessageId: waMessageId,
+        senderType:    null,
       });
     }
 
@@ -258,11 +343,10 @@ serve(async (req: Request) => {
       status:        'received',
     });
 
-    // ── Bot only responds to appointment intents — NOT generic messages ────
-    // If the patient sends a free-form message with no intent, the staff
-    // replies manually from the Inbox. Bot only handles confirm/cancel/reschedule.
+    // ── Intent-based bot reply (appointment confirm/cancel/reschedule) ──────
+    // This original bot only handles explicit appointment intents.
+    // Generic messages are handled by the AI agent (below).
     const shouldBotReply = !!(appointment && intent);
-    const noAppointmentIntent = !appointment && intent; // intent but no appt
 
     const { data: clinicData } = await supabase
       .from('clinics')
@@ -281,6 +365,7 @@ serve(async (req: Request) => {
           content:       replyText,
           status:        replyId ? 'sent' : 'failed',
           metaMessageId: replyId,
+          senderType:    'bot',
         });
       }
       await logAudit(supabase, {
@@ -316,8 +401,31 @@ serve(async (req: Request) => {
           `Entendido, ${patient.full_name}. 📅 Para reagendar tu turno escribinos al consultorio${clinicPhone} y con gusto te buscamos un nuevo horario. ¡Hasta pronto!`,
         );
       }
+      // Intent handled by appointment bot → AI agent doesn't need to reply
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
     }
-    // Generic messages (no intent) → staff replies manually from Inbox. No bot response.
+
+    // ── AI Handoff: determinar si el agente de IA debe responder ───────────
+    // Solo se llega acá cuando NO hubo respuesta del bot de turnos (mensaje genérico).
+    // Llamamos ai-agent-reply de forma sincrónica pero sin bloquear: respondemos a Meta
+    // primero y el agente corre dentro del mismo ciclo de vida de esta invocación.
+    if (conversationId && shouldAgentReply(convData, patient)) {
+      console.log('[webhook] Invocando ai-agent-reply para conv:', conversationId);
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/ai-agent-reply`, {
+          method:  'POST',
+          headers: {
+            'Content-Type':  'application/json',
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+          },
+          body: JSON.stringify({ conversationId, clinicId: patient.clinic_id }),
+        });
+      } catch (err) {
+        console.error('[webhook] Error invocando ai-agent-reply:', err);
+      }
+    }
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200, headers: { 'Content-Type': 'application/json' },

@@ -164,4 +164,35 @@ export const Icons = {
       <path d="M4.5 9.5H2.5C1.95 9.5 1.5 9.05 1.5 8.5V2.5C1.5 1.95 1.95 1.5 2.5 1.5H8.5C9.05 1.5 9.5 1.95 9.5 2.5V4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </svg>
   ),
+  Pause: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="4"   y="3" width="2.8" height="10" rx="1.2" fill="currentColor" />
+      <rect x="9.2" y="3" width="2.8" height="10" rx="1.2" fill="currentColor" />
+    </svg>
+  ),
+  Bot: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="2" y="5" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="5.5" cy="9" r="1" fill="currentColor" />
+      <circle cx="10.5" cy="9" r="1" fill="currentColor" />
+      <path d="M8 2V5M6.5 13h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M5.5 13v1.5M10.5 13v1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  ),
+  Info: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M8 7v5M8 5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  ChevronRight: ({ size = 14 }) => (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M5 3L9 7L5 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  ChevronLeft: ({ size = 14 }) => (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M9 3L5 7L9 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
 };

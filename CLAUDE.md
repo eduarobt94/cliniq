@@ -3,19 +3,30 @@
 ## ⚡ INICIO RÁPIDO DE SESIÓN
 > Leé esta sección primero. Resume el estado actual y qué hacer a continuación.
 
-**Último trabajo completado (2026-04-28):**
-- **Features:** `useMembers` con join de `profiles` (displayName); `Configuracion` con miembros reales + invite modal funcional + botón de eliminar; `useInbox` (nuevo hook); página `Inbox` conectada a Supabase con Realtime
-- **Seguridad (Trail of Bits audit):** `'unsafe-inline'` removido de `script-src` en prod; mensajes de error genéricos en Login/Signup; validación E.164 + normalización de teléfonos; checkbox "Mantener sesión" eliminado (era no-funcional)
+**Último trabajo completado (2026-04-30) — Agente IA WhatsApp completo y funcional:**
+
+### ✅ Completado en esta sesión
+- **Agente IA multi-herramienta:** Claude Haiku-4-5 maneja turnos completo via WhatsApp
+- **Herramientas del agente:** `schedule_appointment`, `cancel_appointments`, `reschedule_appointment`, `confirm_appointment`, `register_patient`
+- **Multi-turn tool loop:** loop de hasta 4 rondas, procesa TODOS los tool_use blocks en paralelo por ronda — fix del bug crítico donde Claude devolvía 0 chars porque la segunda llamada se hacía sin tools (violación de Anthropic API spec)
+- **Nuevos pacientes:** registro automático vía WA → nombre → register_patient → turno (resolvedPatientId en memoria para chain inmediato)
+- **Timezone fix:** formatAppointments usa `timeZone: 'America/Montevideo'` — antes mostraba 18:00 en vez de 15:00
+- **Intenciones inteligentes:** reagendar/cancelar/confirmar con lógica de 1 turno vs múltiples
+- **Saludos vacíos del staff no bloquean la IA:** "hola", "ok", "bien" del staff no se tratan como "respuesta real"
+- **Sidebar badges reales:** `useAgendaBadge` (turnos activos de hoy en adelante), `useAutomationsBadge` (automatizaciones enabled)
+- **Refetch inmediato:** después de toda mutación (delete/create/edit) en Agenda y Pacientes
+- **Capitalización correcta:** `split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1))` — evita bug con tildes ("SáBado")
+- **Calendario explícito en prompt:** 14 días con `día nombre + número → ISO` — Claude nunca calcula fechas solo
+- **Info de clínica en contexto IA:** dirección, teléfono, email respondidos automáticamente
+- **Lookup de clínica para guests:** two-step — exact match wa_phone_number_id → fallback WA_PHONE_NUMBER_ID_GLOBAL env var
 
 **Próximas tareas priorizadas:**
-1. 🔴 Ejecutar migraciones pendientes en Supabase (SQL Editor del dashboard):
-   - `20260423000000_clinic_members.sql`
-   - `20260424000000_profiles_and_rpc.sql`
-   - `20260425000000_invite_flow.sql`
-   - `20260428000000_whatsapp_automations.sql`
-2. 🔴 Configurar WhatsApp en Supabase: secrets `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` + cron job pg_cron
-3. 🟡 Conectar `RevenueBlock` a datos reales (tabla `appointments`)
-4. 🟢 Envío real de mensajes desde Inbox (requiere Edge Function outbound)
+1. 🔴 **Token WhatsApp permanente** — el token de 24h venció. Crear System User token en Meta Business Manager → actualizar secret `WHATSAPP_ACCESS_TOKEN` en Supabase → redesplegar funciones
+2. 🟡 **pg_cron** — habilitar extensión en Supabase Dashboard + correr `supabase db push` + insertar supabase_url en ai_config
+3. 🟡 **Dashboard InboxBlock** — migrar de tabla legacy `whatsapp_message_log` a tabla `messages`
+4. 🟡 **RevenueBlock** — conectar a datos reales de `appointments`
+5. 🟢 **Reportes** — conectar página a datos reales
+6. 🟢 **Configuración → WhatsApp** — UI real para gestionar token y número
 
 **Usuario de prueba:** `maria@bonomi.uy` / `demo1234`
 **Dev server:** `npm run dev` → localhost:5173
@@ -34,7 +45,7 @@ SaaS de automatización para clínicas médicas en Uruguay. Gestiona turnos, pac
 - **Styling:** Tailwind CSS v3 + CSS custom properties (`--cq-*`)
 - **Routing:** React Router v6
 - **Backend:** Supabase (PostgreSQL 15, Auth, Realtime)
-- **Language:** JavaScript (JSX) — sin TypeScript
+- **Language:** JavaScript (JSX) — sin TypeScript en frontend; TypeScript en Edge Functions (Deno)
 
 ---
 
@@ -46,41 +57,38 @@ src/
   components/ProtectedRoute.jsx
   context/AuthContext.jsx  ← Auth con Supabase real (solo onAuthStateChange, sin race condition)
   hooks/
-    useClinic.js           ← clínica del usuario autenticado
-    useAppointments.js     ← turnos de hoy + Realtime
-    useKpis.js             ← KPIs desde v_clinic_kpis_today
-    usePatients.js         ← lista de pacientes (limit 50)
-    useMembers.js          ← miembros + profiles batch + addMember/removeMember/refetch
-    useAutomations.js      ← clinic_automations + v_automation_stats
-    useWhatsappInbox.js    ← últimos N mensajes inbound (para InboxBlock del dashboard)
-    useInbox.js            ← conversaciones completas agrupadas por phone (para página Inbox)
-    useAgenda.js / useAgendaRange.js
+    useClinic.js              ← clínica del usuario autenticado
+    useAppointments.js        ← turnos de hoy + Realtime
+    useKpis.js                ← KPIs desde v_clinic_kpis_today
+    usePatients.js            ← lista de pacientes (limit 50) + refetch
+    useMembers.js             ← miembros + profiles batch + addMember/removeMember/refetch
+    useAutomations.js         ← clinic_automations + v_automation_stats
+    useWhatsappInbox.js       ← últimos N mensajes inbound (InboxBlock dashboard) — tabla legacy
+    useConversations.js       ← lista de conversaciones CRM con Realtime
+    useRealtimeMessages.js    ← mensajes de una conversación con Realtime
+    useAgendaRange.js         ← turnos por rango de fechas + Realtime + refetch
     useNotifications.js
+    useAgendaBadge.js         ← count turnos activos futuros (new/pending/confirmed) para sidebar
+    useAutomationsBadge.js    ← count automatizaciones enabled para sidebar
   lib/
     supabase.js            ← cliente Supabase singleton
-    authService.js         ← signUp, signIn, createClinic, inviteMember, acceptInvite, sendInviteEmail
+    authService.js         ← signUp, signIn, createClinic, inviteMember, acceptInvite
     appointmentService.js  ← CRUD de patients y appointments; normaliza teléfonos a E.164
     phoneUtils.js          ← isValidPhone(), normalizePhone() — validación E.164
   pages/
-    Landing/               ← LandingHero, LandingProduct, LandingHow, LandingStory, LandingPricing, LandingNav, LandingFooter
-    Login/                 ← formulario con toast de error + Google OAuth
-    Signup/                ← registro con nombre de clínica o modo invitación
-    Onboarding/            ← recuperación si clinic creation falló post-signup
-    ForgotPassword/ / ResetPassword/ / VerifyEmail/ / AuthCallback/ / AcceptInvite/
     Dashboard/             ← AgendaBlock, KPIs, AutomationsBlock, InboxBlock, NewAppointmentModal, InviteMemberModal
-    Agenda/                ← vista completa de agenda
-    Pacientes/             ← tabla de pacientes con CRUD, búsqueda y filtros
-    Inbox/                 ← chat de WhatsApp conectado a Supabase via useInbox
+    Agenda/                ← vista completa de agenda + fmtDayLabel/fmtMonthLabel con split(' ') para tildes
+    Pacientes/             ← tabla de pacientes con CRUD, búsqueda, filtros + refetch inmediato
+    Inbox/                 ← CRM inbox: useConversations + useRealtimeMessages, toggle IA, panel contexto
     Automatizaciones/ / Reportes/ / Configuracion/
-    NotFound/
-  styles/globals.css       ← variables --cq-* (design tokens) + keyframes CSS
-  App.jsx                  ← ErrorBoundary + AuthProvider + ProtectedRoute + Routes
-  main.jsx
+  layouts/DashboardLayout.jsx  ← dispara cq_appointment_created CustomEvent para refetch cross-component
 supabase/
-  migrations/              ← ver tabla de migraciones más abajo
-  seed.sql                 ← 6 pacientes + 6 turnos de prueba (reemplazar UUID antes de ejecutar)
-netlify.toml               ← headers de seguridad + redirect SPA
-vercel.json                ← headers de seguridad + rewrite SPA
+  functions/
+    whatsapp-webhook/      ← recibe eventos Meta, upsert conversations+messages, llama ai-agent-reply
+    ai-agent-reply/        ← agente IA completo (ver sección AI Agent más abajo)
+    send-whatsapp-message/ ← staff envía mensajes outbound
+    initiate-conversation/ ← crea conversación + envía template si hay turno
+  migrations/              ← ver tabla más abajo
 ```
 
 ---
@@ -89,101 +97,231 @@ vercel.json                ← headers de seguridad + rewrite SPA
 **Proyecto ID:** `jmpyygecgqkeuwwaioew` — región: São Paulo
 **URL:** `https://jmpyygecgqkeuwwaioew.supabase.co`
 
-### Tablas
+### Tablas principales
 | Tabla | Descripción |
 |---|---|
-| `clinics` | Raíz multi-tenant. `owner_id` FK → `auth.users.id` |
-| `profiles` | Nombre y apellido de cada usuario. Creado por trigger al registrarse |
-| `clinic_members` | Multi-usuario por clínica. Roles: `owner / staff / viewer`. Estados: `invited / active` |
-| `patients` | `UNIQUE(clinic_id, phone_number)`. Teléfono en formato E.164 |
-| `appointments` | Tabla central. ENUM status: `new/pending/confirmed/rescheduled/cancelled` |
-| `clinic_automations` | Config de recordatorios por clínica. `UNIQUE(clinic_id, type)` |
-| `whatsapp_message_log` | Auditoría de mensajes WA. `direction: inbound/outbound` |
+| `clinics` | Raíz multi-tenant. `owner_id` FK → `auth.users.id`. Cols WA: `wa_phone_number_id`, `wa_access_token`, `address`, `phone`, `email_contact` |
+| `profiles` | Nombre y apellido de cada usuario. Creado por trigger |
+| `clinic_members` | Multi-usuario. Roles: `owner/staff/viewer`. Estados: `invited/active` |
+| `patients` | `UNIQUE(clinic_id, phone_number)`. Tel en E.164. Cols IA: `ai_enabled` (bool), `last_human_interaction` |
+| `appointments` | ENUM status: `new/pending/confirmed/rescheduled/cancelled`. `notes` = `[IA] Servicio: X` para agente |
+| `clinic_automations` | Config recordatorios. `UNIQUE(clinic_id, type)` |
+| `conversations` | CRM inbox. `UNIQUE(clinic_id, phone_number)`. `agent_mode`: `bot/human`. `agent_last_human_reply_at`. `REPLICA IDENTITY FULL` |
+| `messages` | FK → conversations. `direction`: `inbound/outbound/outbound_ai/system/system_template`. `sender_type`: `bot/staff/system`. `REPLICA IDENTITY FULL` |
+| `whatsapp_message_log` | Auditoría legacy — sigue siendo insertada para backward compat |
 
-### Vistas (SECURITY INVOKER — respetan RLS)
-- `v_today_appointments` — turnos de hoy + datos del paciente + timezone de la clínica
-- `v_clinic_kpis_today` — conteos del día por clínica
-- `v_automation_stats` — estadísticas de mensajes outbound por clínica
+### Vistas
+- `v_today_appointments` — turnos de hoy + paciente + timezone
+- `v_clinic_kpis_today` — conteos del día
+- `v_automation_stats` — estadísticas outbound
 
 ### RPCs
-- `fn_user_clinic_ids()` — STABLE SECURITY DEFINER, devuelve UUIDs de clínicas del usuario
-- `create_clinic_with_owner(clinic_name, p_first_name, p_last_name)` — crea clínica + perfil atómicamente
-- `create_member_invite(p_clinic_id, p_email, p_role)` — crea/renueva invite_token, devuelve UUID
-- `get_invite_by_token(p_token)` — consulta pública del estado de una invitación
-- `accept_member_invite(p_token)` — vincula auth.uid() a la invitación
+- `fn_user_clinic_ids()` — STABLE SECURITY DEFINER
+- `create_clinic_with_owner(clinic_name, p_first_name, p_last_name)`
+- `create_member_invite(p_clinic_id, p_email, p_role)`
+- `get_invite_by_token(p_token)` — pública
+- `accept_member_invite(p_token)`
 
 ### Migraciones
 | Archivo | Estado |
 |---|---|
 | `20260420000000_cliniq_mvp.sql` | ✅ Ejecutada |
 | `20260422000000_cliniq_optimizations.sql` | ✅ Ejecutada |
-| `20260423000000_clinic_members.sql` | ⚠️ Pendiente |
-| `20260424000000_profiles_and_rpc.sql` | ⚠️ Pendiente |
-| `20260425000000_invite_flow.sql` | ⚠️ Pendiente |
-| `20260428000000_whatsapp_automations.sql` | ⚠️ Pendiente |
-| `20260428000000_fix_whatsapp_rls.sql` | ⚠️ Pendiente |
+| `20260423000000_clinic_members.sql` | ✅ Ejecutada |
+| `20260424000000_profiles_and_rpc.sql` | ✅ Ejecutada |
+| `20260425000000_invite_flow.sql` | ✅ Ejecutada |
+| `20260428000000_whatsapp_automations.sql` | ✅ Ejecutada |
+| `20260428000000_fix_whatsapp_rls.sql` | ✅ Ejecutada |
+| `20260429000000_inbox_v2.sql` | ✅ Ejecutada |
+| `20260429000001_inbox_delete_policy.sql` | ✅ Ejecutada |
+| `20260430000000_ai_agent_handoff.sql` | ✅ Ejecutada — `agent_mode`, `ai_enabled`, `sender_type`, `outbound_ai`, `agent_last_human_reply_at` |
 
 **⚠️ Nunca volver a ejecutar las ya aplicadas en producción.**
 
 ---
 
+## Agente IA WhatsApp (`ai-agent-reply`)
+
+### Arquitectura
+- **Modelo:** `claude-haiku-4-5`, max_tokens: 400
+- **Invocación:** `whatsapp-webhook` → llama `ai-agent-reply` via HTTP interno cuando `shouldAgentReply()` = true
+- **Timezone:** todos los cálculos de fecha/hora en `America/Montevideo` (UTC-3)
+- **Modo paciente nuevo:** `isNewPatient = !patient` → sistema diferente, solo tools `register_patient` + `schedule_appointment`
+- **resolvedPatientId:** variable en memoria que se actualiza al registrar → permite chain `register_patient → schedule_appointment` en mismo invocation
+
+### Loop multi-turn (crítico)
+```typescript
+// La API de Anthropic REQUIERE tools en toda llamada que tenga tool_use en el historial
+// Loop de hasta 4 rondas — procesa TODOS los tool_use blocks en paralelo por ronda
+for (let round = 0; round < 4; round++) {
+  const data = await callClaude(currentMessages); // siempre con tools
+  if (data.stop_reason !== 'tool_use') { claudeText = extractText(data); break; }
+  // Ejecutar todos los tool blocks en paralelo → Promise.all
+  // Añadir assistant + tool_results al hilo → continuar loop
+}
+```
+**⚠️ NUNCA llamar a Claude sin tools si el historial tiene bloques tool_use — devuelve contenido vacío.**
+
+### Herramientas disponibles
+| Tool | Cuándo | Qué hace |
+|---|---|---|
+| `schedule_appointment` | Turno nuevo — tiene servicio+fecha+hora | Inserta en `appointments` con status `new` |
+| `cancel_appointments` | Cancelar sin nueva fecha | UPDATE status → `cancelled` |
+| `reschedule_appointment` | Cambiar fecha/hora | UPDATE viejos → `rescheduled` + INSERT nuevo |
+| `confirm_appointment` | Paciente confirma asistencia | UPDATE status → `confirmed` |
+| `register_patient` | Solo para isNewPatient | INSERT en `patients` + UPDATE conversation.patient_id |
+
+### Contexto de turnos (`formatAppointments`)
+```typescript
+// ⚠ Siempre con timeZone: 'America/Montevideo' — servidor corre en UTC
+const fecha = dt.toLocaleDateString('es-UY', { timeZone: 'America/Montevideo', weekday: 'long', ... });
+const hora  = dt.toLocaleTimeString('es-UY', { timeZone: 'America/Montevideo', ... });
+// Extrae servicio de notes: /Servicio:\s*([^—\n]+)/
+// Formato: [ID:uuid] Turno el miércoles 6 de mayo a las 15:00 (estado: new) — Servicio: limpieza dental
+```
+
+### Lógica de activación (`whatsapp-webhook`)
+- `shouldAgentReply()`: agent_mode = 'bot' → true; 'human' → solo si `agent_last_human_reply_at > 2 min`
+- Saludos vacíos del staff (`"hola"`, `"ok"`, `"bien"`, etc.) → NO se tratan como "respuesta real" al contar inbounds sin responder
+- Si hay mensajes del paciente sin respuesta Y humano inactivo > 2min → IA retoma aunque agent_mode sea 'human'
+- Lookup de clínica para guests: exact match `wa_phone_number_id` → fallback `WA_PHONE_NUMBER_ID_GLOBAL` env var
+
+### Sistema de intenciones (prompt)
+- **"cuántos turnos tengo"** → responde del contexto, sin tool
+- **"cancelar"** → 1 turno: cancela directo. Varios: muestra lista y pregunta cuál
+- **"reagendar para X"** → 1 turno + fecha dada: reschedule directo. Sin fecha: pregunta. Varios: pregunta cuál primero
+- **"confirmo"** → confirm_appointment con el turno más próximo
+- **"quiero turno nuevo"** → pide servicio → fecha → hora → schedule_appointment
+
+### Calendario explícito en system prompt
+```typescript
+// 14 días con día nombre + número + mes → ISO
+// "miércoles 06 de mayo → 2026-05-06"
+// REGLA ABSOLUTA: Claude NUNCA calcula fechas — copia del calendario
+const proximosDias = Array.from({ length: 14 }, (_, i) => {
+  const d = new Date(nowUY.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
+  // ...
+  return `  ${DAY_NAMES[d.getUTCDay()]} ${iso.slice(8)} de ${MON_NAMES[d.getUTCMonth()]} → ${iso}`;
+}).join('\n');
+```
+
+---
+
 ## Variables de entorno
-Archivo `.env` en la raíz del proyecto (en `.gitignore`, no se sube):
 ```
 VITE_SUPABASE_URL=https://jmpyygecgqkeuwwaioew.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_...  ← Settings → API Keys → Publishable key
+VITE_SUPABASE_ANON_KEY=sb_publishable_...
 ```
+
+### Secrets de Supabase (Edge Functions)
+```
+SUPABASE_URL=https://jmpyygecgqkeuwwaioew.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+WHATSAPP_VERIFY_TOKEN=cliniq_webhook_2026
+WHATSAPP_ACCESS_TOKEN=<system-user-token-permanente>   ← 🔴 VENCE CADA 24H si es token de prueba
+WHATSAPP_PHONE_NUMBER_ID=<phone-number-id>
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
+
+## WhatsApp / Meta — Configuración
+
+- **Webhook URL:** `https://jmpyygecgqkeuwwaioew.supabase.co/functions/v1/whatsapp-webhook`
+- **Verify Token:** `cliniq_webhook_2026`
+- **Subscribed fields:** `messages`
+- **Token permanente:** Meta Business Manager → Configuración → Usuarios del sistema → Generar token → Sin expiración → `whatsapp_business_messaging` + `whatsapp_business_management`
+- **Ventana 24h:** texto libre solo si el paciente escribió en las últimas 24h
+
+### Edge Functions — Deploy
+| Función | Flags | Propósito |
+|---|---|---|
+| `whatsapp-webhook` | `--no-verify-jwt` | Recibe eventos de Meta (Meta no manda JWT) |
+| `ai-agent-reply` | `--no-verify-jwt` | Agente IA (invocado internamente por webhook) |
+| `send-whatsapp-message` | normal | Staff envía mensaje outbound |
+| `initiate-conversation` | normal | Crea conversación + template |
 
 ---
 
 ## Auth
-- `AuthContext.jsx` usa solo `onAuthStateChange` (dispara `INITIAL_SESSION` al montar — sin doble llamada)
-- `authService.js` — lógica pura: signUp crea user + clinic; si clinic falla → needsOnboarding=true
-- `ProtectedRoute` → redirige a `/login` si no hay sesión, a `/onboarding` si needsOnboarding
-- Flujo normal: `/signup` → crea user + clinic → `/dashboard`
-- Flujo invitación: `/accept-invite?token=X` → login/signup → acepta automáticamente → `/dashboard`
+- `AuthContext.jsx` usa solo `onAuthStateChange` (dispara `INITIAL_SESSION` al montar)
+- `authService.js` — signUp crea user + clinic; si clinic falla → needsOnboarding=true
+- `ProtectedRoute` → `/login` si no hay sesión, `/onboarding` si needsOnboarding
+- Flujo invitación: `/accept-invite?token=X` → login/signup → acepta → `/dashboard`
 
 ---
 
-## Hooks de datos (src/hooks/)
+## Hooks de datos
 | Hook | Retorna | Notas |
 |---|---|---|
 | `useClinic()` | `{ clinic, loading }` | Join clinic_members → clinics |
 | `useAppointments()` | `{ appointments, loading }` | Hoy + Realtime |
-| `useKpis()` | `{ kpis, loading }` | Desde `v_clinic_kpis_today` |
-| `usePatients()` | `{ patients, loading }` | Limit 50, incluye appointments |
-| `useMembers(clinicId)` | `{ members, loading, addMember, removeMember, refetch }` | Batch-fetch de profiles; `displayName` = nombre completo o email |
-| `useAutomations(clinicId)` | `{ automation, stats, loading, toggle, save }` | clinic_automations + v_automation_stats |
-| `useWhatsappInbox(clinicId, limit)` | `{ messages, unreadCount, loading }` | Inbound recientes para InboxBlock del dashboard |
-| `useInbox(clinicId)` | `{ conversations, getThread(phone), loading }` | Todas direcciones; agrupa por phone; timestamps es-UY |
+| `useKpis()` | `{ kpis, loading }` | v_clinic_kpis_today |
+| `usePatients()` | `{ patients, loading, refetch }` | Limit 50 |
+| `useMembers(clinicId)` | `{ members, loading, addMember, removeMember, refetch }` | displayName = nombre o email |
+| `useAutomations(clinicId)` | `{ automation, stats, loading, toggle, save }` | |
+| `useAgendaRange(start, end)` | `{ appointments, loading, error, refetch }` | Rango de fechas + Realtime |
+| `useConversations(clinicId)` | `{ conversations, loading, error, refetch, deleteConversation }` | agent_mode, agent_context, ai_enabled |
+| `useRealtimeMessages(convId)` | `{ messages, loading, error, addOptimistic, removeOptimistic, deleteMessage, refetch }` | |
+| `useAgendaBadge(clinicId)` | `{ count }` | Turnos new/pending/confirmed futuros |
+| `useAutomationsBadge(clinicId)` | `{ count }` | Automatizaciones enabled |
+| `useAIReactivation(clinicId, convs)` | `{ showBanner, affectedCount, handleReactivate, handleDismiss }` | Sugiere reactivar IAs > 2h inactivas |
 
 ---
 
-## UI Components (src/components/ui/)
-- `Button`, `Badge`, `Card`, `Avatar`, `Icons`, `MonoLabel`, `SectionLabel`, `Divider`
-- `Toast` / `ToastContainer` / `useToast` — notificaciones auto-dismiss (4s), rojo mate para errores
-- **Regla:** Colores siempre `var(--cq-*)`, nunca hardcodeados
-- **Fuentes:** Geist (sans), Geist Mono, Instrument Serif (solo itálicas)
-- **Idioma:** español rioplatense / Uruguay en toda la UI
-
----
-
-## Estado actual de páginas y bloques
+## Estado actual de páginas
 | Componente | Estado | Notas |
 |---|---|---|
-| KPI cards | ✅ Real | useKpis → v_clinic_kpis_today |
-| Saludo + nombre clínica | ✅ Real | useClinic |
-| AgendaBlock | ✅ Real | useAppointments + skeleton + Realtime |
-| NewAppointmentModal | ✅ Real | appointmentService → patients + appointments |
-| AutomationsBlock | ✅ Real | useAutomations → clinic_automations + v_automation_stats |
-| InboxBlock (dashboard) | ✅ Real | useWhatsappInbox → inbound + Realtime |
-| Página Inbox | ✅ Real | useInbox → todas direcciones, conversaciones por phone + Realtime |
-| Configuracion → Equipo | ✅ Real | useMembers + InviteMemberModal funcional para owners |
-| Configuracion → WhatsApp | ⏳ Mock | Hardcodeado — requiere configurar WA primero |
+| KPI cards | ✅ Real | useKpis |
+| AgendaBlock | ✅ Real | useAppointments + Realtime |
+| NewAppointmentModal | ✅ Real | appointmentService |
+| AutomationsBlock | ✅ Real | useAutomations |
+| InboxBlock (dashboard) | ✅ Real | tabla legacy whatsapp_message_log |
+| Página Inbox (CRM) | ✅ Real | bidireccional + AI Agent + toggle + contexto lead |
+| Agenda (página) | ✅ Real | useAgendaRange + refetch inmediato post-mutación |
+| Pacientes | ✅ Real | CRUD + refetch inmediato |
+| Sidebar badges | ✅ Real | useAgendaBadge + useAutomationsBadge |
+| Configuracion → Equipo | ✅ Real | useMembers + InviteMemberModal |
+| Configuracion → WhatsApp | ⏳ Mock | Hardcodeado |
 | RevenueBlock | ⏳ Mock | Hardcodeado |
-| RiskBlock | ⏳ Mock | Hardcodeado |
-| QuickActionsBlock | ⏳ Mock | Hardcodeado |
-| SystemBlock | ⏳ Mock | Hardcodeado |
+| Reportes | ⏳ Mock | Hardcodeado |
+
+---
+
+## Decisiones de diseño importantes
+
+- **Loop multi-turn siempre con tools:** la API de Anthropic requiere tools en toda llamada que tenga `tool_use` en el historial. Sin esto Claude devuelve contenido vacío (chars: 0).
+- **Múltiples tools por ronda:** Claude puede devolver varios `tool_use` blocks en una respuesta (ej: reschedule + cancel). Se ejecutan en `Promise.all` y se devuelven todos los resultados juntos.
+- **resolvedPatientId:** variable en memoria dentro del invocation que se actualiza al registrar un paciente nuevo. Permite que `schedule_appointment` funcione inmediatamente después de `register_patient` sin esperar a que la DB sincronice.
+- **Timezone en formatAppointments:** siempre `timeZone: 'America/Montevideo'`. El servidor Deno corre en UTC — sin esto muestra +3h de la hora real (ej: 15:00 aparece como 18:00).
+- **Capitalización con split(' '):** `split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')` — el regex `\b\w` de JS no funciona con tildes (á, é, í actúan como word boundaries).
+- **Saludos vacíos del staff:** "hola", "ok", "bien" etc. del staff no se cuentan como "respuesta real" al escanear mensajes inbound sin responder. Permite que la IA retome aunque el staff haya saludado.
+- **Refetch inmediato post-mutación:** todas las mutaciones llaman `refetch()` directamente, sin esperar el evento Realtime (que tarda 1-2s). El evento Realtime actúa como segunda confirmación.
+- **CustomEvent `cq_appointment_created`:** `DashboardLayout` lo emite cuando se crea un turno desde el modal. `Agenda` escucha y llama `refetchAgenda()`.
+- **Sin UI optimista en mensajes:** causaba duplicados con Realtime. Realtime < 1s es suficiente.
+- **Realtime DELETE requiere REPLICA IDENTITY FULL:** sin esto los filtros de columna en DELETE no funcionan.
+- **agent_mode 'human':** cualquier mensaje manual del staff silencia el bot. Se reactiva si el humano lleva > 2min sin escribir Y hay mensajes del paciente sin responder.
+
+---
+
+## Comandos útiles
+```bash
+npm run dev      # localhost:5173
+npm run build    # build de producción
+
+# Desplegar Edge Functions
+npx supabase functions deploy whatsapp-webhook --no-verify-jwt
+npx supabase functions deploy ai-agent-reply --no-verify-jwt
+npx supabase functions deploy send-whatsapp-message
+npx supabase functions deploy initiate-conversation
+
+# Setear secrets
+npx supabase secrets set WHATSAPP_ACCESS_TOKEN=<nuevo-token-permanente>
+npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+
+# Verificar secrets actuales
+npx supabase secrets list
+```
 
 ---
 
@@ -191,32 +329,16 @@ VITE_SUPABASE_ANON_KEY=sb_publishable_...  ← Settings → API Keys → Publish
 | Aspecto | Estado |
 |---|---|
 | RLS | ✅ Activado en todas las tablas; 23+ políticas |
-| CORS | ✅ Gestionado por Supabase (verificar Allowed Origins en dashboard) |
-| Headers HTTP | ✅ CSP + HSTS + X-Frame-Options + Permissions-Policy en netlify.toml / vercel.json |
-| CSP script-src (prod) | ✅ `'self'` únicamente — sin `'unsafe-inline'` |
-| CSP script-src (dev) | ⚠️ `'unsafe-inline'` en index.html solo para Vite HMR — los headers HTTP lo sobreescriben en prod |
-| Error disclosure | ✅ Mensajes genéricos en Login y Signup; sin filtración de `err.message` internos |
-| Phone validation | ✅ `phoneUtils.js`: isValidPhone() + normalizePhone() antes de persistir |
-| Dependencias | ✅ `npm audit`: 0 vulnerabilidades conocidas |
-| XSS | ✅ Sin `dangerouslySetInnerHTML`; React escapa todo el contenido de DB |
-| CSRF | ✅ No aplica — Bearer tokens en headers, no cookies |
-| SQL injection | ✅ No aplica — PostgREST parametriza todas las queries |
-
----
-
-## Comandos útiles
-```bash
-npm run dev      # servidor local → localhost:5173
-npm run build    # build de producción (debe pasar sin errores)
-npm audit        # verificar vulnerabilidades en dependencias
-git add -p       # revisar cambios antes de commit
-git push origin main
-```
+| Headers HTTP | ✅ CSP + HSTS + X-Frame-Options en netlify.toml / vercel.json |
+| Error disclosure | ✅ Mensajes genéricos en Login/Signup |
+| Phone validation | ✅ phoneUtils.js antes de persistir |
+| XSS | ✅ Sin dangerouslySetInnerHTML |
+| SQL injection | ✅ PostgREST parametriza todo |
+| npm audit | ✅ 0 vulnerabilidades |
 
 ---
 
 ## Superpowers Skills
-Invocar con la herramienta Skill antes de tareas no triviales:
 - Nuevas features → `brainstorming`
 - Bugs → `systematic-debugging`
 - Implementación → `test-driven-development`

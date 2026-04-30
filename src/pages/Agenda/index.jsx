@@ -131,7 +131,8 @@ function fmtDayLabel(iso) {
   if (iso === yesterday) return 'Ayer';
   return new Date(`${iso}T12:00:00`).toLocaleDateString('es-UY', {
     weekday: 'long', day: 'numeric', month: 'long',
-  }).replace(/\b\w/g, c => c.toUpperCase());
+  // Capitalizar primer carácter de cada palabra sin romper acentos
+  }).split(' ').map(w => w ? w.charAt(0).toUpperCase() + w.slice(1) : w).join(' ');
 }
 
 function fmtWeekLabel(weekDays) {
@@ -146,7 +147,7 @@ function fmtWeekLabel(weekDays) {
 function fmtMonthLabel(iso) {
   return new Date(`${iso.slice(0, 7)}-15T12:00:00`)
     .toLocaleDateString('es-UY', { month: 'long', year: 'numeric' })
-    .replace(/\b\w/g, c => c.toUpperCase());
+    .split(' ').map(w => w ? w.charAt(0).toUpperCase() + w.slice(1) : w).join(' ');
 }
 
 function toLocalDate(isoUtc) {
@@ -758,34 +759,44 @@ export function Agenda() {
     return { startDate: currentDate, endDate: currentDate };
   }, [view, currentDate]);
 
-  const { appointments, loading } = useAgendaRange(startDate, endDate);
+  const { appointments, loading, refetch: refetchAgenda } = useAgendaRange(startDate, endDate);
+
+  // Refetch cuando el modal global crea un turno nuevo (viene del DashboardLayout)
+  useEffect(() => {
+    const handler = () => refetchAgenda();
+    window.addEventListener('cq_appointment_created', handler);
+    return () => window.removeEventListener('cq_appointment_created', handler);
+  }, [refetchAgenda]);
 
   const handleStatusChange = useCallback(async (apptId, newStatus) => {
     try {
       await updateAppointmentStatus(apptId, newStatus);
+      refetchAgenda();
       push?.(`Estado actualizado: ${STATUS_LABELS[newStatus] ?? newStatus}.`, 'success');
     } catch {
       push?.('No se pudo actualizar el estado. Intentá de nuevo.', 'error');
     }
-  }, [push]);
+  }, [push, refetchAgenda]);
 
   const handleDelete = useCallback(async (apptId) => {
     try {
       await deleteAppointment(apptId);
+      refetchAgenda();
       push?.('Turno eliminado correctamente.', 'success');
     } catch {
       push?.('No se pudo eliminar el turno. Intentá más tarde.', 'error');
     }
-  }, [push]);
+  }, [push, refetchAgenda]);
 
   const handleEdit = useCallback((appt) => {
     setEditingAppt(appt);
   }, []);
 
   const handleEditSuccess = useCallback(() => {
+    refetchAgenda();
     push?.('Turno actualizado correctamente.', 'success');
     setEditingAppt(null);
-  }, [push]);
+  }, [push, refetchAgenda]);
 
   const handleNew = useCallback((date) => {
     openModal?.({ date: date ?? currentDate });

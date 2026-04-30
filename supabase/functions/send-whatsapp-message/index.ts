@@ -177,7 +177,7 @@ serve(async (req: Request) => {
 
   const waId = await sendWaText(conv.phone_number, content.trim(), phoneNumberId);
 
-  // ── Insert into messages ──────────────────────────────────────────────────
+  // ── Insert into messages — sender_type='staff' marks manual human reply ──
   const { data: msg, error: insertErr } = await supabase
     .from('messages')
     .insert({
@@ -185,6 +185,7 @@ serve(async (req: Request) => {
       clinic_id:       conv.clinic_id,
       patient_id:      conv.patient_id ?? null,
       direction:       'outbound',
+      sender_type:     'staff',
       content:         content.trim(),
       status:          waId ? 'sent' : 'failed',
       meta_message_id: waId ?? null,
@@ -197,6 +198,25 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: 'Failed to save message' }), {
       status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
+  }
+
+  // ── Marcar que el humano tomó control — silencia al bot automáticamente ──
+  // Fire and forget — no bloquear la respuesta al cliente
+  supabase
+    .from('conversations')
+    .update({
+      agent_mode:                'human',
+      agent_last_human_reply_at: new Date().toISOString(),
+    })
+    .eq('id', conversation_id)
+    .then(({ error: e }) => { if (e) console.error('Update agent_mode error:', e); });
+
+  if (conv.patient_id) {
+    supabase
+      .from('patients')
+      .update({ last_human_interaction: new Date().toISOString() })
+      .eq('id', conv.patient_id)
+      .then(({ error: e }) => { if (e) console.error('Update last_human_interaction error:', e); });
   }
 
   return new Response(JSON.stringify({ ok: true, message: msg, wa_id: waId }), {

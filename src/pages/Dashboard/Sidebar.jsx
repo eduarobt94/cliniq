@@ -5,12 +5,12 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 
 const NAV_ITEMS = [
-  { id: 'overview',        label: 'Resumen',          icon: Icons.Home,     path: '/dashboard'                                           },
-  { id: 'agenda',          label: 'Agenda',            icon: Icons.Calendar, path: '/dashboard/agenda',           badge: '14'            },
-  { id: 'pacientes',       label: 'Pacientes',         icon: Icons.Users,    path: '/dashboard/pacientes'                                 },
-  { id: 'automatizaciones',label: 'Automatizaciones',  icon: Icons.Zap,      path: '/dashboard/automatizaciones',  badge: '6'             },
-  { id: 'inbox',           label: 'Inbox WhatsApp',    icon: Icons.Chat,     path: '/dashboard/inbox',            dynamic: 'inboxCount'  },
-  { id: 'reportes',        label: 'Reportes',          icon: Icons.Chart,    path: '/dashboard/reportes'                                  },
+  { id: 'overview',        label: 'Resumen',          icon: Icons.Home,     path: '/dashboard'                                                 },
+  { id: 'agenda',          label: 'Agenda',            icon: Icons.Calendar, path: '/dashboard/agenda',           dynamic: 'agendaCount'       },
+  { id: 'pacientes',       label: 'Pacientes',         icon: Icons.Users,    path: '/dashboard/pacientes'                                       },
+  { id: 'automatizaciones',label: 'Automatizaciones',  icon: Icons.Zap,      path: '/dashboard/automatizaciones', dynamic: 'automationsCount'  },
+  { id: 'inbox',           label: 'Inbox WhatsApp',    icon: Icons.Chat,     path: '/dashboard/inbox',            dynamic: 'inboxCount'        },
+  { id: 'reportes',        label: 'Reportes',          icon: Icons.Chart,    path: '/dashboard/reportes'                                        },
 ];
 
 /**
@@ -34,11 +34,81 @@ function useInboxBadge(clinicId) {
 
     load();
 
-    // Re-count whenever a conversation is updated (last_message_direction changes)
     const channel = supabase
       .channel(`inbox-badge-${clinicId}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'conversations',
+        filter: `clinic_id=eq.${clinicId}`,
+      }, load)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [clinicId]);
+
+  return count;
+}
+
+/**
+ * Count active appointments (new + pending + confirmed) from today onwards.
+ */
+function useAgendaBadge(clinicId) {
+  const [count, setCount] = useState(null);
+
+  useEffect(() => {
+    if (!clinicId) return;
+
+    async function load() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { count: n } = await supabase
+        .from('appointments')
+        .select('id', { count: 'exact', head: true })
+        .eq('clinic_id', clinicId)
+        .in('status', ['new', 'pending', 'confirmed'])
+        .gte('appointment_datetime', today.toISOString());
+      setCount(n > 0 ? Math.min(n, 99) : null);
+    }
+
+    load();
+
+    const channel = supabase
+      .channel(`agenda-badge-${clinicId}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'appointments',
+        filter: `clinic_id=eq.${clinicId}`,
+      }, load)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [clinicId]);
+
+  return count;
+}
+
+/**
+ * Count enabled automations for this clinic.
+ */
+function useAutomationsBadge(clinicId) {
+  const [count, setCount] = useState(null);
+
+  useEffect(() => {
+    if (!clinicId) return;
+
+    async function load() {
+      const { count: n } = await supabase
+        .from('clinic_automations')
+        .select('id', { count: 'exact', head: true })
+        .eq('clinic_id', clinicId)
+        .eq('enabled', true);
+      setCount(n > 0 ? Math.min(n, 99) : null);
+    }
+
+    load();
+
+    const channel = supabase
+      .channel(`automations-badge-${clinicId}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'clinic_automations',
         filter: `clinic_id=eq.${clinicId}`,
       }, load)
       .subscribe();
@@ -63,11 +133,15 @@ export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobil
   const navigate = useNavigate();
   const location = useLocation();
   const { clinic, profile, role } = useAuth();
-  const inboxCount = useInboxBadge(clinic?.id);
+  const inboxCount       = useInboxBadge(clinic?.id);
+  const agendaCount      = useAgendaBadge(clinic?.id);
+  const automationsCount = useAutomationsBadge(clinic?.id);
   const isFloating = variant === 'floating';
 
   const getDynamicBadge = (item) => {
-    if (item.dynamic === 'inboxCount') return inboxCount ? String(inboxCount) : null;
+    if (item.dynamic === 'inboxCount')       return inboxCount       ? String(inboxCount)       : null;
+    if (item.dynamic === 'agendaCount')      return agendaCount      ? String(agendaCount)      : null;
+    if (item.dynamic === 'automationsCount') return automationsCount ? String(automationsCount) : null;
     return item.badge ?? null;
   };
   const isIconOnly = variant === 'icon' || collapsed;

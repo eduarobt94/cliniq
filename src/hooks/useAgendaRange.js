@@ -55,5 +55,5 @@ export function useAgendaRange(startDateStr, endDateStr) {
     return () => supabase.removeChannel(channel);
   }, [user, clinic?.id, startDateStr, endDateStr, fetchAppointments]);
 
-  return { appointments, loading, error };
+  return { appointments, loading, error, refetch: fetchAppointments };
 }

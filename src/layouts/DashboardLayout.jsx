@@ -38,6 +38,8 @@ export function DashboardLayout() {
 
   const handleAppointmentCreated = useCallback(() => {
     push('Turno agendado correctamente.', 'success');
+    // Notificar a todas las páginas que escuchan (Agenda, Dashboard) para refetch inmediato
+    window.dispatchEvent(new CustomEvent('cq_appointment_created'));
   }, [push]);
 
   return (

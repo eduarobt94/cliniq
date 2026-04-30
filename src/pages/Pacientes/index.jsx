@@ -52,7 +52,7 @@ const FILTERS = [
 ];
 
 // ─── Add patient modal ────────────────────────────────────────────────────────
-function AddPatientModal({ open, onClose, clinicId, push, existingPatients = [] }) {
+function AddPatientModal({ open, onClose, onSuccess, clinicId, push, existingPatients = [] }) {
   const [name,       setName]       = useState('');
   const [phone,      setPhone]      = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -92,6 +92,7 @@ function AddPatientModal({ open, onClose, clinicId, push, existingPatients = [] 
     setSubmitting(true);
     try {
       await createPatient(clinicId, name, phone);
+      onSuccess?.();
       push?.('Paciente agregado correctamente.', 'success');
       onClose();
     } catch (err) {
@@ -486,7 +487,7 @@ const PatientRow = memo(function PatientRow({ patient, onEdit, onDelete }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function Pacientes() {
   const { push } = useOutletContext() ?? {};
-  const { patients: rawPatients, loading } = usePatients();
+  const { patients: rawPatients, loading, refetch: refetchPatients } = usePatients();
   const { clinic } = useClinic();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
@@ -516,6 +517,7 @@ export function Pacientes() {
   const handleDelete = useCallback(async (patientId) => {
     try {
       await deletePatient(patientId);
+      refetchPatients();
       push?.('Paciente eliminado.', 'success');
     } catch (err) {
       const msg = err?.message ?? '';
@@ -525,12 +527,13 @@ export function Pacientes() {
         push?.('No se pudo eliminar el paciente. Intentá más tarde.', 'error');
       }
     }
-  }, [push]);
+  }, [push, refetchPatients]);
 
   const handleEditSuccess = useCallback(() => {
+    refetchPatients();
     push?.('Datos del paciente actualizados.', 'success');
     setEditingPatient(null);
-  }, [push]);
+  }, [push, refetchPatients]);
 
   return (
     <>
@@ -655,6 +658,7 @@ export function Pacientes() {
       <AddPatientModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
+        onSuccess={refetchPatients}
         clinicId={clinic?.id}
         push={push}
         existingPatients={patients}
