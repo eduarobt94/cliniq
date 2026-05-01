@@ -1027,7 +1027,7 @@ export function Inbox() {
 
   return (
     <div
-      className="flex -m-5 md:-m-8 h-[calc(100vh-64px)] overflow-hidden"
+      className="flex -m-5 md:-m-4 h-[calc(100vh-64px)] overflow-hidden"
       style={{ backgroundColor: 'var(--cq-bg)' }}
     >
       {/* ── Left column: conversation list ────────────────────────────────── */}

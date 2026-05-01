@@ -1,7 +1,5 @@
-import { useState, useCallback, useEffect, memo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, memo } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 import { useKpis } from '../../hooks/useKpis';
 import { useClinic } from '../../hooks/useClinic';
 import { useAppointments } from '../../hooks/useAppointments';
@@ -9,9 +7,7 @@ import { Button, MonoLabel } from '../../components/ui';
 import { Icons } from '../../components/ui';
 import { AgendaBlock } from './AgendaBlock';
 import { AutomationsBlock } from './AutomationsBlock';
-import { RevenueBlock } from './RevenueBlock';
 import { InboxBlock } from './InboxBlock';
-import { RiskBlock } from './RiskBlock';
 import { QuickActionsBlock } from './QuickActionsBlock';
 import { SystemBlock } from './SystemBlock';
 
@@ -81,9 +77,7 @@ const GreetingStrip = memo(function GreetingStrip({ clinicName, kpis, kpisLoadin
 });
 
 export function Dashboard() {
-  const navigate = useNavigate();
-  const { logout } = useAuth();
-  const { openModal, openInvite } = useOutletContext() ?? {};
+  const { openModal, openModalExpress, openInvite } = useOutletContext() ?? {};
   const { kpis, loading: kpisLoading }             = useKpis();
   const { clinic }                                  = useClinic();
   const { appointments, loading: appointmentsLoading } = useAppointments();
@@ -99,10 +93,10 @@ export function Dashboard() {
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--cq-border)] border border-[var(--cq-border)] rounded-[14px] overflow-hidden mb-5">
-        <KpiCard label="Turnos confirmados"   value={confirmedLabel}       loading={kpisLoading} delta="+23%"    trend="up"   hint="vs. semana pasada" />
-        <KpiCard label="Mensajes enviados"    value={kpis?.reminders_sent} loading={kpisLoading} delta="+12"     trend="up"   hint="automáticos · 24h" />
-        <KpiCard label="Tasa de confirmación" value={confirmRate}          loading={kpisLoading} delta="+6 pts"  trend="up"   hint="objetivo: 90%" />
-        <KpiCard label="Auto-confirmados"     value={kpis?.auto_confirmed} loading={kpisLoading} delta="hoy"     trend="flat" hint="sin intervención" />
+        <KpiCard label="Turnos confirmados"   value={confirmedLabel}       loading={kpisLoading} hint="hoy" />
+        <KpiCard label="Mensajes enviados"    value={kpis?.reminders_sent} loading={kpisLoading} hint="automáticos · 24h" />
+        <KpiCard label="Tasa de confirmación" value={confirmRate}          loading={kpisLoading} hint="objetivo: 90%" />
+        <KpiCard label="Auto-confirmados"     value={kpis?.auto_confirmed} loading={kpisLoading} hint="sin intervención" />
       </div>
 
       {/* Main grid */}
@@ -110,21 +104,16 @@ export function Dashboard() {
         <AgendaBlock appointments={appointments} loading={appointmentsLoading} />
         <AutomationsBlock />
       </div>
-      <div className="grid lg:grid-cols-3 gap-5">
-        <RevenueBlock />
+      <div className="grid lg:grid-cols-2 gap-5 mt-5">
         <InboxBlock />
-      </div>
-      <div className="grid lg:grid-cols-3 gap-5 mt-5">
-        <RiskBlock />
-        <QuickActionsBlock onNew={openModal} onInvite={openInvite} />
-        <SystemBlock />
+        <div className="flex flex-col gap-5">
+          <QuickActionsBlock onNew={openModal} onNewExpress={openModalExpress} onInvite={openInvite} />
+          <SystemBlock />
+        </div>
       </div>
 
       <div className="mt-8 flex items-center justify-between text-[12px] text-[var(--cq-fg-muted)]">
         <MonoLabel>Cliniq v2.4.1 · Sistema operativo</MonoLabel>
-        <button onClick={() => { logout(); navigate('/login'); }} className="hover:text-[var(--cq-fg)] cursor-pointer px-2 py-1">
-          Cerrar sesión
-        </button>
       </div>
     </>
   );

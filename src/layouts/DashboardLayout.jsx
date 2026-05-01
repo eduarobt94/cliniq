@@ -24,13 +24,15 @@ export function DashboardLayout() {
   const [collapsed,   setCollapsed]   = useState(false);
   const [mobileOpen,  setMobileOpen]  = useState(false);
   const [inviteOpen,  setInviteOpen]  = useState(false);
-  const [modalConfig, setModalConfig] = useState({ open: false, defaultDate: null });
+  const [modalConfig, setModalConfig] = useState({ open: false, defaultDate: null, express: false });
 
   const openMobileMenu = useCallback(() => setMobileOpen(true), []);
 
-  const openModal  = useCallback((config = {}) =>
-    setModalConfig({ open: true, defaultDate: config?.date ?? null }), []);
-  const closeModal = useCallback(() =>
+  const openModal        = useCallback((config = {}) =>
+    setModalConfig({ open: true, defaultDate: config?.date ?? null, express: false }), []);
+  const openModalExpress = useCallback(() =>
+    setModalConfig({ open: true, defaultDate: null, express: true }), []);
+  const closeModal       = useCallback(() =>
     setModalConfig((c) => ({ ...c, open: false })), []);
 
   const openInvite  = useCallback(() => setInviteOpen(true),  []);
@@ -59,7 +61,7 @@ export function DashboardLayout() {
           onMarkAllRead={markAllRead}
         />
         <main className={`flex-1 overflow-y-auto transition-[padding] ${compact ? 'p-3 md:p-4' : 'p-5 md:p-8'}`}>
-          <Outlet context={{ openModal, openInvite, push }} />
+          <Outlet context={{ openModal, openModalExpress, openInvite, push }} />
         </main>
       </div>
 
@@ -69,6 +71,7 @@ export function DashboardLayout() {
         clinicId={clinic?.id}
         defaultDate={modalConfig.defaultDate}
         onSuccess={handleAppointmentCreated}
+        express={modalConfig.express}
       />
       <InviteMemberModal
         open={inviteOpen}

@@ -3,7 +3,6 @@ import { Badge, Card, MonoLabel } from '../../components/ui';
 const SERVICES = [
   { n: 'WhatsApp API · Meta', v: '99.9%' },
   { n: 'Google Calendar', v: 'sincronizado' },
-  { n: 'DGI · Facturación', v: 'disponible' },
   { n: 'Backup diario', v: '02:14 UYT' },
 ];
 

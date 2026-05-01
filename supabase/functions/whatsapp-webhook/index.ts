@@ -199,11 +199,47 @@ serve(async (req: Request) => {
       if (['1', 'si', 'sí', 'confirmo', 'confirmar', 'ok'].includes(lower)) intent = 'confirm';
       else if (['2', 'no', 'cancelo', 'cancelar', 'cancelacion', 'cancelación'].includes(lower)) intent = 'cancel';
       else if (['3', 'reagendar', 'reagendo', 'cambiar'].includes(lower)) intent = 'reschedule';
+    } else if (msgType === 'button') {
+      // Quick Reply desde template — llega como type:"button", no "interactive"
+      const btn        = message.button as Record<string, string>;
+      const btnPayload = (btn?.payload ?? '').toLowerCase().trim();
+      const btnText    = (btn?.text    ?? '').toLowerCase().trim();
+      rawText = btn?.text ?? btn?.payload ?? '';
+
+      const matchesBtn = (keywords: string[]) =>
+        keywords.some(k => btnPayload.includes(k) || btnText.includes(k));
+
+      if (matchesBtn(['confirm', 'confirmar', 'confirmo', 'si', 'sí', '1'])) {
+        intent = 'confirm';
+      } else if (matchesBtn(['cancel', 'cancelar', 'cancelo', 'cancelacion', 'cancelación', 'no', '2'])) {
+        intent = 'cancel';
+      } else if (matchesBtn(['reschedule', 'reagendar', 'reagendo', 'cambiar', 'otro', '3'])) {
+        intent = 'reschedule';
+      } else {
+        intent = btnPayload;
+      }
+      console.log(`[webhook] button(template): payload="${btnPayload}" text="${btnText}" → intent="${intent}"`);
     } else if (msgType === 'interactive') {
       const interactive = message.interactive as Record<string, unknown>;
       const buttonReply = interactive?.button_reply as Record<string, string>;
-      intent  = buttonReply?.id ?? '';
-      rawText = buttonReply?.title ?? '';
+      const btnId    = (buttonReply?.id    ?? '').toLowerCase().trim();
+      const btnTitle = (buttonReply?.title ?? '').toLowerCase().trim();
+      rawText = buttonReply?.title ?? buttonReply?.id ?? '';
+
+      // Map any button ID or title → standard intent (tolerante con español/inglés)
+      const matches = (keywords: string[]) =>
+        keywords.some(k => btnId.includes(k) || btnTitle.includes(k));
+
+      if (matches(['confirm', 'confirmar', 'confirmo', 'si', 'sí', '1'])) {
+        intent = 'confirm';
+      } else if (matches(['cancel', 'cancelar', 'cancelo', 'cancelacion', 'cancelación', 'no', '2'])) {
+        intent = 'cancel';
+      } else if (matches(['reschedule', 'reagendar', 'reagendo', 'cambiar', 'otro', '3'])) {
+        intent = 'reschedule';
+      } else {
+        intent = btnId; // fallback: usar el id directo
+      }
+      console.log(`[webhook] button_reply: id="${btnId}" title="${btnTitle}" → intent="${intent}"`);
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -319,13 +355,13 @@ serve(async (req: Request) => {
       });
     }
 
-    // ── Find pending appointment ───────────────────────────────────────────
+    // ── Find upcoming appointment (pending or new — recordatorio puede no haber cambiado estado) ──
     const { data: appointment } = await supabase
       .from('appointments')
       .select('id, status, appointment_datetime')
       .eq('patient_id', patient.id)
       .eq('clinic_id',  patient.clinic_id)
-      .eq('status', 'pending')
+      .in('status', ['pending', 'new'])
       .gte('appointment_datetime', new Date().toISOString())
       .order('appointment_datetime', { ascending: true })
       .limit(1)
@@ -387,6 +423,9 @@ serve(async (req: Request) => {
           .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
           .eq('id', appointment!.id);
         await sendReply(`¡Perfecto, ${patient.full_name}! ✅ Tu turno quedó *confirmado*. Te esperamos.`);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
 
       } else if (intent === 'cancel') {
         await supabase
@@ -394,17 +433,15 @@ serve(async (req: Request) => {
           .update({ status: 'cancelled' })
           .eq('id', appointment!.id);
         await sendReply(`Entendido, ${patient.full_name}. Tu turno fue *cancelado*. Cuando quieras reagendar, contactá al consultorio.`);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
 
       } else if (intent === 'reschedule') {
-        const clinicPhone = clinicData?.phone ? ` o llamanos al ${clinicData.phone}` : '';
-        await sendReply(
-          `Entendido, ${patient.full_name}. 📅 Para reagendar tu turno escribinos al consultorio${clinicPhone} y con gusto te buscamos un nuevo horario. ¡Hasta pronto!`,
-        );
+        // No tocamos el turno acá — el AI agent lo marca como rescheduled
+        // cuando ejecuta el tool reschedule_appointment.
+        // Caemos al bloque AI agent para que pregunte fecha/hora.
       }
-      // Intent handled by appointment bot → AI agent doesn't need to reply
-      return new Response(JSON.stringify({ ok: true }), {
-        status: 200, headers: { 'Content-Type': 'application/json' },
-      });
     }
 
     // ── AI Handoff: determinar si el agente de IA debe responder ───────────

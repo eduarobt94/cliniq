@@ -4,6 +4,7 @@ import { Icons, Badge, Avatar, MonoLabel } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 
+
 const NAV_ITEMS = [
   { id: 'overview',        label: 'Resumen',          icon: Icons.Home,     path: '/dashboard'                                                 },
   { id: 'agenda',          label: 'Agenda',            icon: Icons.Calendar, path: '/dashboard/agenda',           dynamic: 'agendaCount'       },
@@ -132,7 +133,7 @@ function clinicInitials(name = '') {
 export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobileOpen }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { clinic, profile, role } = useAuth();
+  const { clinic, profile, role, logout } = useAuth();
   const inboxCount       = useInboxBadge(clinic?.id);
   const agendaCount      = useAgendaBadge(clinic?.id);
   const automationsCount = useAutomationsBadge(clinic?.id);
@@ -282,6 +283,16 @@ export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobil
                 </li>
               );
             })}
+            <li>
+              <button
+                onClick={() => { logout(); navigate('/login'); }}
+                title={isIconOnly ? 'Cerrar sesión' : undefined}
+                className={`w-full flex items-center gap-2.5 ${isIconOnly ? 'justify-center px-0' : 'px-2.5'} h-11 rounded-[8px] text-[13.5px] transition-colors text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] hover:text-[var(--cq-danger)]`}
+              >
+                <Icons.LogOut size={16} />
+                {!isIconOnly && <span className="flex-1 text-left">Cerrar sesión</span>}
+              </button>
+            </li>
           </ul>
         </nav>
 

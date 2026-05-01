@@ -26,6 +26,15 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Round up to the nearest 15-minute slot */
+function nowRounded15() {
+  const d = new Date();
+  const m = Math.ceil(d.getMinutes() / 15) * 15;
+  const h = m === 60 ? d.getHours() + 1 : d.getHours();
+  const mm = m === 60 ? 0 : m;
+  return `${String(h % 24).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
 function SpinnerIcon() {
   return (
     <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -35,7 +44,7 @@ function SpinnerIcon() {
   );
 }
 
-export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSuccess }) {
+export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSuccess, express = false }) {
   const containerRef = useRef(null);
 
   const [query,          setQuery]          = useState('');
@@ -51,6 +60,7 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
   const [type,           setType]           = useState('');
   const [professional,   setProfessional]   = useState('');
   const [notes,          setNotes]          = useState('');
+  const [showExtras,     setShowExtras]     = useState(false);
 
   const [submitting,     setSubmitting]     = useState(false);
   const [success,        setSuccess]        = useState(false);
@@ -67,14 +77,15 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
     setCreatingPatient(false);
     setNewPhone('');
     setDate(defaultDate ?? todayISO());
-    setTime('09:00');
+    setTime(express ? nowRounded15() : '09:00');
     setType('');
     setProfessional('');
     setNotes('');
+    setShowExtras(false);
     setSubmitting(false);
     setSuccess(false);
     setError(null);
-  }, [open, defaultDate]);
+  }, [open, defaultDate, express]);
 
   useEffect(() => {
     if (!debouncedQuery || debouncedQuery.length < 2 || !clinicId || selectedPatient) {
@@ -179,7 +190,10 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
       }
 
       const datetime = new Date(`${date}T${time}:00`).toISOString();
-      await createAppointment(clinicId, { patientId, datetime, type, professionalName: professional, notes });
+      await createAppointment(clinicId, {
+        patientId, datetime, type, professionalName: professional, notes,
+        status: express ? 'confirmed' : 'new',
+      });
 
       onSuccess?.();
       setSuccess(true);
@@ -220,10 +234,15 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
       >
         <div className="flex items-start justify-between mb-5">
           <div>
-            <MonoLabel>Nuevo turno</MonoLabel>
+            <MonoLabel>{express ? 'Turno express' : 'Nuevo turno'}</MonoLabel>
             <h3 id="new-appt-title" className="mt-1 text-[22px] font-semibold tracking-tight">
-              Agendar paciente
+              {express ? 'Confirmar al instante' : 'Agendar paciente'}
             </h3>
+            {express && (
+              <p className="text-[12.5px] text-[var(--cq-fg-muted)] mt-0.5">
+                El turno queda confirmado directamente, sin pasar por pendiente.
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -355,54 +374,72 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                 </div>
               </div>
 
-              {/* Type */}
-              <div>
-                <label className="block">
-                  <MonoLabel>Tipo de consulta</MonoLabel>
-                  <div className="mt-1.5 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] flex items-center">
-                    <select
-                      value={type}
-                      onChange={(e) => setType(e.target.value)}
-                      className="flex-1 bg-transparent outline-none text-[13.5px] cursor-pointer"
-                    >
-                      <option value="">Seleccionar…</option>
-                      {APPOINTMENT_TYPES.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-              </div>
+              {/* Optional fields — collapsed in express mode */}
+              {express && (
+                <button
+                  type="button"
+                  onClick={() => setShowExtras(v => !v)}
+                  className="flex items-center gap-1.5 text-[12.5px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] transition-colors"
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: showExtras ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 150ms' }}>
+                    <path d="M4 2.5L7.5 6L4 9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {showExtras ? 'Ocultar opciones' : 'Más opciones (tipo, profesional, notas)'}
+                </button>
+              )}
 
-              {/* Professional */}
-              <div>
-                <label className="block">
-                  <MonoLabel>Profesional</MonoLabel>
-                  <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)]">
-                    <input
-                      type="text"
-                      value={professional}
-                      onChange={(e) => setProfessional(e.target.value)}
-                      placeholder="Dr. / Dra. …"
-                      className="flex-1 bg-transparent outline-none text-[13.5px]"
-                    />
+              {(!express || showExtras) && (
+                <>
+                  {/* Type */}
+                  <div>
+                    <label className="block">
+                      <MonoLabel>Tipo de consulta</MonoLabel>
+                      <div className="mt-1.5 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] flex items-center">
+                        <select
+                          value={type}
+                          onChange={(e) => setType(e.target.value)}
+                          className="flex-1 bg-transparent outline-none text-[13.5px] cursor-pointer"
+                        >
+                          <option value="">Seleccionar…</option>
+                          {APPOINTMENT_TYPES.map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </label>
                   </div>
-                </label>
-              </div>
 
-              {/* Notes */}
-              <div>
-                <label className="block">
-                  <MonoLabel>Notas</MonoLabel>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Observaciones internas…"
-                    rows={2}
-                    className="mt-1.5 w-full px-3 py-2.5 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus:border-[var(--cq-fg)] outline-none text-[13.5px] resize-none"
-                  />
-                </label>
-              </div>
+                  {/* Professional */}
+                  <div>
+                    <label className="block">
+                      <MonoLabel>Profesional</MonoLabel>
+                      <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)]">
+                        <input
+                          type="text"
+                          value={professional}
+                          onChange={(e) => setProfessional(e.target.value)}
+                          placeholder="Dr. / Dra. …"
+                          className="flex-1 bg-transparent outline-none text-[13.5px]"
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label className="block">
+                      <MonoLabel>Notas</MonoLabel>
+                      <textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Observaciones internas…"
+                        rows={2}
+                        className="mt-1.5 w-full px-3 py-2.5 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus:border-[var(--cq-fg)] outline-none text-[13.5px] resize-none"
+                      />
+                    </label>
+                  </div>
+                </>
+              )}
 
               {error && (
                 <p role="alert" className="text-[13px] text-[var(--cq-danger)]">{error}</p>
@@ -419,8 +456,8 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                 onClick={handleSubmit}
                 disabled={!canSubmit}
               >
-                {submitting ? <SpinnerIcon /> : <Icons.Calendar size={14} />}
-                {submitting ? 'Agendando…' : 'Agendar'}
+                {submitting ? <SpinnerIcon /> : express ? <Icons.Zap size={14} /> : <Icons.Calendar size={14} />}
+                {submitting ? 'Agendando…' : express ? 'Confirmar turno' : 'Agendar'}
               </Button>
             </div>
           </>

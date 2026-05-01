@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turnos por mes — Cliniq Demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+      gap: 32px;
+    }
+
+    header {
+      text-align: center;
+    }
+    header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: -0.4px;
+    }
+    header p {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+
+    .chart-card {
+      background: #1e2330;
+      border: 1px solid #2d3548;
+      border-radius: 16px;
+      padding: 32px;
+      width: 100%;
+      max-width: 760px;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 340px;
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      width: 100%;
+      max-width: 760px;
+    }
+
+    .kpi {
+      background: #1e2330;
+      border: 1px solid #2d3548;
+      border-radius: 12px;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .kpi .month { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.6px; }
+    .kpi .total { font-size: 32px; font-weight: 800; color: #f8fafc; line-height: 1; }
+    .kpi .delta { font-size: 12px; margin-top: 4px; }
+    .kpi .delta.up   { color: #34d399; }
+    .kpi .delta.down { color: #f87171; }
+    .kpi .delta.neutral { color: #64748b; }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      justify-content: center;
+      width: 100%;
+      max-width: 760px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Turnos por mes</h1>
+    <p>Datos del demo seed · Clínica Bonomi</p>
+  </header>
+
+  <!-- KPI cards -->
+  <div class="kpis">
+    <div class="kpi">
+      <span class="month">Marzo 2026</span>
+      <span class="total">12</span>
+      <span class="delta neutral">Línea base</span>
+    </div>
+    <div class="kpi">
+      <span class="month">Abril 2026</span>
+      <span class="total">36</span>
+      <span class="delta up">↑ +200% vs marzo</span>
+    </div>
+    <div class="kpi">
+      <span class="month">Mayo 2026</span>
+      <span class="total">20</span>
+      <span class="delta neutral">Mes en curso</span>
+    </div>
+  </div>
+
+  <!-- Stacked bar chart -->
+  <div class="chart-card">
+    <div class="chart-wrap">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#34d399"></div> Confirmado</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div> Pendiente</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div> Nuevo</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div> Reagendado</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f87171"></div> Cancelado</div>
+  </div>
+
+  <script>
+    const labels = ['Marzo 2026', 'Abril 2026', 'Mayo 2026'];
+
+    const data = {
+      confirmed:   [9,  25,  6],
+      pending:     [0,   2,  2],
+      new:         [0,   2, 12],
+      rescheduled: [0,   2,  0],
+      cancelled:   [3,   5,  0],
+    };
+
+    const cfg = {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Confirmado',
+            data: data.confirmed,
+            backgroundColor: '#34d399',
+            borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 },
+            borderSkipped: false,
+          },
+          {
+            label: 'Pendiente',
+            data: data.pending,
+            backgroundColor: '#f59e0b',
+            borderRadius: 0,
+            borderSkipped: false,
+          },
+          {
+            label: 'Nuevo',
+            data: data.new,
+            backgroundColor: '#60a5fa',
+            borderRadius: 0,
+            borderSkipped: false,
+          },
+          {
+            label: 'Reagendado',
+            data: data.rescheduled,
+            backgroundColor: '#a78bfa',
+            borderRadius: 0,
+            borderSkipped: false,
+          },
+          {
+            label: 'Cancelado',
+            data: data.cancelled,
+            backgroundColor: '#f87171',
+            borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+            borderSkipped: false,
+          },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0f1117',
+            borderColor: '#2d3548',
+            borderWidth: 1,
+            titleColor: '#f8fafc',
+            bodyColor: '#94a3b8',
+            padding: 14,
+            callbacks: {
+              footer(items) {
+                const total = items.reduce((s, i) => s + i.raw, 0);
+                return `Total: ${total} turnos`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            stacked: true,
+            grid: { display: false },
+            ticks: { color: '#64748b', font: { size: 13 } },
+            border: { color: '#2d3548' },
+          },
+          y: {
+            stacked: true,
+            beginAtZero: true,
+            max: 45,
+            grid: { color: '#1e2330' },
+            border: { color: 'transparent', dash: [4, 4] },
+            ticks: {
+              color: '#64748b',
+              font: { size: 12 },
+              stepSize: 5,
+            },
+          }
+        }
+      }
+    };
+
+    new Chart(document.getElementById('chart'), cfg);
+  </script>
+</body>
+</html>

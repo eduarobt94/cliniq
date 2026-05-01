@@ -1,9 +1,12 @@
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useWhatsappInbox } from '../../hooks/useWhatsappInbox';
+import { useConversations } from '../../hooks/useConversations';
+import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 import { Icons, Badge, Card, Avatar, MonoLabel, Divider } from '../../components/ui';
 
 function relativeTime(isoStr) {
+  if (!isoStr) return '';
   const diff = Date.now() - new Date(isoStr).getTime();
   const min  = Math.floor(diff / 60_000);
   if (min < 1)   return 'ahora';
@@ -28,22 +31,37 @@ function RowSkeleton() {
 function EmptyState() {
   return (
     <li className="px-5 py-8 text-center">
-      <p className="text-[13px] text-[var(--cq-fg-muted)]">
-        Sin mensajes aún.
-      </p>
+      <p className="text-[13px] text-[var(--cq-fg-muted)]">Todo al día.</p>
       <p className="text-[12px] text-[var(--cq-fg-muted)] mt-1">
-        Los pacientes aparecerán aquí cuando respondan los recordatorios.
+        Cuando un paciente escriba, aparecerá aquí.
       </p>
     </li>
   );
 }
 
-export function InboxBlock() {
-  const navigate      = useNavigate();
-  const { clinic }    = useAuth();
-  const { messages, unreadCount, loading } = useWhatsappInbox(clinic?.id);
+/** Small pill showing N unread messages */
+function UnreadBadge({ count }) {
+  if (!count) return null;
+  return (
+    <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--cq-accent)] text-white text-[10px] font-semibold font-mono inline-flex items-center justify-center leading-none">
+      {count > 9 ? '9+' : count}
+    </span>
+  );
+}
 
-  const isRecent = unreadCount > 0;
+export function InboxBlock() {
+  const navigate   = useNavigate();
+  const { clinic } = useAuth();
+  const { conversations, loading } = useConversations(clinic?.id);
+
+  // Only conversations where patient wrote last (needs a reply)
+  const pending = useMemo(
+    () => conversations.filter(c => c.last_message_direction === 'inbound').slice(0, 5),
+    [conversations],
+  );
+
+  const pendingIds = useMemo(() => pending.map(c => c.id), [pending]);
+  const unreadCounts = useUnreadCounts(pendingIds);
 
   return (
     <Card padded={false}>
@@ -51,46 +69,54 @@ export function InboxBlock() {
         <div>
           <MonoLabel>Inbox · WhatsApp</MonoLabel>
           <h3 className="mt-1 text-[18px] font-semibold tracking-tight">
-            {loading ? 'Cargando…' : isRecent ? `${unreadCount} sin leer` : 'Sin mensajes nuevos'}
+            {loading
+              ? 'Cargando…'
+              : pending.length > 0
+              ? `${pending.length} esperando respuesta`
+              : 'Todo al día'}
           </h3>
         </div>
-        <Badge tone="success" dot>
-          Bot activo
-        </Badge>
+        <Badge tone="success" dot>Bot activo</Badge>
       </div>
       <Divider />
 
       <ul className="divide-y divide-[var(--cq-border)]">
         {loading
           ? Array.from({ length: 3 }).map((_, i) => <RowSkeleton key={i} />)
-          : messages.length === 0
+          : pending.length === 0
           ? <EmptyState />
-          : messages.map((m) => {
-              const name    = m.patients?.full_name ?? m.phone_number;
-              const isUnread = new Date(m.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000);
+          : pending.map((conv) => {
+              const name  = conv.patients?.full_name ?? conv.phone_number ?? 'Paciente';
+              const msgCount = unreadCounts.get(conv.id) ?? 0;
 
               return (
                 <li
-                  key={m.id}
+                  key={conv.id}
+                  onClick={() => navigate('/dashboard/inbox')}
                   className="px-5 py-3 hover:bg-[var(--cq-surface-2)] cursor-pointer transition-colors flex items-start gap-3"
                 >
+                  {/* Avatar with unread-count badge instead of a dot */}
                   <div className="relative shrink-0">
                     <Avatar name={name} size={34} />
-                    {isUnread && (
-                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[var(--cq-accent)] ring-2 ring-[var(--cq-surface)]" />
+                    {msgCount > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-0.5 rounded-full bg-[var(--cq-accent)] text-white text-[9px] font-semibold font-mono inline-flex items-center justify-center leading-none ring-2 ring-[var(--cq-surface)]">
+                        {msgCount > 9 ? '9+' : msgCount}
+                      </span>
                     )}
                   </div>
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[13.5px] truncate ${isUnread ? 'font-semibold' : 'font-medium'}`}>
-                        {name}
-                      </span>
+                      <span className="text-[13.5px] font-semibold truncate">{name}</span>
                       <span className="ml-auto font-mono text-[11px] text-[var(--cq-fg-muted)] shrink-0">
-                        {relativeTime(m.created_at)}
+                        {relativeTime(conv.last_message_at)}
                       </span>
                     </div>
-                    <div className="text-[12.5px] text-[var(--cq-fg-muted)] truncate mt-0.5">
-                      {m.message}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[12.5px] text-[var(--cq-fg-muted)] truncate flex-1">
+                        {conv.last_message ?? '—'}
+                      </span>
+                      <UnreadBadge count={msgCount} />
                     </div>
                   </div>
                 </li>

@@ -6,7 +6,7 @@ const SUPABASE_URL              = Deno.env.get('SUPABASE_URL')              ?? '
 const SUPABASE_KEY              = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const WA_ACCESS_TOKEN           = Deno.env.get('WHATSAPP_ACCESS_TOKEN')     ?? '';
 const WA_PHONE_NUMBER_ID_GLOBAL = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')  ?? '';
-const WA_TEMPLATE_NAME          = Deno.env.get('WHATSAPP_TEMPLATE_NAME')    ?? 'recordatorio_turno';
+const WA_TEMPLATE_NAME          = Deno.env.get('WHATSAPP_TEMPLATE_NAME')    ?? 'appointment_scheduling';
 const WA_TEMPLATE_LANG          = Deno.env.get('WHATSAPP_TEMPLATE_LANG')    ?? 'es';
 
 // ─── Format date/time for a timezone ─────────────────────────────────────────
@@ -21,17 +21,25 @@ function formatForTimezone(iso: string, tz: string): { date: string; time: strin
   return { date: date.charAt(0).toUpperCase() + date.slice(1), time };
 }
 
+// All Spanish language codes to try (in order of preference).
+// We auto-detect because Meta's UI shows "Spanish (URY)" which may map to various codes.
+const LANG_CANDIDATES = [
+  WA_TEMPLATE_LANG,          // configured value first
+  'es_AR', 'es', 'es_ES', 'es_MX', 'es_US', 'es_UY', 'es_LA',
+];
+
 /**
- * Send a WhatsApp template message.
- * Template params: {{1}} = patient_name, {{2}} = time, {{3}} = clinic_name
+ * Try sending a WhatsApp template with a specific language code.
+ * Returns { waId, errorCode } — errorCode 132001 = wrong lang (keep trying).
  */
-async function sendWaTemplate(
+async function trySendWithLang(
   to: string,
   phoneNumberId: string,
   patientName: string,
   time: string,
   clinicName: string,
-): Promise<string | null> {
+  lang: string,
+): Promise<{ waId: string | null; errorCode: number | null }> {
   const api = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
   try {
     const res = await fetch(api, {
@@ -47,7 +55,7 @@ async function sendWaTemplate(
         type: 'template',
         template: {
           name:     WA_TEMPLATE_NAME,
-          language: { code: WA_TEMPLATE_LANG },
+          language: { code: lang },
           components: [
             {
               type: 'body',
@@ -63,17 +71,46 @@ async function sendWaTemplate(
     });
 
     if (!res.ok) {
-      const err = await res.text();
-      console.error(`WA API error sending to ${to} via ${phoneNumberId}:`, err);
-      return null;
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      const errObj = body?.error as Record<string, unknown> | undefined;
+      const code   = (errObj?.code as number) ?? null;
+      console.error(`WA API [lang=${lang}] error sending to ${to}:`, JSON.stringify(body));
+      return { waId: null, errorCode: code };
     }
 
-    const data = await res.json();
-    return data?.messages?.[0]?.id ?? null;
+    const data = await res.json() as Record<string, unknown>;
+    const waId = ((data?.messages as Record<string, string>[])?.[0]?.id) ?? null;
+    console.log(`✅ Template sent [lang=${lang}] to ${to}, waId=${waId}`);
+    return { waId, errorCode: null };
   } catch (err) {
     console.error(`Fetch error sending to ${to}:`, err);
-    return null;
+    return { waId: null, errorCode: null };
   }
+}
+
+/**
+ * Send a WhatsApp template message, auto-detecting the correct language code.
+ * Template params: {{1}} = patient_name, {{2}} = time, {{3}} = clinic_name
+ */
+async function sendWaTemplate(
+  to: string,
+  phoneNumberId: string,
+  patientName: string,
+  time: string,
+  clinicName: string,
+): Promise<string | null> {
+  const seen = new Set<string>();
+  for (const lang of LANG_CANDIDATES) {
+    if (seen.has(lang)) continue;
+    seen.add(lang);
+    const { waId, errorCode } = await trySendWithLang(to, phoneNumberId, patientName, time, clinicName, lang);
+    if (waId) return waId;                // ✅ success
+    if (errorCode !== 132001) return null; // ❌ non-language error, stop retrying
+    // errorCode === 132001 → wrong language, try next
+    console.log(`Lang ${lang} not found for template ${WA_TEMPLATE_NAME}, trying next...`);
+  }
+  console.error(`No valid language found for template ${WA_TEMPLATE_NAME}`);
+  return null;
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -153,41 +190,75 @@ serve(async (req: Request) => {
           clinic.name ?? 'el consultorio',
         );
 
-        // Build readable message for the log
-        const logMessage =
-          `[Template: ${WA_TEMPLATE_NAME}] ` +
-          `Hola ${patient.full_name}, turno mañana a las ${time} en ${clinic.name}.`;
+        // Readable content for the inbox (template placeholder text)
+        const msgContent =
+          `📅 Recordatorio de turno enviado — ${WA_TEMPLATE_NAME} — ` +
+          `${patient.full_name}, ${time} en ${clinic.name}`;
 
         if (waId) {
+          // ── Mark appointment as reminded ──────────────────────────────────
           await supabase
             .from('appointments')
             .update({ status: 'pending', reminder_sent_at: new Date().toISOString() })
             .eq('id', appt.id);
 
+          // ── Upsert conversation (get or create) ───────────────────────────
+          const { data: convRow, error: convErr } = await supabase
+            .from('conversations')
+            .upsert(
+              {
+                clinic_id:    auto.clinic_id,
+                patient_id:   patient.id,
+                phone_number: patient.phone_number,
+              },
+              { onConflict: 'clinic_id,phone_number', ignoreDuplicates: false },
+            )
+            .select('id')
+            .single();
+
+          if (convErr || !convRow?.id) {
+            console.error(`Conversation upsert error for ${patient.phone_number}:`, convErr);
+          } else {
+            // ── Insert into messages table (appears in inbox + stops AI followup) ──
+            await supabase.from('messages').insert({
+              conversation_id: convRow.id,
+              clinic_id:       auto.clinic_id,
+              patient_id:      patient.id,
+              direction:       'system_template',
+              content:         msgContent,
+              status:          'sent',
+              meta_message_id: waId,
+            });
+          }
+
+          // ── Audit log (legacy) ────────────────────────────────────────────
           await supabase.from('whatsapp_message_log').insert({
             clinic_id:      auto.clinic_id,
             patient_id:     patient.id,
             appointment_id: appt.id,
             direction:      'outbound',
             phone_number:   patient.phone_number,
-            message:        logMessage,
+            message:        msgContent,
             wa_message_id:  waId,
             status:         'sent',
           });
 
+          console.log(`✅ Reminder sent to ${patient.phone_number} (waId: ${waId})`);
           results.sent++;
         } else {
+          // ── Failed send — just log it ─────────────────────────────────────
           await supabase.from('whatsapp_message_log').insert({
             clinic_id:      auto.clinic_id,
             patient_id:     patient.id,
             appointment_id: appt.id,
             direction:      'outbound',
             phone_number:   patient.phone_number,
-            message:        logMessage,
+            message:        msgContent,
             wa_message_id:  null,
             status:         'failed',
           });
 
+          console.log(`❌ Reminder failed for ${patient.phone_number}`);
           results.failed++;
         }
       }

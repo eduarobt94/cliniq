@@ -3,30 +3,22 @@
 ## ⚡ INICIO RÁPIDO DE SESIÓN
 > Leé esta sección primero. Resume el estado actual y qué hacer a continuación.
 
-**Último trabajo completado (2026-04-30) — Agente IA WhatsApp completo y funcional:**
+**Último trabajo completado (2026-04-30) — Automatizaciones + Reportes + Resumen funcionales:**
 
 ### ✅ Completado en esta sesión
-- **Agente IA multi-herramienta:** Claude Haiku-4-5 maneja turnos completo via WhatsApp
-- **Herramientas del agente:** `schedule_appointment`, `cancel_appointments`, `reschedule_appointment`, `confirm_appointment`, `register_patient`
-- **Multi-turn tool loop:** loop de hasta 4 rondas, procesa TODOS los tool_use blocks en paralelo por ronda — fix del bug crítico donde Claude devolvía 0 chars porque la segunda llamada se hacía sin tools (violación de Anthropic API spec)
-- **Nuevos pacientes:** registro automático vía WA → nombre → register_patient → turno (resolvedPatientId en memoria para chain inmediato)
-- **Timezone fix:** formatAppointments usa `timeZone: 'America/Montevideo'` — antes mostraba 18:00 en vez de 15:00
-- **Intenciones inteligentes:** reagendar/cancelar/confirmar con lógica de 1 turno vs múltiples
-- **Saludos vacíos del staff no bloquean la IA:** "hola", "ok", "bien" del staff no se tratan como "respuesta real"
-- **Sidebar badges reales:** `useAgendaBadge` (turnos activos de hoy en adelante), `useAutomationsBadge` (automatizaciones enabled)
-- **Refetch inmediato:** después de toda mutación (delete/create/edit) en Agenda y Pacientes
-- **Capitalización correcta:** `split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1))` — evita bug con tildes ("SáBado")
-- **Calendario explícito en prompt:** 14 días con `día nombre + número → ISO` — Claude nunca calcula fechas solo
-- **Info de clínica en contexto IA:** dirección, teléfono, email respondidos automáticamente
-- **Lookup de clínica para guests:** two-step — exact match wa_phone_number_id → fallback WA_PHONE_NUMBER_ID_GLOBAL env var
+- **send-whatsapp-reminders:** cron cada 1 min, escribe en `messages` + `conversations` (aparece en inbox), para `ai_followup_tick` de disparar texto extra, auto-detecta idioma del template (itera es_AR/es/es_ES/es_MX/es_US/es_UY hasta encontrar el correcto)
+- **Cron `send-whatsapp-reminders`:** era `Token null is invalid` — faltaba service_role_key en ai_config. Fix: recrear cron SIN Authorization header (`--no-verify-jwt` no lo necesita)
+- **Template buttons (confirmar/cancelar/reagendar):** llegaban como `type:"button"` (no `"interactive"`). Agregado handler para `msgType === 'button'` en `whatsapp-webhook` con mapping robusto de payload/title → intent
+- **Reagendar desde botón:** NO marca el turno como `rescheduled` en el webhook — deja que el AI agent lo haga cuando ejecuta `reschedule_appointment` (si se marca antes, la IA no ve el turno y responde genéricamente)
+- **System prompt reagendar:** mejorado para reconocer "Reagendar" (sola palabra de botón) y pedir fecha/hora de inmediato
+- **Reportes:** datos reales vía `useReportes` hook — tasa de confirmación, cancelados, mensajes WA enviados, turnos por mes (bar chart), top pacientes, estadísticas de automatizaciones
+- **Dashboard Resumen:** removidos `RevenueBlock` y `RiskBlock` (hardcodeados, contenían facturación/ingresos). KPI strip sin deltas falsos. Layout ajustado
+- **Sin facturación/DGI en esta versión:** todos los bloques de ingresos, dinero en riesgo y facturación están ocultos/eliminados
 
-**Próximas tareas priorizadas:**
-1. 🔴 **Token WhatsApp permanente** — el token de 24h venció. Crear System User token en Meta Business Manager → actualizar secret `WHATSAPP_ACCESS_TOKEN` en Supabase → redesplegar funciones
-2. 🟡 **pg_cron** — habilitar extensión en Supabase Dashboard + correr `supabase db push` + insertar supabase_url en ai_config
-3. 🟡 **Dashboard InboxBlock** — migrar de tabla legacy `whatsapp_message_log` a tabla `messages`
-4. 🟡 **RevenueBlock** — conectar a datos reales de `appointments`
-5. 🟢 **Reportes** — conectar página a datos reales
-6. 🟢 **Configuración → WhatsApp** — UI real para gestionar token y número
+### Próximas tareas priorizadas
+1. 🔴 **Token WhatsApp permanente** — crear System User token en Meta Business Manager → actualizar secret `WHATSAPP_ACCESS_TOKEN`
+2. 🟡 **Configuración → WhatsApp** — UI real para gestionar token y número  
+3. 🟡 **InboxBlock dashboard** — migrar de tabla legacy `whatsapp_message_log` a tabla `messages`
 
 **Usuario de prueba:** `maria@bonomi.uy` / `demo1234`
 **Dev server:** `npm run dev` → localhost:5173
@@ -240,6 +232,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 | `ai-agent-reply` | `--no-verify-jwt` | Agente IA (invocado internamente por webhook) |
 | `send-whatsapp-message` | normal | Staff envía mensaje outbound |
 | `initiate-conversation` | normal | Crea conversación + template |
+| `send-whatsapp-reminders` | `--no-verify-jwt` | Recordatorios automáticos — cron cada 1 min, escribe en messages+conversations |
 
 ---
 
@@ -266,6 +259,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 | `useAgendaBadge(clinicId)` | `{ count }` | Turnos new/pending/confirmed futuros |
 | `useAutomationsBadge(clinicId)` | `{ count }` | Automatizaciones enabled |
 | `useAIReactivation(clinicId, convs)` | `{ showBanner, affectedCount, handleReactivate, handleDismiss }` | Sugiere reactivar IAs > 2h inactivas |
+| `useReportes(clinicId, range)` | `{ data, loading, error }` | Reportes reales: confirmRate, cancelled, msgCount, monthSeries, topPatients, autoStats |
 
 ---
 
@@ -283,8 +277,9 @@ ANTHROPIC_API_KEY=sk-ant-...
 | Sidebar badges | ✅ Real | useAgendaBadge + useAutomationsBadge |
 | Configuracion → Equipo | ✅ Real | useMembers + InviteMemberModal |
 | Configuracion → WhatsApp | ⏳ Mock | Hardcodeado |
-| RevenueBlock | ⏳ Mock | Hardcodeado |
-| Reportes | ⏳ Mock | Hardcodeado |
+| RevenueBlock | 🚫 Oculto | Sin facturación en esta versión |
+| RiskBlock | 🚫 Oculto | Sin datos de dinero en esta versión |
+| Reportes | ✅ Real | useReportes — turnos, confirmación, WA, top pacientes |
 
 ---
 

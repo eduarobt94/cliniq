@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cliniq-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "chart-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-s", "supabase", "-l", "4321", "--no-clipboard"],
+      "port": 4321
+    }
+  ]
+}

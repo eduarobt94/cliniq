@@ -22,7 +22,7 @@ export async function createPatient(clinicId, fullName, phoneNumber) {
   return data;
 }
 
-export async function createAppointment(clinicId, { patientId, datetime, type, professionalName, notes }) {
+export async function createAppointment(clinicId, { patientId, datetime, type, professionalName, notes, status = 'new' }) {
   const { data, error } = await supabase
     .from('appointments')
     .insert({
@@ -32,7 +32,7 @@ export async function createAppointment(clinicId, { patientId, datetime, type, p
       appointment_type:     type?.trim() || null,
       professional_name:    professionalName?.trim() || null,
       notes:                notes?.trim() || null,
-      status:               'new',
+      status,
     })
     .select('id')
     .single();

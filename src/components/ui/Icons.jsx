@@ -195,4 +195,22 @@ export const Icons = {
       <path d="M9 3L5 7L9 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+  LogOut: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M6 2.5H3C2.4 2.5 2 2.9 2 3.5V12.5C2 13.1 2.4 13.5 3 13.5H6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M10.5 5L13.5 8L10.5 11M6 8H13.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  Star: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 2L9.6 6H14L10.7 8.6L11.9 13L8 10.5L4.1 13L5.3 8.6L2 6H6.4L8 2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    </svg>
+  ),
+  UserRefresh: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="6.5" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M2 13C2 10.8 4 9.5 6.5 9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M11 9.5C12.4 9.5 13.5 10.6 13.5 12C13.5 13.4 12.4 14.5 11 14.5C9.9 14.5 9 13.8 8.7 12.8M11 9.5L9.5 8M11 9.5L12.5 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
 };
