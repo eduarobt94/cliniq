@@ -1039,7 +1039,7 @@ export function Inbox() {
         <div className="px-4 pt-4 pb-3 border-b shrink-0" style={{ borderColor: 'var(--cq-border)' }}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Icons.Whatsapp size={16} />
+              <Icons.Whatsapp size={24} />
               <span className="text-[14px] font-semibold text-[var(--cq-fg)]">Inbox WhatsApp</span>
             </div>
             <button

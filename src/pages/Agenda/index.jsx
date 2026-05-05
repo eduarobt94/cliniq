@@ -1,8 +1,9 @@
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Badge, Button, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
+import { EditApptModal } from '../../components/EditApptModal';
 import { useAgendaRange } from '../../hooks/useAgendaRange';
-import { updateAppointmentStatus, updateAppointment, deleteAppointment } from '../../lib/appointmentService';
+import { updateAppointmentStatus, deleteAppointment } from '../../lib/appointmentService';
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_MAP = {
@@ -176,156 +177,6 @@ const SkeletonRow = memo(function SkeletonRow() {
   );
 });
 
-// ─── Edit appointment modal ───────────────────────────────────────────────────
-function SpinnerIcon() {
-  return (
-    <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
-      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function EditApptModal({ appt, onClose, onSuccess }) {
-  const [date,         setDate]         = useState('');
-  const [time,         setTime]         = useState('');
-  const [type,         setType]         = useState('');
-  const [professional, setProfessional] = useState('');
-  const [notes,        setNotes]        = useState('');
-  const [submitting,   setSubmitting]   = useState(false);
-  const [error,        setError]        = useState(null);
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    if (!appt) return;
-    setDate(toLocalDate(appt.appointment_datetime));
-    setTime(toLocalTime(appt.appointment_datetime));
-    setType(appt.appointment_type ?? '');
-    setProfessional(appt.professional_name ?? '');
-    setNotes(appt.notes ?? '');
-    setError(null);
-    setSubmitting(false);
-  }, [appt]);
-
-  useEffect(() => {
-    if (!appt) return;
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    containerRef.current?.querySelector('input,select,textarea,button')?.focus();
-    return () => document.removeEventListener('keydown', onKey);
-  }, [appt, onClose]);
-
-  if (!appt) return null;
-
-  const patientName = appt.patients?.full_name ?? '—';
-
-  const handleSubmit = async () => {
-    if (!date || !time) { setError('Completá la fecha y hora.'); return; }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const datetime = new Date(`${date}T${time}:00`).toISOString();
-      await updateAppointment(appt.id, { datetime, type, professionalName: professional, notes });
-      onSuccess?.();
-    } catch {
-      setError('No se pudo guardar el turno. Intentá de nuevo.');
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="edit-appt-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-    >
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
-      <div
-        ref={containerRef}
-        className="relative w-full max-w-[480px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6 max-h-[90vh] overflow-y-auto"
-        style={{ animation: 'cqModalIn 220ms cubic-bezier(.2,.7,.2,1)' }}
-      >
-        <div className="flex items-start justify-between mb-5">
-          <div>
-            <MonoLabel>Editar turno</MonoLabel>
-            <h3 id="edit-appt-title" className="mt-1 text-[20px] font-semibold tracking-tight truncate max-w-[320px]">
-              {patientName}
-            </h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-10 h-10 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
-            aria-label="Cerrar"
-          >
-            <Icons.Close size={15} />
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block">
-                <MonoLabel>Fecha *</MonoLabel>
-                <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)]">
-                  <span className="text-[var(--cq-fg-muted)] shrink-0"><Icons.Calendar size={14} /></span>
-                  <input type="date" value={date} onChange={e => setDate(e.target.value)} className="flex-1 bg-transparent outline-none text-[13.5px]" />
-                </div>
-              </label>
-            </div>
-            <div>
-              <label className="block">
-                <MonoLabel>Hora *</MonoLabel>
-                <div className="mt-1.5 flex items-center h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)]">
-                  <input type="time" value={time} onChange={e => setTime(e.target.value)} className="flex-1 bg-transparent outline-none text-[13.5px]" />
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <label className="block">
-              <MonoLabel>Tipo de consulta</MonoLabel>
-              <div className="mt-1.5 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] flex items-center">
-                <select value={type} onChange={e => setType(e.target.value)} className="flex-1 bg-transparent outline-none text-[13.5px] cursor-pointer">
-                  <option value="">Seleccionar…</option>
-                  {APPOINTMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-            </label>
-          </div>
-
-          <div>
-            <label className="block">
-              <MonoLabel>Profesional</MonoLabel>
-              <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)]">
-                <input type="text" value={professional} onChange={e => setProfessional(e.target.value)} placeholder="Dr. / Dra. …" className="flex-1 bg-transparent outline-none text-[13.5px]" />
-              </div>
-            </label>
-          </div>
-
-          <div>
-            <label className="block">
-              <MonoLabel>Notas</MonoLabel>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Observaciones internas…" rows={2} className="mt-1.5 w-full px-3 py-2.5 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus:border-[var(--cq-fg)] outline-none text-[13.5px] resize-none" />
-            </label>
-          </div>
-
-          {error && <p role="alert" className="text-[13px] text-[var(--cq-danger)]">{error}</p>}
-        </div>
-
-        <div className="mt-5 flex items-center gap-2 justify-end">
-          <Button variant="ghost" size="md" onClick={onClose} disabled={submitting}>Cancelar</Button>
-          <Button variant="primary" size="md" onClick={handleSubmit} disabled={submitting || !date || !time}>
-            {submitting ? <SpinnerIcon /> : <Icons.Check size={14} />}
-            {submitting ? 'Guardando…' : 'Guardar cambios'}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Day-view actions dropdown ────────────────────────────────────────────────
 function ActionsMenu({ appt, onStatusChange, onEdit, onDelete }) {
   const [open,          setOpen]          = useState(false);
@@ -441,13 +292,20 @@ function ApptTooltip({ appt, rect }) {
   const prof   = appt.professional_name;
   const status = appt.status ?? 'new';
   const { tone, label } = STATUS_MAP[status] ?? STATUS_MAP.new;
+  const rawNotes = appt.notes ?? '';
+  // For AI appointments, extract service from notes if appointment_type is missing
+  const notesService = rawNotes.match(/Servicio:\s*([^—\n]+)/)?.[1]?.trim() ?? '';
+  const displayType  = type || notesService;
+  // Observation = everything after the "—" separator, or plain notes without AI prefix
+  const notesAfterDash = rawNotes.includes('—') ? rawNotes.split('—').slice(1).join('—').trim() : '';
+  const notes = rawNotes.startsWith('[IA]') ? notesAfterDash : rawNotes.trim();
 
-  const W = 210;
+  const W = 220;
   let left = rect.left + rect.width / 2 - W / 2;
   left = Math.max(8, Math.min(left, window.innerWidth - W - 8));
   const spaceBelow = window.innerHeight - rect.bottom;
-  const top = spaceBelow > 160 ? rect.bottom + 6 : rect.top - 6;
-  const ty  = spaceBelow > 160 ? '0%' : '-100%';
+  const top = spaceBelow > 180 ? rect.bottom + 6 : rect.top - 6;
+  const ty  = spaceBelow > 180 ? '0%' : '-100%';
 
   return (
     <div
@@ -462,9 +320,14 @@ function ApptTooltip({ appt, rect }) {
           <Icons.Calendar size={11} />
           <span className="font-mono">{time}</span>
         </div>
-        {type && <p className="text-[12px] text-[var(--cq-fg-muted)]">{type}</p>}
+        {displayType && <p className="text-[12px] text-[var(--cq-fg-muted)]">{displayType}</p>}
         {prof && <p className="text-[12px] text-[var(--cq-fg-muted)]">{prof}</p>}
       </div>
+      {notes && (
+        <p className="mt-2 text-[11.5px] text-[var(--cq-fg-muted)] italic leading-snug line-clamp-3 border-t border-[var(--cq-border)] pt-2">
+          {notes}
+        </p>
+      )}
       <div className="mt-2.5">
         <Badge tone={tone} dot>{label}</Badge>
       </div>

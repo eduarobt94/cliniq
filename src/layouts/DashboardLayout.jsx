@@ -4,6 +4,7 @@ import { Sidebar } from '../pages/Dashboard/Sidebar';
 import { TopBar } from '../pages/Dashboard/TopBar';
 import { NewAppointmentModal } from '../pages/Dashboard/NewAppointmentModal';
 import { InviteMemberModal } from '../pages/Dashboard/InviteMemberModal';
+import { AddPatientModal } from '../components/AddPatientModal';
 import { useAuth } from '../context/AuthContext';
 import { ToastContainer, useToast } from '../components/ui';
 import { useNotifications } from '../hooks/useNotifications';
@@ -21,10 +22,11 @@ export function DashboardLayout() {
     return () => window.removeEventListener('cq_compact_mode', sync);
   }, []);
 
-  const [collapsed,   setCollapsed]   = useState(false);
-  const [mobileOpen,  setMobileOpen]  = useState(false);
-  const [inviteOpen,  setInviteOpen]  = useState(false);
-  const [modalConfig, setModalConfig] = useState({ open: false, defaultDate: null, express: false });
+  const [collapsed,     setCollapsed]     = useState(false);
+  const [mobileOpen,    setMobileOpen]    = useState(false);
+  const [inviteOpen,    setInviteOpen]    = useState(false);
+  const [patientOpen,   setPatientOpen]   = useState(false);
+  const [modalConfig,   setModalConfig]   = useState({ open: false, defaultDate: null, express: false });
 
   const openMobileMenu = useCallback(() => setMobileOpen(true), []);
 
@@ -35,8 +37,10 @@ export function DashboardLayout() {
   const closeModal       = useCallback(() =>
     setModalConfig((c) => ({ ...c, open: false })), []);
 
-  const openInvite  = useCallback(() => setInviteOpen(true),  []);
-  const closeInvite = useCallback(() => setInviteOpen(false), []);
+  const openInvite      = useCallback(() => setInviteOpen(true),    []);
+  const closeInvite     = useCallback(() => setInviteOpen(false),   []);
+  const openNewPatient  = useCallback(() => setPatientOpen(true),   []);
+  const closeNewPatient = useCallback(() => setPatientOpen(false),  []);
 
   const handleAppointmentCreated = useCallback(() => {
     push('Turno agendado correctamente.', 'success');
@@ -61,7 +65,7 @@ export function DashboardLayout() {
           onMarkAllRead={markAllRead}
         />
         <main className={`flex-1 overflow-y-auto transition-[padding] ${compact ? 'p-3 md:p-4' : 'p-5 md:p-8'}`}>
-          <Outlet context={{ openModal, openModalExpress, openInvite, push }} />
+          <Outlet context={{ openModal, openModalExpress, openInvite, openNewPatient, push }} />
         </main>
       </div>
 
@@ -77,6 +81,15 @@ export function DashboardLayout() {
         open={inviteOpen}
         onClose={closeInvite}
         clinicId={clinic?.id}
+      />
+      <AddPatientModal
+        open={patientOpen}
+        onClose={closeNewPatient}
+        clinicId={clinic?.id}
+        push={push}
+        onSuccess={() => {
+          window.dispatchEvent(new CustomEvent('cq_patient_created'));
+        }}
       />
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </div>

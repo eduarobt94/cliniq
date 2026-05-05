@@ -92,6 +92,9 @@ body {
 }
 
 /* Respeta la preferencia del SO de reducir movimiento */
+/* Hide scrollbar inside scroll-columns (TimePicker, etc.) */
+.cq-scroll-hidden::-webkit-scrollbar { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

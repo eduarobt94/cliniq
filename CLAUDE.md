@@ -3,22 +3,28 @@
 ## ⚡ INICIO RÁPIDO DE SESIÓN
 > Leé esta sección primero. Resume el estado actual y qué hacer a continuación.
 
-**Último trabajo completado (2026-04-30) — Automatizaciones + Reportes + Resumen funcionales:**
+**Último trabajo completado (2026-05-01) — Automatizaciones + Reportes + InboxBlock + Express modal:**
 
 ### ✅ Completado en esta sesión
-- **send-whatsapp-reminders:** cron cada 1 min, escribe en `messages` + `conversations` (aparece en inbox), para `ai_followup_tick` de disparar texto extra, auto-detecta idioma del template (itera es_AR/es/es_ES/es_MX/es_US/es_UY hasta encontrar el correcto)
-- **Cron `send-whatsapp-reminders`:** era `Token null is invalid` — faltaba service_role_key en ai_config. Fix: recrear cron SIN Authorization header (`--no-verify-jwt` no lo necesita)
-- **Template buttons (confirmar/cancelar/reagendar):** llegaban como `type:"button"` (no `"interactive"`). Agregado handler para `msgType === 'button'` en `whatsapp-webhook` con mapping robusto de payload/title → intent
-- **Reagendar desde botón:** NO marca el turno como `rescheduled` en el webhook — deja que el AI agent lo haga cuando ejecuta `reschedule_appointment` (si se marca antes, la IA no ve el turno y responde genéricamente)
-- **System prompt reagendar:** mejorado para reconocer "Reagendar" (sola palabra de botón) y pedir fecha/hora de inmediato
-- **Reportes:** datos reales vía `useReportes` hook — tasa de confirmación, cancelados, mensajes WA enviados, turnos por mes (bar chart), top pacientes, estadísticas de automatizaciones
-- **Dashboard Resumen:** removidos `RevenueBlock` y `RiskBlock` (hardcodeados, contenían facturación/ingresos). KPI strip sin deltas falsos. Layout ajustado
-- **Sin facturación/DGI en esta versión:** todos los bloques de ingresos, dinero en riesgo y facturación están ocultos/eliminados
+- **Reportes (real data):** reemplazado datos hardcodeados → `useReportes` hook real. Recharts `BarChart` apilado (5 estados). Selector de rango: 3M / 6M / 1A / 2A. Toggle de granularidad mensual/trimestral. Multi-year label detection (`"Ene '25"`).
+- **Nuevos tipos de automatización:** `patient_reactivation` + `review_request` agregados a `clinic_automations.type`. Nuevas columnas: `months_inactive` (default 6), `hours_after` (default 2). Migración `20260430000002_new_automations.sql` creada.
+- **Edge Functions nuevas:**
+  - `send-patient-reactivation` — contacta pacientes inactivos por WhatsApp; max 20/clínica/run; anti-spam
+  - `send-review-requests` — envía link de Google Reviews N horas después de la consulta
+- **Automatizaciones UI:** `EditModal` renovado — campos dinámicos por tipo (horas recordatorio / meses inactivo / horas post-turno), preview de template en vivo con `renderPreview()`
+- **InboxBlock dashboard:** migrado de `whatsapp_message_log` (legacy) → `useConversations` + `useUnreadCounts`. Muestra conversaciones reales con badge de mensajes sin responder.
+- **`useUnreadCounts` hook:** cuenta mensajes inbound consecutivos al final del hilo (sin respuesta del staff). Single query + cálculo client-side.
+- **NewAppointmentModal — Express mode:** `express={true}` pre-carga hora actual redondeada a 15min, status `confirmed` (no `new`), UI comprimida con campos opcionales colapsados. Disparado desde `openModalExpress()` en DashboardLayout.
+- **DashboardLayout:** gestión de modal centralizada con `modalConfig` (`open`, `defaultDate`, `express`). Contexto expuesto via `Outlet context`.
+- **Demo seeds para Reportes:** `supabase/demo_seed.sql` (15 pacientes UY + ~65 turnos ±56d) y `supabase/demo_seed_2years.sql` (PL/pgSQL DO block, 24 meses de datos, distribución realista de estados).
+- **`send-whatsapp-reminders`:** refactoring — escribe en `messages` + `conversations` (aparece en inbox), auto-detecta idioma del template.
 
 ### Próximas tareas priorizadas
 1. 🔴 **Token WhatsApp permanente** — crear System User token en Meta Business Manager → actualizar secret `WHATSAPP_ACCESS_TOKEN`
-2. 🟡 **Configuración → WhatsApp** — UI real para gestionar token y número  
-3. 🟡 **InboxBlock dashboard** — migrar de tabla legacy `whatsapp_message_log` a tabla `messages`
+2. 🔴 **Ejecutar migración** `20260430000002_new_automations.sql` en Supabase SQL Editor (producción)
+3. 🟡 **Deploy Edge Functions nuevas** — `send-patient-reactivation` y `send-review-requests` (ver comandos abajo)
+4. 🟡 **Configuración → WhatsApp** — UI real para gestionar token y número
+5. 🟠 **Demo seeds** — ejecutar en Supabase SQL Editor para poblar datos de Reportes
 
 **Usuario de prueba:** `maria@bonomi.uy` / `demo1234`
 **Dev server:** `npm run dev` → localhost:5173
@@ -36,6 +42,7 @@ SaaS de automatización para clínicas médicas en Uruguay. Gestiona turnos, pac
 - **Framework:** React 18 + Vite 6
 - **Styling:** Tailwind CSS v3 + CSS custom properties (`--cq-*`)
 - **Routing:** React Router v6
+- **Charts:** Recharts (`BarChart`, `ResponsiveContainer`, `XAxis`, `YAxis`, `CartesianGrid`, `Tooltip`)
 - **Backend:** Supabase (PostgreSQL 15, Auth, Realtime)
 - **Language:** JavaScript (JSX) — sin TypeScript en frontend; TypeScript en Edge Functions (Deno)
 
@@ -55,32 +62,46 @@ src/
     usePatients.js            ← lista de pacientes (limit 50) + refetch
     useMembers.js             ← miembros + profiles batch + addMember/removeMember/refetch
     useAutomations.js         ← clinic_automations + v_automation_stats
-    useWhatsappInbox.js       ← últimos N mensajes inbound (InboxBlock dashboard) — tabla legacy
     useConversations.js       ← lista de conversaciones CRM con Realtime
     useRealtimeMessages.js    ← mensajes de una conversación con Realtime
     useAgendaRange.js         ← turnos por rango de fechas + Realtime + refetch
     useNotifications.js
     useAgendaBadge.js         ← count turnos activos futuros (new/pending/confirmed) para sidebar
     useAutomationsBadge.js    ← count automatizaciones enabled para sidebar
+    useUnreadCounts.js        ← Map<convId, N> de mensajes inbound sin respuesta por conversación
+    useReportes.js            ← Reportes reales: confirmRate, cancelled, msgCount, monthSeries,
+                                 quarterSeries, topPatients, autoStats. Rangos: 3m/6m/1a/2a
   lib/
     supabase.js            ← cliente Supabase singleton
     authService.js         ← signUp, signIn, createClinic, inviteMember, acceptInvite
     appointmentService.js  ← CRUD de patients y appointments; normaliza teléfonos a E.164
     phoneUtils.js          ← isValidPhone(), normalizePhone() — validación E.164
   pages/
-    Dashboard/             ← AgendaBlock, KPIs, AutomationsBlock, InboxBlock, NewAppointmentModal, InviteMemberModal
+    Dashboard/             ← AgendaBlock, KPIs, AutomationsBlock, InboxBlock, NewAppointmentModal,
+                              InviteMemberModal. InboxBlock usa useConversations+useUnreadCounts.
+                              NewAppointmentModal tiene modo express (status=confirmed, hora=now±15m)
     Agenda/                ← vista completa de agenda + fmtDayLabel/fmtMonthLabel con split(' ') para tildes
     Pacientes/             ← tabla de pacientes con CRUD, búsqueda, filtros + refetch inmediato
     Inbox/                 ← CRM inbox: useConversations + useRealtimeMessages, toggle IA, panel contexto
-    Automatizaciones/ / Reportes/ / Configuracion/
-  layouts/DashboardLayout.jsx  ← dispara cq_appointment_created CustomEvent para refetch cross-component
+    Automatizaciones/      ← 3 tipos: appointment_reminder / patient_reactivation / review_request.
+                              EditModal con campos dinámicos por tipo + preview de template en vivo
+    Reportes/              ← Recharts BarChart apilado (5 estados). Rangos: 3M/6M/1A/2A.
+                              Toggle granularidad mensual/trimestral. Datos reales de appointments
+    Configuracion/
+  layouts/DashboardLayout.jsx  ← modalConfig centralizado (open/defaultDate/express),
+                                  openModal()/openModalExpress(), cq_appointment_created CustomEvent
 supabase/
   functions/
     whatsapp-webhook/      ← recibe eventos Meta, upsert conversations+messages, llama ai-agent-reply
     ai-agent-reply/        ← agente IA completo (ver sección AI Agent más abajo)
     send-whatsapp-message/ ← staff envía mensajes outbound
     initiate-conversation/ ← crea conversación + envía template si hay turno
+    send-whatsapp-reminders/   ← recordatorios automáticos — cron, escribe en messages+conversations
+    send-patient-reactivation/ ← contacta pacientes inactivos N meses; max 20/clínica/run
+    send-review-requests/      ← envía link de Google Reviews N horas post-consulta
   migrations/              ← ver tabla más abajo
+  demo_seed.sql            ← 15 pacientes UY + ~65 turnos ±56d desde hoy (ON CONFLICT DO NOTHING)
+  demo_seed_2years.sql     ← PL/pgSQL DO block — 24 meses Jan 2024–Dec 2025 de datos históricos
 ```
 
 ---
@@ -97,8 +118,8 @@ supabase/
 | `clinic_members` | Multi-usuario. Roles: `owner/staff/viewer`. Estados: `invited/active` |
 | `patients` | `UNIQUE(clinic_id, phone_number)`. Tel en E.164. Cols IA: `ai_enabled` (bool), `last_human_interaction` |
 | `appointments` | ENUM status: `new/pending/confirmed/rescheduled/cancelled`. `notes` = `[IA] Servicio: X` para agente |
-| `clinic_automations` | Config recordatorios. `UNIQUE(clinic_id, type)` |
-| `conversations` | CRM inbox. `UNIQUE(clinic_id, phone_number)`. `agent_mode`: `bot/human`. `agent_last_human_reply_at`. `REPLICA IDENTITY FULL` |
+| `clinic_automations` | Config automatizaciones. `UNIQUE(clinic_id, type)`. Tipos: `appointment_reminder / patient_reactivation / review_request`. Extra cols: `months_inactive` (int, default 6), `hours_after` (int, default 2) |
+| `conversations` | CRM inbox. `UNIQUE(clinic_id, phone_number)`. `agent_mode`: `bot/human`. `REPLICA IDENTITY FULL` |
 | `messages` | FK → conversations. `direction`: `inbound/outbound/outbound_ai/system/system_template`. `sender_type`: `bot/staff/system`. `REPLICA IDENTITY FULL` |
 | `whatsapp_message_log` | Auditoría legacy — sigue siendo insertada para backward compat |
 
@@ -126,7 +147,9 @@ supabase/
 | `20260428000000_fix_whatsapp_rls.sql` | ✅ Ejecutada |
 | `20260429000000_inbox_v2.sql` | ✅ Ejecutada |
 | `20260429000001_inbox_delete_policy.sql` | ✅ Ejecutada |
-| `20260430000000_ai_agent_handoff.sql` | ✅ Ejecutada — `agent_mode`, `ai_enabled`, `sender_type`, `outbound_ai`, `agent_last_human_reply_at` |
+| `20260430000000_ai_agent_handoff.sql` | ✅ Ejecutada |
+| `20260430000002_new_automations.sql` | 🔴 PENDIENTE — agregar `patient_reactivation`, `review_request`, cols `months_inactive`/`hours_after` |
+| `20260504000000_fix_views_timezone.sql` | 🔴 PENDIENTE — fix `CURRENT_DATE` (UTC) → `(CURRENT_TIMESTAMP AT TIME ZONE 'America/Montevideo')::date` en `v_today_appointments` y `v_clinic_kpis_today` |
 
 **⚠️ Nunca volver a ejecutar las ya aplicadas en producción.**
 
@@ -174,7 +197,7 @@ const hora  = dt.toLocaleTimeString('es-UY', { timeZone: 'America/Montevideo', .
 
 ### Lógica de activación (`whatsapp-webhook`)
 - `shouldAgentReply()`: agent_mode = 'bot' → true; 'human' → solo si `agent_last_human_reply_at > 2 min`
-- Saludos vacíos del staff (`"hola"`, `"ok"`, `"bien"`, etc.) → NO se tratan como "respuesta real" al contar inbounds sin responder
+- Saludos vacíos del staff (`"hola"`, `"ok"`, `"bien"`, etc.) → NO se tratan como "respuesta real"
 - Si hay mensajes del paciente sin respuesta Y humano inactivo > 2min → IA retoma aunque agent_mode sea 'human'
 - Lookup de clínica para guests: exact match `wa_phone_number_id` → fallback `WA_PHONE_NUMBER_ID_GLOBAL` env var
 
@@ -192,10 +215,31 @@ const hora  = dt.toLocaleTimeString('es-UY', { timeZone: 'America/Montevideo', .
 // REGLA ABSOLUTA: Claude NUNCA calcula fechas — copia del calendario
 const proximosDias = Array.from({ length: 14 }, (_, i) => {
   const d = new Date(nowUY.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
-  // ...
   return `  ${DAY_NAMES[d.getUTCDay()]} ${iso.slice(8)} de ${MON_NAMES[d.getUTCMonth()]} → ${iso}`;
 }).join('\n');
 ```
+
+---
+
+## Automatizaciones (Edge Functions de fondo)
+
+### `send-whatsapp-reminders`
+- Cron cada 1 min via Supabase Cron
+- Busca turnos de mañana sin recordatorio enviado
+- Auto-detecta idioma del template (itera `es_AR/es/es_ES/es_MX/es_US/es_UY`)
+- Escribe en `messages` + `conversations` (visible en inbox)
+- Cron creado SIN `Authorization` header (`--no-verify-jwt`)
+
+### `send-patient-reactivation`
+- Busca pacientes sin turno en N meses (`months_inactive` de la automatización, default 6)
+- Max 20 pacientes por clínica por ejecución (anti-spam)
+- Envía texto libre con template `{patient_name}` + `{clinic_name}` vía WhatsApp
+- Registra en `messages` + actualiza `conversations`
+
+### `send-review-requests`
+- Corre N horas después de que termina un turno (`hours_after`, default 2)
+- Solo para turnos `confirmed` que no recibieron request aún
+- Template configurable con `{patient_name}` + `{clinic_name}` + link de reviews
 
 ---
 
@@ -228,11 +272,13 @@ ANTHROPIC_API_KEY=sk-ant-...
 ### Edge Functions — Deploy
 | Función | Flags | Propósito |
 |---|---|---|
-| `whatsapp-webhook` | `--no-verify-jwt` | Recibe eventos de Meta (Meta no manda JWT) |
-| `ai-agent-reply` | `--no-verify-jwt` | Agente IA (invocado internamente por webhook) |
+| `whatsapp-webhook` | `--no-verify-jwt` | Recibe eventos de Meta |
+| `ai-agent-reply` | `--no-verify-jwt` | Agente IA (invocado internamente) |
 | `send-whatsapp-message` | normal | Staff envía mensaje outbound |
 | `initiate-conversation` | normal | Crea conversación + template |
-| `send-whatsapp-reminders` | `--no-verify-jwt` | Recordatorios automáticos — cron cada 1 min, escribe en messages+conversations |
+| `send-whatsapp-reminders` | `--no-verify-jwt` | Recordatorios automáticos — cron |
+| `send-patient-reactivation` | `--no-verify-jwt` | Reactivación de pacientes inactivos |
+| `send-review-requests` | `--no-verify-jwt` | Solicitud de reseñas Google post-turno |
 
 ---
 
@@ -256,10 +302,10 @@ ANTHROPIC_API_KEY=sk-ant-...
 | `useAgendaRange(start, end)` | `{ appointments, loading, error, refetch }` | Rango de fechas + Realtime |
 | `useConversations(clinicId)` | `{ conversations, loading, error, refetch, deleteConversation }` | agent_mode, agent_context, ai_enabled |
 | `useRealtimeMessages(convId)` | `{ messages, loading, error, addOptimistic, removeOptimistic, deleteMessage, refetch }` | |
+| `useUnreadCounts(conversationIds)` | `Map<convId, N>` | Mensajes inbound consecutivos sin respuesta staff. Single query + client-side |
 | `useAgendaBadge(clinicId)` | `{ count }` | Turnos new/pending/confirmed futuros |
 | `useAutomationsBadge(clinicId)` | `{ count }` | Automatizaciones enabled |
-| `useAIReactivation(clinicId, convs)` | `{ showBanner, affectedCount, handleReactivate, handleDismiss }` | Sugiere reactivar IAs > 2h inactivas |
-| `useReportes(clinicId, range)` | `{ data, loading, error }` | Reportes reales: confirmRate, cancelled, msgCount, monthSeries, topPatients, autoStats |
+| `useReportes(clinicId, range)` | `{ data, loading, error }` | `data` = `{ confirmRate, cancelled, msgCount, monthSeries, quarterSeries, topPatients, autoStats }`. Rangos: `3m/6m/1a/2a` |
 
 ---
 
@@ -268,34 +314,37 @@ ANTHROPIC_API_KEY=sk-ant-...
 |---|---|---|
 | KPI cards | ✅ Real | useKpis |
 | AgendaBlock | ✅ Real | useAppointments + Realtime |
-| NewAppointmentModal | ✅ Real | appointmentService |
+| NewAppointmentModal | ✅ Real | appointmentService. Express mode: status=confirmed, hora=now±15m |
 | AutomationsBlock | ✅ Real | useAutomations |
-| InboxBlock (dashboard) | ✅ Real | tabla legacy whatsapp_message_log |
+| InboxBlock (dashboard) | ✅ Real | useConversations + useUnreadCounts (migrado de legacy) |
 | Página Inbox (CRM) | ✅ Real | bidireccional + AI Agent + toggle + contexto lead |
 | Agenda (página) | ✅ Real | useAgendaRange + refetch inmediato post-mutación |
 | Pacientes | ✅ Real | CRUD + refetch inmediato |
 | Sidebar badges | ✅ Real | useAgendaBadge + useAutomationsBadge |
 | Configuracion → Equipo | ✅ Real | useMembers + InviteMemberModal |
 | Configuracion → WhatsApp | ⏳ Mock | Hardcodeado |
+| Reportes | ✅ Real | useReportes — Recharts BarChart apilado, rangos 3M/6M/1A/2A, granularidad mensual/trimestral |
+| Automatizaciones | ✅ Real | 3 tipos, EditModal dinámico, preview de template |
 | RevenueBlock | 🚫 Oculto | Sin facturación en esta versión |
 | RiskBlock | 🚫 Oculto | Sin datos de dinero en esta versión |
-| Reportes | ✅ Real | useReportes — turnos, confirmación, WA, top pacientes |
 
 ---
 
 ## Decisiones de diseño importantes
 
 - **Loop multi-turn siempre con tools:** la API de Anthropic requiere tools en toda llamada que tenga `tool_use` en el historial. Sin esto Claude devuelve contenido vacío (chars: 0).
-- **Múltiples tools por ronda:** Claude puede devolver varios `tool_use` blocks en una respuesta (ej: reschedule + cancel). Se ejecutan en `Promise.all` y se devuelven todos los resultados juntos.
-- **resolvedPatientId:** variable en memoria dentro del invocation que se actualiza al registrar un paciente nuevo. Permite que `schedule_appointment` funcione inmediatamente después de `register_patient` sin esperar a que la DB sincronice.
-- **Timezone en formatAppointments:** siempre `timeZone: 'America/Montevideo'`. El servidor Deno corre en UTC — sin esto muestra +3h de la hora real (ej: 15:00 aparece como 18:00).
-- **Capitalización con split(' '):** `split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')` — el regex `\b\w` de JS no funciona con tildes (á, é, í actúan como word boundaries).
-- **Saludos vacíos del staff:** "hola", "ok", "bien" etc. del staff no se cuentan como "respuesta real" al escanear mensajes inbound sin responder. Permite que la IA retome aunque el staff haya saludado.
-- **Refetch inmediato post-mutación:** todas las mutaciones llaman `refetch()` directamente, sin esperar el evento Realtime (que tarda 1-2s). El evento Realtime actúa como segunda confirmación.
-- **CustomEvent `cq_appointment_created`:** `DashboardLayout` lo emite cuando se crea un turno desde el modal. `Agenda` escucha y llama `refetchAgenda()`.
+- **Múltiples tools por ronda:** Claude puede devolver varios `tool_use` blocks en una respuesta. Se ejecutan en `Promise.all` y se devuelven todos juntos.
+- **resolvedPatientId:** variable en memoria dentro del invocation. Permite que `schedule_appointment` funcione inmediatamente después de `register_patient`.
+- **Timezone en formatAppointments:** siempre `timeZone: 'America/Montevideo'`. El servidor Deno corre en UTC.
+- **Capitalización con split(' '):** `split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')` — el regex `\b\w` de JS no funciona con tildes.
+- **Saludos vacíos del staff:** "hola", "ok", "bien" no cuentan como respuesta real al escanear inbounds sin responder.
+- **Refetch inmediato post-mutación:** todas las mutaciones llaman `refetch()` directamente, sin esperar Realtime (que tarda 1-2s).
+- **CustomEvent `cq_appointment_created`:** `DashboardLayout` lo emite al crear turno. `Agenda` escucha y llama `refetchAgenda()`.
 - **Sin UI optimista en mensajes:** causaba duplicados con Realtime. Realtime < 1s es suficiente.
 - **Realtime DELETE requiere REPLICA IDENTITY FULL:** sin esto los filtros de columna en DELETE no funcionan.
-- **agent_mode 'human':** cualquier mensaje manual del staff silencia el bot. Se reactiva si el humano lleva > 2min sin escribir Y hay mensajes del paciente sin responder.
+- **agent_mode 'human':** cualquier mensaje manual del staff silencia el bot. Se reactiva si humano lleva > 2min sin escribir Y hay mensajes del paciente sin responder.
+- **useReportes — `buildMonthSeries` / `buildQuarterSeries`:** agrupa appointments por mes/trimestre en timezone UY. Multi-year label: si hay más de un año en el rango, labels como `"Ene '25"` en vez de `"Ene"`.
+- **useUnreadCounts:** cuenta hacia atrás desde el último mensaje hasta el primer outbound — eso da los inbound sin responder. No usa Realtime (se recalcula al cambiar conversationIds).
 
 ---
 
@@ -309,12 +358,15 @@ npx supabase functions deploy whatsapp-webhook --no-verify-jwt
 npx supabase functions deploy ai-agent-reply --no-verify-jwt
 npx supabase functions deploy send-whatsapp-message
 npx supabase functions deploy initiate-conversation
+npx supabase functions deploy send-whatsapp-reminders --no-verify-jwt
+npx supabase functions deploy send-patient-reactivation --no-verify-jwt
+npx supabase functions deploy send-review-requests --no-verify-jwt
 
 # Setear secrets
 npx supabase secrets set WHATSAPP_ACCESS_TOKEN=<nuevo-token-permanente>
 npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 
-# Verificar secrets actuales
+# Verificar secrets
 npx supabase secrets list
 ```
 
@@ -330,12 +382,3 @@ npx supabase secrets list
 | XSS | ✅ Sin dangerouslySetInnerHTML |
 | SQL injection | ✅ PostgREST parametriza todo |
 | npm audit | ✅ 0 vulnerabilidades |
-
----
-
-## Superpowers Skills
-- Nuevas features → `brainstorming`
-- Bugs → `systematic-debugging`
-- Implementación → `test-driven-development`
-- Planes → `writing-plans` → `executing-plans`
-- Antes de terminar → `verification-before-completion`

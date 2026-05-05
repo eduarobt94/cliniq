@@ -7,11 +7,12 @@ const BASE_ACTIONS = [
   { id: 'invite',      l: 'Invitar equipo', icon: Icons.UserPlus },
 ];
 
-export function QuickActionsBlock({ onNew, onNewExpress, onInvite }) {
+export function QuickActionsBlock({ onNew, onNewExpress, onInvite, onNewPatient }) {
   const actions = BASE_ACTIONS.map((a) =>
-    a.id === 'new-appt'  ? { ...a, onClick: onNew        } :
-    a.id === 'express'   ? { ...a, onClick: onNewExpress } :
-    a.id === 'invite'    ? { ...a, onClick: onInvite     } :
+    a.id === 'new-appt'     ? { ...a, onClick: onNew          } :
+    a.id === 'express'      ? { ...a, onClick: onNewExpress    } :
+    a.id === 'invite'       ? { ...a, onClick: onInvite        } :
+    a.id === 'new-patient'  ? { ...a, onClick: onNewPatient    } :
     a
   );
 

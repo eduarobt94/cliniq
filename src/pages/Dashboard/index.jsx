@@ -1,5 +1,5 @@
-import { useState, useEffect, memo } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useState, useEffect, memo, useCallback } from 'react';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import { useKpis } from '../../hooks/useKpis';
 import { useClinic } from '../../hooks/useClinic';
 import { useAppointments } from '../../hooks/useAppointments';
@@ -10,6 +10,56 @@ import { AutomationsBlock } from './AutomationsBlock';
 import { InboxBlock } from './InboxBlock';
 import { QuickActionsBlock } from './QuickActionsBlock';
 import { SystemBlock } from './SystemBlock';
+
+const STATUS_LABELS = {
+  confirmed:   'Confirmado',
+  pending:     'Pendiente',
+  new:         'Nuevo',
+  rescheduled: 'Reagendado',
+  cancelled:   'Cancelado',
+};
+
+function exportAppointmentsCSV(appointments, clinicName) {
+  const today = new Date().toLocaleDateString('es-UY', {
+    timeZone: 'America/Montevideo',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+
+  const rows = [
+    ['Hora', 'Paciente', 'Teléfono', 'Servicio', 'Profesional', 'Estado'],
+    ...appointments
+      .slice()
+      .sort((a, b) => new Date(a.appointment_datetime) - new Date(b.appointment_datetime))
+      .map(a => {
+        const hora = new Date(a.appointment_datetime).toLocaleTimeString('es-UY', {
+          timeZone: 'America/Montevideo',
+          hour: '2-digit', minute: '2-digit',
+        });
+        const servicio = a.appointment_type
+          || (a.notes?.match(/Servicio:\s*([^—\n]+)/)?.[1]?.trim() ?? '');
+        return [
+          hora,
+          a.patient_name ?? '',
+          a.patient_phone ?? '',
+          servicio,
+          a.professional_name ?? '',
+          STATUS_LABELS[a.status] ?? a.status ?? '',
+        ];
+      }),
+  ];
+
+  const csv = rows
+    .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    .join('\r\n');
+
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href     = url;
+  link.download = `agenda_${today.replace(/\//g, '-')}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 const KpiSkeleton = memo(function KpiSkeleton() {
   return <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-8 w-20" />;
@@ -51,13 +101,18 @@ function useGreeting() {
   return { saludo, fecha: `${fecha} · ${hora} UYT` };
 }
 
-const GreetingStrip = memo(function GreetingStrip({ clinicName, kpis, kpisLoading }) {
+const GreetingStrip = memo(function GreetingStrip({ clinicName, kpis, kpisLoading, appointments }) {
   const { saludo, fecha } = useGreeting();
+  const navigate = useNavigate();
   const subline = kpisLoading
     ? 'Cargando resumen del día…'
     : kpis && kpis.total_today > 0
     ? <><strong className="text-[var(--cq-fg)] font-medium">{kpis.total_today} turnos</strong> hoy · <strong className="text-[var(--cq-fg)] font-medium">{kpis.confirmed_today} confirmados</strong> hasta ahora.</>
     : 'Sin turnos registrados por ahora. ¡Buen momento para agregar uno!';
+
+  const handleExport = useCallback(() => {
+    exportAppointmentsCSV(appointments ?? [], clinicName);
+  }, [appointments, clinicName]);
 
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
@@ -69,18 +124,28 @@ const GreetingStrip = memo(function GreetingStrip({ clinicName, kpis, kpisLoadin
         <p className="text-[14px] text-[var(--cq-fg-muted)]">{subline}</p>
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm"><Icons.Calendar size={14} /> Agenda</Button>
-        <Button variant="secondary" size="sm">Exportar reporte</Button>
+        <Button variant="outline" size="sm" onClick={() => navigate('/dashboard/agenda')}>
+          <Icons.Calendar size={14} /> Agenda
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleExport}
+          disabled={!appointments?.length}
+          title={!appointments?.length ? 'Sin turnos para exportar' : `Exportar ${appointments.length} turnos de hoy`}
+        >
+          <Icons.ArrowUpRight size={14} /> Exportar agenda
+        </Button>
       </div>
     </div>
   );
 });
 
 export function Dashboard() {
-  const { openModal, openModalExpress, openInvite } = useOutletContext() ?? {};
+  const { openModal, openModalExpress, openInvite, openNewPatient, push } = useOutletContext() ?? {};
   const { kpis, loading: kpisLoading }             = useKpis();
   const { clinic }                                  = useClinic();
-  const { appointments, loading: appointmentsLoading } = useAppointments();
+  const { appointments, loading: appointmentsLoading, refetch: refetchAppts } = useAppointments();
 
   const confirmedLabel = kpis ? `${kpis.confirmed_today} / ${kpis.total_today}` : null;
   const confirmRate    = kpis && kpis.total_today > 0
@@ -89,7 +154,7 @@ export function Dashboard() {
 
   return (
     <>
-      <GreetingStrip clinicName={clinic?.name} kpis={kpis} kpisLoading={kpisLoading} />
+      <GreetingStrip clinicName={clinic?.name} kpis={kpis} kpisLoading={kpisLoading} appointments={appointments} />
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--cq-border)] border border-[var(--cq-border)] rounded-[14px] overflow-hidden mb-5">
@@ -101,13 +166,13 @@ export function Dashboard() {
 
       {/* Main grid */}
       <div className="grid lg:grid-cols-3 gap-5 mb-5">
-        <AgendaBlock appointments={appointments} loading={appointmentsLoading} />
+        <AgendaBlock appointments={appointments} loading={appointmentsLoading} push={push} refetch={refetchAppts} />
         <AutomationsBlock />
       </div>
       <div className="grid lg:grid-cols-2 gap-5 mt-5">
         <InboxBlock />
         <div className="flex flex-col gap-5">
-          <QuickActionsBlock onNew={openModal} onNewExpress={openModalExpress} onInvite={openInvite} />
+          <QuickActionsBlock onNew={openModal} onNewExpress={openModalExpress} onInvite={openInvite} onNewPatient={openNewPatient} />
           <SystemBlock />
         </div>
       </div>

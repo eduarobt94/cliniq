@@ -73,8 +73,8 @@ export const Icons = {
   ),
   Whatsapp: ({ size = 16 }) => (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M2.5 13.5L3.5 10.5C2.9 9.6 2.5 8.6 2.5 7.5C2.5 4.7 4.7 2.5 7.5 2.5C10.3 2.5 12.5 4.7 12.5 7.5C12.5 10.3 10.3 12.5 7.5 12.5C6.4 12.5 5.4 12.1 4.5 11.5L2.5 13.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-      <path d="M5.5 6.5C5.5 7.9 6.6 9.5 8 9.5M6 6.2C6.3 5.8 6.5 5.2 6 5C5.5 4.8 5 5.3 5 5.8M8.2 8.8C8.8 9 9.5 9 9.8 8.5C10 8 9.3 7.5 9 7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M2.5 13.5L3.5 10.5C2.9 9.6 2.5 8.6 2.5 7.5C2.5 4.7 4.7 2.5 7.5 2.5C10.3 2.5 12.5 4.7 12.5 7.5C12.5 10.3 10.3 12.5 7.5 12.5C6.4 12.5 5.4 12.1 4.5 11.5L2.5 13.5Z" stroke="oklch(0.58 0.08 195)" strokeWidth="1" strokeLinejoin="round" />
+      <path d="M5.5 6.5C5.5 7.9 6.6 9.5 8 9.5M6 6.2C6.3 5.8 6.5 5.2 6 5C5.5 4.8 5 5.3 5 5.8M8.2 8.8C8.8 9 9.5 9 9.8 8.5C10 8 9.3 7.5 9 7.5" stroke="oklch(0.58 0.08 195)" strokeWidth="1" strokeLinecap="round" />
     </svg>
   ),
   Plus: ({ size = 14 }) => (
@@ -211,6 +211,12 @@ export const Icons = {
       <circle cx="6.5" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
       <path d="M2 13C2 10.8 4 9.5 6.5 9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
       <path d="M11 9.5C12.4 9.5 13.5 10.6 13.5 12C13.5 13.4 12.4 14.5 11 14.5C9.9 14.5 9 13.8 8.7 12.8M11 9.5L9.5 8M11 9.5L12.5 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  Alert: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M8 2L14.5 13.5H1.5L8 2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M8 6.5V9.5M8 11V11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   ),
 };

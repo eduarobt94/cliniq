@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Icons, Button, MonoLabel } from '../../components/ui';
+import { DatePicker, TimePicker } from '../../components/ui/DateTimePicker';
 import { searchPatients, createPatient, createAppointment } from '../../lib/appointmentService';
 import { isValidPhone, filterPhoneInput } from '../../lib/phoneUtils';
+import { useClinicSchedule } from '../../hooks/useClinicSchedule';
+import { isDatetimeAllowed, getScheduleError, getScheduleWarning } from '../../lib/scheduleUtils';
+import { supabase } from '../../lib/supabase';
 
 const APPOINTMENT_TYPES = [
   'Control',
@@ -44,6 +48,23 @@ function SpinnerIcon() {
   );
 }
 
+function WarnBanner({ children }) {
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-2 text-[12.5px] rounded-[8px] px-3 py-2"
+      style={{
+        color:      'var(--cq-warn)',
+        background: 'color-mix(in oklch, var(--cq-warn) 10%, transparent)',
+        border:     '1px solid color-mix(in oklch, var(--cq-warn) 28%, transparent)',
+      }}
+    >
+      <Icons.Alert size={13} style={{ marginTop: 1, flexShrink: 0 }} />
+      {children}
+    </div>
+  );
+}
+
 export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSuccess, express = false }) {
   const containerRef = useRef(null);
 
@@ -66,6 +87,26 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
   const [success,        setSuccess]        = useState(false);
   const [error,          setError]          = useState(null);
 
+  const { schedule, closures } = useClinicSchedule(clinicId);
+
+  const [slotConflicts, setSlotConflicts] = useState(0);
+  const debouncedDate = useDebounce(date, 300);
+  const debouncedTime = useDebounce(time, 300);
+
+  useEffect(() => {
+    if (!clinicId || !debouncedDate || !debouncedTime) { setSlotConflicts(0); return; }
+    let cancelled = false;
+    const datetime = `${debouncedDate}T${debouncedTime}:00`;
+    supabase
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('clinic_id', clinicId)
+      .eq('appointment_datetime', new Date(datetime).toISOString())
+      .not('status', 'eq', 'cancelled')
+      .then(({ count }) => { if (!cancelled) setSlotConflicts(count ?? 0); });
+    return () => { cancelled = true; };
+  }, [clinicId, debouncedDate, debouncedTime]);
+
   const debouncedQuery = useDebounce(query, 280);
 
   useEffect(() => {
@@ -85,6 +126,7 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
     setSubmitting(false);
     setSuccess(false);
     setError(null);
+    setSlotConflicts(0);
   }, [open, defaultDate, express]);
 
   useEffect(() => {
@@ -215,7 +257,13 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
 
   if (!open) return null;
 
-  const canSubmit = !submitting && date && time &&
+  const scheduleCheck = (date && time && schedule)
+    ? isDatetimeAllowed(`${date}T${time}`, schedule, closures)
+    : { allowed: true };
+  const scheduleError   = getScheduleError(scheduleCheck);
+  const scheduleWarning = getScheduleWarning(scheduleCheck);
+
+  const canSubmit = !submitting && date && time && !scheduleError &&
     (selectedPatient || (creatingPatient && query.trim() && newPhone.trim()));
 
   return (
@@ -346,31 +394,18 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
               {/* Date + Time */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block">
-                    <MonoLabel>Fecha *</MonoLabel>
-                    <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)]">
-                      <span className="text-[var(--cq-fg-muted)] shrink-0"><Icons.Calendar size={14} /></span>
-                      <input
-                        type="date"
-                        value={date}
-                        onChange={(e) => setDate(e.target.value)}
-                        className="flex-1 bg-transparent outline-none text-[13.5px]"
-                      />
-                    </div>
-                  </label>
+                  <MonoLabel className="block mb-1.5">Fecha *</MonoLabel>
+                  <DatePicker
+                    value={date}
+                    onChange={setDate}
+                    min={new Date().toISOString().slice(0, 10)}
+                    schedule={schedule}
+                    closures={closures}
+                  />
                 </div>
                 <div>
-                  <label className="block">
-                    <MonoLabel>Hora *</MonoLabel>
-                    <div className="mt-1.5 flex items-center h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)]">
-                      <input
-                        type="time"
-                        value={time}
-                        onChange={(e) => setTime(e.target.value)}
-                        className="flex-1 bg-transparent outline-none text-[13.5px]"
-                      />
-                    </div>
-                  </label>
+                  <MonoLabel className="block mb-1.5">Hora *</MonoLabel>
+                  <TimePicker value={time} onChange={setTime} />
                 </div>
               </div>
 
@@ -441,6 +476,18 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                 </>
               )}
 
+              {slotConflicts > 0 && (
+                <WarnBanner>
+                  Ya hay {slotConflicts === 1 ? '1 turno' : `${slotConflicts} turnos`} a esa hora. Verificá que no haya superposición.
+                </WarnBanner>
+              )}
+              {scheduleWarning && <WarnBanner>{scheduleWarning}</WarnBanner>}
+              {scheduleError && (
+                <div role="alert" className="flex items-start gap-2 text-[12.5px] rounded-[8px] px-3 py-2" style={{ color: 'var(--cq-danger)', background: 'color-mix(in oklch, var(--cq-danger) 8%, transparent)', border: '1px solid color-mix(in oklch, var(--cq-danger) 22%, transparent)' }}>
+                  <Icons.Alert size={13} style={{ marginTop: 1, flexShrink: 0 }} />
+                  {scheduleError}
+                </div>
+              )}
               {error && (
                 <p role="alert" className="text-[13px] text-[var(--cq-danger)]">{error}</p>
               )}

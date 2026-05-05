@@ -7,6 +7,7 @@ import { useAutomations } from '../../hooks/useAutomations';
 import { InviteMemberModal } from '../Dashboard/InviteMemberModal';
 import { updateClinicProfile, updateClinicSettings } from '../../lib/clinicService';
 import { filterPhoneInput } from '../../lib/phoneUtils';
+import { ScheduleSection } from './ScheduleSection';
 
 const TIMEZONES = [
   { value: 'America/Montevideo', label: 'America/Montevideo (UTC-3)' },
@@ -435,7 +436,17 @@ export function Configuracion() {
 
       <Divider />
 
-      {/* ── SECTION 4: Conexión WhatsApp ─────────────────────────────────────── */}
+      {/* ── SECTION 4: Horarios de atención ─────────────────────────────────── */}
+      <SectionCard>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-[16px] font-semibold text-[var(--cq-fg)]">Horarios de atención</h2>
+        </div>
+        <ScheduleSection clinicId={clinic?.id} isOwner={isOwner} push={push} />
+      </SectionCard>
+
+      <Divider />
+
+      {/* ── SECTION 5: Conexión WhatsApp ─────────────────────────────────────── */}
       <SectionCard>
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-[16px] font-semibold text-[var(--cq-fg)]">Conexión WhatsApp</h2>
