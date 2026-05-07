@@ -1015,15 +1015,15 @@ export function Inbox() {
   const activeId     = selectedId ?? firstId;
   const selectedConv = conversations.find((c) => c.id === activeId) ?? null;
 
-  function handleConversationCreated(conv) {
+  const handleConversationCreated = useCallback((conv) => {
     refetch();
     setSelectedId(conv.id);
-  }
+  }, [refetch]);
 
-  async function handleDeleteConversation(convId) {
+  const handleDeleteConversation = useCallback(async (convId) => {
     const err = await deleteConversation(convId);
     if (!err && selectedId === convId) setSelectedId(null);
-  }
+  }, [deleteConversation, selectedId]);
 
   return (
     <div
