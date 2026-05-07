@@ -15,13 +15,20 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// Module-level cache: survives re-renders, shared across hook instances in the same session.
+// Avoids N+1 queries when multiple realtime events fire in quick succession.
+const _patientNameCache = new Map();
+
 async function getPatientName(patientId) {
+  if (_patientNameCache.has(patientId)) return _patientNameCache.get(patientId);
   const { data } = await supabase
     .from('patients')
     .select('full_name')
     .eq('id', patientId)
     .single();
-  return data?.full_name ?? 'Paciente';
+  const name = data?.full_name ?? 'Paciente';
+  _patientNameCache.set(patientId, name);
+  return name;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
