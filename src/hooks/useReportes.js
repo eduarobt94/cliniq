@@ -123,6 +123,13 @@ export function useReportes(clinicId, range = '1a') {
         const cancelled_count = allAppts.filter(a => a.status === 'cancelled').length;
         const confirmRate = total > 0 ? Math.round(confirmed / total * 100) : 0;
 
+        // ── No-shows: past appointments still in pending/new (never confirmed/cancelled) ──
+        const noShowCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+        const noShows      = allAppts.filter(
+          a => ['pending', 'new'].includes(a.status) && a.appointment_datetime < noShowCutoff,
+        ).length;
+        const noShowRate   = total > 0 ? Math.round(noShows / total * 100) : 0;
+
         // ── Series ────────────────────────────────────────────────────────────
         const monthSeries   = buildMonthSeries(allAppts);
         const quarterSeries = buildQuarterSeries(monthSeries);
@@ -181,6 +188,8 @@ export function useReportes(clinicId, range = '1a') {
             cancelled: cancelled_count,
             total,
             confirmed,
+            noShows,
+            noShowRate,
             msgCount:     msgCount ?? 0,
             monthSeries,
             quarterSeries,

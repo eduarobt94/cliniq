@@ -14,8 +14,11 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('es-UY', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+const NO_SHOW_CUTOFF_MS = 2 * 60 * 60 * 1000; // 2 hours
+
 function derivePatient(raw) {
   const now    = new Date();
+  const cutoff = new Date(now - NO_SHOW_CUTOFF_MS);
   const appts  = raw.appointments ?? [];
   const past   = appts
     .filter(a => new Date(a.appointment_datetime) < now)
@@ -27,6 +30,11 @@ function derivePatient(raw) {
   const lastVisit = past[0]?.appointment_datetime ?? null;
   const nextAppt  = future[0]?.appointment_datetime ?? null;
 
+  // No-show: past appointment still in pending/new (no confirmation, no cancellation)
+  const noShowCount = appts.filter(
+    a => ['pending', 'new'].includes(a.status) && new Date(a.appointment_datetime) < cutoff,
+  ).length;
+
   let status = 'activo';
   if (appts.length === 0) {
     status = 'nuevo';
@@ -35,7 +43,7 @@ function derivePatient(raw) {
     if (daysSince > 90) status = 'inactivo';
   }
 
-  return { ...raw, lastVisit, nextAppt, status, appointmentCount: appts.length };
+  return { ...raw, lastVisit, nextAppt, status, appointmentCount: appts.length, noShowCount };
 }
 
 // ─── Status + filters ─────────────────────────────────────────────────────────
@@ -112,8 +120,7 @@ function EditPatientModal({ patient, onClose, onSuccess, existingPatients = [] }
     >
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div
-        className="relative w-full max-w-[400px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6"
-        style={{ animation: 'cqModalIn 220ms cubic-bezier(.2,.7,.2,1)' }}
+        className="cq-modal-in relative w-full max-w-[400px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6"
       >
         <div className="flex items-start justify-between mb-5">
           <div>
@@ -333,7 +340,17 @@ const PatientRow = memo(function PatientRow({ patient, onEdit, onDelete }) {
         <span className="font-mono text-[13px] text-[var(--cq-fg-muted)]">{patient.appointmentCount}</span>
       </td>
       <td className="px-5 py-3.5">
-        <Badge tone={tone} dot>{label}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge tone={tone} dot>{label}</Badge>
+          {patient.noShowCount > 0 && (
+            <span
+              title={`${patient.noShowCount} no-show${patient.noShowCount !== 1 ? 's' : ''}`}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[5px] bg-[color-mix(in_oklch,var(--cq-warn)_15%,transparent)] text-[var(--cq-warn)] text-[11px] font-mono font-semibold leading-none"
+            >
+              !{patient.noShowCount}
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-5 py-3.5 w-10">
         <PatientActionsMenu patient={patient} onEdit={onEdit} onDelete={onDelete} />
@@ -453,13 +470,13 @@ export function Pacientes() {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-[var(--cq-border)]">
-                  <th className="px-5 py-3 text-left"><MonoLabel>Paciente</MonoLabel></th>
-                  <th className="px-5 py-3 text-left"><MonoLabel>Teléfono</MonoLabel></th>
-                  <th className="px-5 py-3 text-left hidden md:table-cell"><MonoLabel>Última visita</MonoLabel></th>
-                  <th className="px-5 py-3 text-left hidden lg:table-cell"><MonoLabel>Próximo turno</MonoLabel></th>
-                  <th className="px-5 py-3 text-left hidden xl:table-cell"><MonoLabel>Turnos</MonoLabel></th>
-                  <th className="px-5 py-3 text-left"><MonoLabel>Estado</MonoLabel></th>
-                  <th className="px-5 py-3 w-10" />
+                  <th scope="col" className="px-5 py-3 text-left"><MonoLabel>Paciente</MonoLabel></th>
+                  <th scope="col" className="px-5 py-3 text-left"><MonoLabel>Teléfono</MonoLabel></th>
+                  <th scope="col" className="px-5 py-3 text-left hidden md:table-cell"><MonoLabel>Última visita</MonoLabel></th>
+                  <th scope="col" className="px-5 py-3 text-left hidden lg:table-cell"><MonoLabel>Próximo turno</MonoLabel></th>
+                  <th scope="col" className="px-5 py-3 text-left hidden xl:table-cell"><MonoLabel>Turnos</MonoLabel></th>
+                  <th scope="col" className="px-5 py-3 text-left"><MonoLabel>Estado</MonoLabel></th>
+                  <th scope="col" className="px-5 py-3 w-10" />
                 </tr>
               </thead>
               <tbody>
