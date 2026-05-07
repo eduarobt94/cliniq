@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-Content *)",
+      "Bash(npm install *)",
+      "Read(//c/Program Files/Google/Chrome/Application/**)",
+      "Read(//c/Program Files \\(x86\\)/Microsoft/Edge/Application/**)",
+      "Read(//c/Program Files/Microsoft/Edge/Application/**)",
+      "Bash(node regression-test.mjs)",
+      "Bash(node -e ' *)",
+      "Bash(node agent-test.mjs)",
+      "Bash(NODE_TLS_REJECT_UNAUTHORIZED=0 node agent-test.mjs)",
+      "Bash(npx supabase *)",
+      "Bash(NODE_TLS_REJECT_UNAUTHORIZED=0 node *)"
+    ]
+  }
+}
