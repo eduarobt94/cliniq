@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Icons, Badge, Avatar, MonoLabel } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { useWaitlistBadge } from '../../hooks/useWaitingList';
 
 
 const NAV_ITEMS = [
@@ -11,6 +12,7 @@ const NAV_ITEMS = [
   { id: 'pacientes',       label: 'Pacientes',         icon: Icons.Users,    path: '/dashboard/pacientes'                                       },
   { id: 'automatizaciones',label: 'Automatizaciones',  icon: Icons.Zap,      path: '/dashboard/automatizaciones', dynamic: 'automationsCount'  },
   { id: 'inbox',           label: 'Inbox WhatsApp',    icon: Icons.Chat,     path: '/dashboard/inbox',            dynamic: 'inboxCount'        },
+  { id: 'lista-espera',   label: 'Lista de espera',   icon: Icons.Bell,     path: '/dashboard/lista-espera',     dynamic: 'waitlistCount'     },
   { id: 'reportes',        label: 'Reportes',          icon: Icons.Chart,    path: '/dashboard/reportes'                                        },
 ];
 
@@ -137,12 +139,14 @@ export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobil
   const inboxCount       = useInboxBadge(clinic?.id);
   const agendaCount      = useAgendaBadge(clinic?.id);
   const automationsCount = useAutomationsBadge(clinic?.id);
+  const waitlistCount    = useWaitlistBadge(clinic?.id);
   const isFloating = variant === 'floating';
 
   const getDynamicBadge = (item) => {
     if (item.dynamic === 'inboxCount')       return inboxCount       ? String(inboxCount)       : null;
     if (item.dynamic === 'agendaCount')      return agendaCount      ? String(agendaCount)      : null;
     if (item.dynamic === 'automationsCount') return automationsCount ? String(automationsCount) : null;
+    if (item.dynamic === 'waitlistCount')    return waitlistCount    ? String(waitlistCount)    : null;
     return item.badge ?? null;
   };
   const isIconOnly = variant === 'icon' || collapsed;
