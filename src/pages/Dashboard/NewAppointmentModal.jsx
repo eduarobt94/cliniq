@@ -48,6 +48,57 @@ function SpinnerIcon() {
   );
 }
 
+function SelectField({ value, onChange, options, placeholder = 'Seleccionar…' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const selected = options.find(o => o === value);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`flex items-center gap-2 h-11 px-3 rounded-[9px] border w-full text-left transition-colors
+          ${open ? 'border-[var(--cq-fg)] bg-[var(--cq-bg)]' : 'border-[var(--cq-border)] bg-[var(--cq-bg)] hover:border-[var(--cq-fg-muted)]'}`}
+      >
+        <span className={`flex-1 text-[13.5px] ${selected ? 'text-[var(--cq-fg)]' : 'text-[var(--cq-fg-muted)]'}`}>
+          {selected ?? placeholder}
+        </span>
+        <Icons.ChevronRight
+          size={12}
+          className={`text-[var(--cq-fg-muted)] shrink-0 transition-transform ${open ? 'rotate-90' : 'rotate-0'}`}
+        />
+      </button>
+
+      {open && (
+        <div
+          className="cq-modal-in-fast absolute left-0 right-0 top-[calc(100%+4px)] z-50 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[12px] shadow-xl overflow-hidden"
+        >
+          {options.map(opt => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => { onChange(opt); setOpen(false); }}
+              className={`w-full text-left px-4 py-2.5 text-[13.5px] transition-colors hover:bg-[var(--cq-surface-2)]
+                ${opt === value ? 'text-[var(--cq-accent)] font-medium' : 'text-[var(--cq-fg)]'}`}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WarnBanner({ children }) {
   return (
     <div
@@ -87,7 +138,11 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
   const [success,        setSuccess]        = useState(false);
   const [error,          setError]          = useState(null);
 
-  const { schedule, closures } = useClinicSchedule(clinicId);
+  const { schedule, closures, refetch: refetchSchedule } = useClinicSchedule(clinicId);
+
+  useEffect(() => {
+    if (open && clinicId) refetchSchedule();
+  }, [open, clinicId, refetchSchedule]);
 
   const [slotConflicts, setSlotConflicts] = useState(0);
   const debouncedDate = useDebounce(date, 300);
@@ -277,8 +332,7 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div
         ref={containerRef}
-        className="relative w-full max-w-[520px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6 max-h-[90vh] overflow-y-auto"
-        style={{ animation: 'cqModalIn 220ms cubic-bezier(.2,.7,.2,1)' }}
+        className="cq-modal-in relative w-full max-w-[520px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6 max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-start justify-between mb-5">
           <div>
@@ -427,21 +481,12 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                 <>
                   {/* Type */}
                   <div>
-                    <label className="block">
-                      <MonoLabel>Tipo de consulta</MonoLabel>
-                      <div className="mt-1.5 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] flex items-center">
-                        <select
-                          value={type}
-                          onChange={(e) => setType(e.target.value)}
-                          className="flex-1 bg-transparent outline-none text-[13.5px] cursor-pointer"
-                        >
-                          <option value="">Seleccionar…</option>
-                          {APPOINTMENT_TYPES.map(t => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
+                    <MonoLabel className="block mb-1.5">Tipo de consulta</MonoLabel>
+                    <SelectField
+                      value={type}
+                      onChange={setType}
+                      options={APPOINTMENT_TYPES}
+                    />
                   </div>
 
                   {/* Professional */}

@@ -68,8 +68,7 @@ export function AddPatientModal({ open, onClose, onSuccess, clinicId, push, exis
     >
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div
-        className="relative w-full max-w-[420px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6"
-        style={{ animation: 'cqModalIn 220ms cubic-bezier(.2,.7,.2,1)' }}
+        className="cq-modal-in relative w-full max-w-[420px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6"
       >
         <div className="flex items-start justify-between mb-5">
           <div>
