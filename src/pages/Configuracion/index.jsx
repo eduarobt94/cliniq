@@ -120,6 +120,7 @@ export function Configuracion() {
     emailContact:     '',
     timezone:         'America/Montevideo',
     waPhoneNumberId:  '',
+    googleReviewUrl:  '',
   });
   const [profileDirty, setProfileDirty] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -133,6 +134,7 @@ export function Configuracion() {
       emailContact:     clinic.email_contact    ?? '',
       timezone:         clinic.timezone         ?? 'America/Montevideo',
       waPhoneNumberId:  clinic.wa_phone_number_id ?? '',
+      googleReviewUrl:  clinic.settings?.google_review_url ?? '',
     });
     setProfileDirty(false);
   }, [clinic?.id]);
@@ -148,9 +150,19 @@ export function Configuracion() {
       push?.('El email de contacto debe contener "@".', 'error');
       return;
     }
+    if (profileForm.googleReviewUrl && !profileForm.googleReviewUrl.startsWith('http')) {
+      push?.('La URL de reseña debe comenzar con http:// o https://', 'error');
+      return;
+    }
     setSavingProfile(true);
     try {
-      await updateClinicProfile(clinic.id, profileForm);
+      await Promise.all([
+        updateClinicProfile(clinic.id, profileForm),
+        updateClinicSettings(clinic.id, {
+          ...(clinic?.settings ?? {}),
+          google_review_url: profileForm.googleReviewUrl.trim() || null,
+        }),
+      ]);
       await refreshMembership();
       setProfileDirty(false);
       push?.('Perfil actualizado.', 'success');
@@ -171,9 +183,11 @@ export function Configuracion() {
     email_notifications:          clinic?.settings?.email_notifications          ?? true,
     auto_reminders:               clinic?.settings?.auto_reminders               ?? true,
     default_appointment_duration: clinic?.settings?.default_appointment_duration ?? 30,
+    doctor_whatsapp:              clinic?.settings?.doctor_whatsapp              ?? '',
     compact_mode:                 localStorage.getItem('cq_compact_mode') === 'true',
   }));
   const [savingPrefs, setSavingPrefs] = useState(false);
+  const [savingDoctorWa, setSavingDoctorWa] = useState(false);
 
   // Sync prefs when clinic loads
   useEffect(() => {
@@ -183,6 +197,7 @@ export function Configuracion() {
       email_notifications:          clinic.settings?.email_notifications          ?? true,
       auto_reminders:               clinic.settings?.auto_reminders               ?? true,
       default_appointment_duration: clinic.settings?.default_appointment_duration ?? 30,
+      doctor_whatsapp:              clinic.settings?.doctor_whatsapp              ?? '',
     }));
   }, [clinic?.id]);
 
@@ -194,6 +209,9 @@ export function Configuracion() {
       window.dispatchEvent(new Event('cq_compact_mode'));
       return;
     }
+
+    // doctor_whatsapp is saved explicitly via its own button — skip auto-save
+    if (key === 'doctor_whatsapp') return;
 
     if (!clinic?.id) return;
     setSavingPrefs(true);
@@ -207,6 +225,27 @@ export function Configuracion() {
       setPrefs(prev => ({ ...prev, [key]: !value }));
     } finally {
       setSavingPrefs(false);
+    }
+  }
+
+  async function handleSaveDoctorWa() {
+    const phone = prefs.doctor_whatsapp.trim();
+    if (phone && !phone.startsWith('+')) {
+      push?.('El número del médico debe comenzar con + (formato internacional).', 'error');
+      return;
+    }
+    setSavingDoctorWa(true);
+    try {
+      await updateClinicSettings(clinic.id, {
+        ...clinic?.settings,
+        doctor_whatsapp: phone || null,
+      });
+      await refreshMembership();
+      push?.('Número del médico guardado.', 'success');
+    } catch (err) {
+      push?.('No se pudo guardar el número.', 'error');
+    } finally {
+      setSavingDoctorWa(false);
     }
   }
 
@@ -299,6 +338,21 @@ export function Configuracion() {
                 <option key={tz.value} value={tz.value}>{tz.label}</option>
               ))}
             </select>
+          </FieldGroup>
+
+          <FieldGroup label="URL de reseña en Google" fullWidth>
+            <input
+              type="url"
+              className={inputCls}
+              value={profileForm.googleReviewUrl}
+              onChange={e => handleProfileChange('googleReviewUrl', e.target.value)}
+              disabled={!isOwner}
+              placeholder="https://g.page/r/XXXXX/review"
+            />
+            <p className="mt-1 text-[11.5px] text-[var(--cq-fg-muted)]">
+              Se usa en el placeholder <span className="font-mono">&#123;review_url&#125;</span> del mensaje de reseña post-consulta.
+              Encontrala en Google Business → Reseñas → Obtener más reseñas.
+            </p>
           </FieldGroup>
         </div>
 
@@ -479,6 +533,33 @@ export function Configuracion() {
           <div className="mb-4 flex items-center gap-2 text-[13.5px] text-[var(--cq-fg)]">
             <Icons.Whatsapp size={15} />
             <span className="font-mono">{profileForm.waPhoneNumberId}</span>
+          </div>
+        )}
+
+        {/* Doctor WhatsApp — para confirmación de turnos */}
+        {isOwner && (
+          <div className="mb-5">
+            <MonoLabel className="block mb-1.5">WhatsApp del médico (confirmación de turnos)</MonoLabel>
+            <div className="flex items-center gap-2">
+              <input
+                className={`${inputCls} flex-1`}
+                value={prefs.doctor_whatsapp}
+                onChange={e => handlePrefChange('doctor_whatsapp', filterPhoneInput(e.target.value))}
+                placeholder="+59899123456"
+                spellCheck={false}
+              />
+              <button
+                onClick={handleSaveDoctorWa}
+                disabled={savingDoctorWa}
+                className="h-10 px-4 rounded-[8px] bg-[var(--cq-fg)] text-[var(--cq-bg)] text-[13px] font-medium hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
+              >
+                {savingDoctorWa ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+            <p className="mt-1.5 text-[11.5px] text-[var(--cq-fg-muted)]">
+              Cuando el bot agenda un turno, notificará automáticamente a este número.
+              El médico puede responder <span className="font-mono">1</span> para confirmar o <span className="font-mono">2</span> para rechazar.
+            </p>
           </div>
         )}
 
