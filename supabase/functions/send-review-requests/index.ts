@@ -72,7 +72,7 @@ serve(async (req: Request) => {
           id,
           appointment_datetime,
           patients!inner ( id, full_name, phone_number ),
-          clinics!inner  ( name, timezone, wa_phone_number_id )
+          clinics!inner  ( name, timezone, wa_phone_number_id, settings )
         `)
         .eq('clinic_id', auto.clinic_id)
         .in('status', ['confirmed', 'completed'])
@@ -94,10 +94,13 @@ serve(async (req: Request) => {
         const phoneNumberId = clinic?.wa_phone_number_id || WA_PHONE_ID;
         if (!phoneNumberId) { results.skipped++; continue; }
 
-        // 3. Render message
+        // 3. Render message (support {review_url} placeholder)
+        const clinicSettings = (clinic?.settings ?? {}) as Record<string, string>;
+        const reviewUrl      = clinicSettings.google_review_url ?? '';
         const text = render(auto.message_template ?? '', {
           patient_name: patient.full_name ?? 'Paciente',
           clinic_name:  clinic.name       ?? 'la clínica',
+          review_url:   reviewUrl,
         });
 
         // 4. Get or create conversation
