@@ -9,6 +9,12 @@ import { supabase }                    from '../../lib/supabase';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Normaliza acentos y mayúsculas para búsquedas tolerantes. "José" ≡ "jose" */
+function norm(str) {
+  return (str ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
 function formatTime(iso) {
   if (!iso) return '';
   const d   = new Date(iso);
@@ -378,11 +384,11 @@ function NewConversationModal({ clinicId, onClose, onCreated }) {
   useEffect(() => { searchRef.current?.focus(); }, []);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = norm(search.trim());
     if (!q) return patients;
     return patients.filter(
       (p) =>
-        p.full_name.toLowerCase().includes(q) ||
+        norm(p.full_name).includes(q) ||
         (p.phone_number ?? '').includes(q),
     );
   }, [patients, search]);
@@ -767,22 +773,6 @@ function ConversationView({ conv, onDelete }) {
     setSendError('');
     setInputValue('');
 
-    // Cuando el staff escribe, silencia la IA temporalmente (agent_mode → human)
-    // pero NO cambia ai_enabled — eso solo lo hace el toggle explícito.
-    // Así la IA puede retomar sola después de 2 min de inactividad del staff.
-    setAgentMode('human');
-    const now = new Date().toISOString();
-    supabase.from('conversations')
-      .update({ agent_mode: 'human', agent_last_human_reply_at: now })
-      .eq('id', conv.id)
-      .then(({ error: e }) => { if (e) console.error('agent_mode update error:', e); });
-    if (conv.patient_id) {
-      supabase.from('patients')
-        .update({ last_human_interaction: now })   // ya NO toca ai_enabled
-        .eq('id', conv.patient_id)
-        .then(({ error: e }) => { if (e) console.error('last_human_interaction update error:', e); });
-    }
-
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token ?? '';
@@ -801,8 +791,24 @@ function ConversationView({ conv, onDelete }) {
           setSendError(json?.message ?? json?.error ?? 'Error al enviar.');
         }
         setInputValue(text);
+        // No marcar agent_mode=human si el envío falló
+      } else {
+        // Éxito — silenciar IA temporalmente (agent_mode → human).
+        // NO toca ai_enabled: la IA puede retomar sola después de 2 min.
+        setAgentMode('human');
+        const now = new Date().toISOString();
+        supabase.from('conversations')
+          .update({ agent_mode: 'human', agent_last_human_reply_at: now })
+          .eq('id', conv.id)
+          .then(({ error: e }) => { if (e) console.error('agent_mode update error:', e); });
+        if (conv.patient_id) {
+          supabase.from('patients')
+            .update({ last_human_interaction: now })
+            .eq('id', conv.patient_id)
+            .then(({ error: e }) => { if (e) console.error('last_human_interaction update error:', e); });
+        }
+        // On success: Realtime fires the INSERT and shows the message
       }
-      // On success: Realtime fires the INSERT and shows the message
     } catch {
       setSendError('Error de red. Intentá de nuevo.');
       setInputValue(text);
@@ -1001,13 +1007,13 @@ export function Inbox() {
   const [showNewModal, setShowNewModal] = useState(false);
 
   const filteredConversations = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = norm(search.trim());
     if (!q) return conversations;
     return conversations.filter(
       (c) =>
-        (c.patients?.full_name ?? '').toLowerCase().includes(q) ||
-        c.phone_number.includes(q) ||
-        (c.last_message ?? '').toLowerCase().includes(q),
+        norm(c.patients?.full_name).includes(q) ||
+        (c.phone_number ?? '').includes(q) ||
+        norm(c.last_message).includes(q),
     );
   }, [conversations, search]);
 
