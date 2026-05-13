@@ -42,7 +42,7 @@ export function AuthCallback() {
       <main className="min-h-screen bg-[var(--cq-bg)] text-[var(--cq-fg)] flex items-center justify-center p-6">
         <div className="w-full max-w-[420px] text-center">
           <div className="w-14 h-14 rounded-full bg-[color-mix(in_oklch,var(--cq-danger)_12%,transparent)] flex items-center justify-center mx-auto mb-6">
-            <Icons.X size={22} className="text-[var(--cq-danger)]" />
+            <Icons.Alert size={22} className="text-[var(--cq-danger)]" />
           </div>
           <h1 className="text-[22px] font-semibold tracking-tight">
             Error al conectar con Google
