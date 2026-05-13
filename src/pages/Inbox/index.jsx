@@ -827,7 +827,7 @@ function ConversationView({ conv, onDelete }) {
               <span className="text-[14px] font-semibold text-[var(--cq-fg)]">{name}</span>
               {windowOpen
                 ? <Badge tone="success">24h ACTIVA</Badge>
-                : <Badge tone="warning">VENTANA CERRADA</Badge>
+                : <Badge tone="warn">VENTANA CERRADA</Badge>
               }
             </div>
             <span className="text-[11.5px] font-mono text-[var(--cq-fg-muted)]">{conv.phone_number}</span>

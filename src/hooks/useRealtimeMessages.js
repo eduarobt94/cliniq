@@ -45,7 +45,7 @@ export function useRealtimeMessages(conversationId) {
             // Already in list → skip
             if (prev.some((m) => m.id === newMsg.id)) return prev;
 
-            if (newMsg.direction === 'outbound' || newMsg.direction === 'system_template') {
+            if (newMsg.direction === 'outbound' || newMsg.direction === 'outbound_ai' || newMsg.direction === 'system_template') {
               // Remove ALL optimistic (sending) outbound messages with the same content,
               // then add the confirmed real message
               const withoutOptimistic = prev.filter(
