@@ -219,4 +219,26 @@ export const Icons = {
       <path d="M8 6.5V9.5M8 11V11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   ),
+  Edit: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M11 2.5L13.5 5L5.5 13H3V10.5L11 2.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M9.5 4L12 6.5" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  ),
+  Clock: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M8 5V8L10 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  Waitlist: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="3.5" cy="4"  r="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6.5 4H13"  stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <circle cx="3.5" cy="8"  r="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6.5 8H13"  stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <circle cx="3.5" cy="12" r="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6.5 12H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  ),
 };

@@ -112,6 +112,27 @@ function formatSchedule(rows: Record<string, unknown>[] | null): string {
   return [...open, ...closed].join('\n');
 }
 
+function formatServices(rows: Record<string, unknown>[] | null): string {
+  if (!rows?.length) return '  (sin servicios configurados)';
+  return rows.map(s => {
+    const name  = s.name as string;
+    const dur   = s.duration_minutes ? ` — ${s.duration_minutes} min` : '';
+    if (s.price == null) return `  • ${name}${dur}`;
+    const base  = Number(s.price);
+    let final   = base;
+    let discTag = '';
+    if (s.discount_type === 'percent' && s.discount_value) {
+      final   = base * (1 - Number(s.discount_value) / 100);
+      discTag = ` (${s.discount_value}% de descuento, precio final $${final.toFixed(2)})`;
+    } else if (s.discount_type === 'fixed' && s.discount_value) {
+      final   = Math.max(0, base - Number(s.discount_value));
+      discTag = ` (descuento $${Number(s.discount_value).toFixed(2)}, precio final $${final.toFixed(2)})`;
+    }
+    const priceLabel = discTag ? `$${base.toFixed(2)}${discTag}` : `$${base.toFixed(2)}`;
+    return `  • ${name}${dur} — ${priceLabel}`;
+  }).join('\n');
+}
+
 function formatClosures(rows: Record<string, unknown>[] | null): string {
   if (!rows?.length) return '  Ninguno próximo.';
   return rows.map(r => {
@@ -286,9 +307,10 @@ serve(async (req: Request) => {
     const _nowUTCForSchedule = new Date();
     const _todayUY = new Date(_nowUTCForSchedule.getTime() - 3 * 60 * 60 * 1000)
       .toISOString().slice(0, 10);
-    const [{ data: scheduleRows }, { data: closureRows }] = await Promise.all([
+    const [{ data: scheduleRows }, { data: closureRows }, { data: serviceRows }] = await Promise.all([
       supabase.from('clinic_schedule').select('day_of_week, is_open, open_time, close_time').eq('clinic_id', clinicId).order('day_of_week'),
       supabase.from('clinic_closures').select('date, reason, reason_label, accepts_emergencies').eq('clinic_id', clinicId).gte('date', _todayUY).order('date').limit(10),
+      supabase.from('clinic_services').select('name, duration_minutes, price, discount_type, discount_value').eq('clinic_id', clinicId).eq('is_active', true).order('created_at'),
     ]);
 
     if (clinicError) {
@@ -406,6 +428,7 @@ serve(async (req: Request) => {
 
     const scheduleText  = formatSchedule(scheduleRows ?? []);
     const closuresText  = formatClosures(closureRows  ?? []);
+    const servicesText  = formatServices(serviceRows  ?? []);
 
     const COMMON_BLOCK = `
 ━━━ GUÍA DE ESCENARIOS ━━━
@@ -446,13 +469,23 @@ serve(async (req: Request) => {
   → Si el hilo ya muestra que preguntaste "¿para qué día?" y el paciente respondió con día y hora → ejecutá reschedule_appointment ya. No volvás a preguntar.
   → Si tiene varios turnos y no especificó cuál → mostrá la lista y preguntá cuál mover.
 
-▸ CONSULTA DE PRECIOS ("¿cuánto sale?", "¿qué precio tiene?", "¿cuánto cuesta una limpieza?"):
-  → NUNCA inventes precios ni rangos. Los precios dependen de cada caso.
-  → Respondé: "Los precios dependen del tratamiento y de cada caso. Para darte un presupuesto exacto, lo mejor es que coordines una consulta. ¿Querés que te ayude con eso?"
+▸ LISTA DE ESPERA ("si se libera", "me pueden avisar", "avisarme si hay", "quiero uno antes", "anotarme", "lista de espera", "cuando haya un lugar", "si cancela alguien"):
+  → Esta intención es DISTINTA de agendar. El paciente quiere que lo avisen cuando se libere un turno.
+  → NO ofrezcas agendar directamente — anotalo en lista de espera primero con add_to_waitlist.
+  → Si ya indicó servicio y/o fechas → llamá add_to_waitlist AHORA con esos datos.
+  → Si no indicó nada específico → llamá add_to_waitlist igual (sin servicio ni fechas).
+  ⚠ OBLIGATORIO: NUNCA digas "lo anoto", "anotado", "te aviso", "ya está" sin haber llamado add_to_waitlist PRIMERO. La notificación la envía el sistema automáticamente.
+  → Tras el éxito: "Listo, quedaste anotado en la lista de espera. Te avisamos por acá en cuanto se libere un turno."
 
-▸ CONSULTA DE SERVICIOS ("¿hacen blanqueamiento?", "¿atienden ortodoncia?", "¿qué servicios tienen?"):
-  → Solo confirmá lo que sabés con certeza. Si no sabés → derivá.
-  → "Para más detalle sobre servicios disponibles, podemos ayudarte directamente. ¿Querés que alguien del equipo te contacte, o preferís venir a una consulta inicial?"
+▸ CONSULTA DE PRECIOS ("¿cuánto sale?", "¿qué precio tiene?", "¿cuánto cuesta una limpieza?"):
+  → Si el servicio figura en SERVICIOS DE LA CLÍNICA con precio → informalo directamente, incluyendo el precio final con descuento si aplica.
+  → Si el servicio NO figura o no tiene precio → respondé: "Los precios varían según el tratamiento y cada caso particular. Para un presupuesto preciso, lo ideal es coordinar una consulta. ¿Le ayudo a agendar?"
+  → NUNCA inventes precios para servicios que no están en la lista.
+
+▸ CONSULTA DE SERVICIOS ("¿hacen blanqueamiento?", "¿atienden ortodoncia?", "¿qué servicios tienen?", "¿qué ofrecen?"):
+  → Si pregunta por un servicio específico: confirmá si está en SERVICIOS DE LA CLÍNICA, si no está → derivá al equipo.
+  → Si pregunta por la lista completa: mostrá los servicios activos de SERVICIOS DE LA CLÍNICA con sus precios.
+  → Si no hay servicios configurados → "Para más detalle sobre los servicios disponibles, podemos ayudarte directamente. ¿Querés que alguien del equipo te contacte?"
 
 ▸ CONSULTA DE OBRA SOCIAL / MUTUAL ("¿aceptan IAMC?", "¿tienen convenio con X?", "¿trabajan con FONASA?"):
   → No inventes información de convenios que no tenés confirmada.
@@ -524,6 +557,9 @@ ${scheduleText}
 DÍAS NO DISPONIBLES PRÓXIMOS:
 ${closuresText}
 
+SERVICIOS DE LA CLÍNICA (activos, con precios donde están configurados):
+${servicesText}
+
 FECHA Y HORA ACTUAL (hora Uruguay): ${fechaHoy}, ${horaHoy}
 
 CALENDARIO — REGLA ABSOLUTA: cuando el paciente mencione un día, buscá en esta lista y copiá la fecha ISO exacta. NUNCA calcules fechas por tu cuenta.
@@ -531,16 +567,26 @@ ${proximosDias}
 
 FLUJO PARA CONTACTOS NUEVOS — seguí estos pasos en orden:
 
-PASO 1 → Saludá y respondé si preguntó algo. Si solo dijo "hola", presentate brevemente y preguntá en qué podés ayudar.
-PASO 2 → Pedile su nombre y apellido. Solo una pregunta: "¿Me podés decir tu nombre completo para registrarte?"
-          Esperá a que lo dé. No registres sin nombre confirmado.
+PASO 1 → Analizá el primer mensaje:
+          - Si incluye nombre Y apellido (ej: "Hola, soy María González", "Soy Pedro López", "Mi nombre es Ana García") → saludá brevemente Y pasá de inmediato al PASO 3 (registrá sin esperar más).
+          - Si solo dijo "hola" o un saludo sin nombre → presentate brevemente y preguntá en qué podés ayudar.
+PASO 2 → Analizá el mensaje recibido:
+          a) Si el mensaje incluye nombre Y apellido explícitos ("Soy Juan Pérez", "Me llamo María González", "Hola, soy Pedro López", "mi nombre es Ana García") → pasá DIRECTAMENTE al PASO 3, llamá register_patient ya, sin preguntar nada más.
+          b) Si el mensaje solo tiene un primer nombre o es un saludo sin nombre → presentate y preguntá: "¿Me podés decir tu nombre completo para registrarte?"
+          c) Si ya hay un mensaje anterior en el historial donde el paciente dio su nombre completo → usá ese nombre y pasá al PASO 3 sin volver a preguntar.
+          REGLA: nunca pedís el apellido si ya aparece un apellido en el mensaje o en el historial.
 PASO 3 → Llamá register_patient con el nombre completo. El teléfono lo toma el sistema solo.
-PASO 4 → Recién después preguntá si quiere agendar turno. Si sí: pedí servicio → día → hora, de a uno.
+PASO 4 → Preguntá si quiere agendar turno. Si sí: pedí servicio → día → hora, de a uno.
           Con los tres datos: llamá schedule_appointment.
+PASO 4b (LISTA DE ESPERA) → Si el paciente quiere anotarse para cuando se libere un turno:
+          1. Si todavía no se llamó register_patient → llamá register_patient PRIMERO.
+          2. Luego llamá add_to_waitlist de inmediato con los datos disponibles.
+          ⚠ NUNCA confirmes la inscripción en lista de espera sin haber llamado add_to_waitlist.
 
 REGLAS ESTRICTAS:
 - Nunca llamar register_patient sin nombre Y apellido confirmados
 - Nunca llamar schedule_appointment antes de register_patient
+- Para add_to_waitlist en paciente nuevo: register_patient primero, en la misma ronda si es posible
 - Si pregunta por la clínica (dirección, servicios, precios) → respondé primero, después continuá con el paso 2
 ${COMMON_BLOCK}
 
@@ -557,6 +603,9 @@ ${scheduleText}
 
 DÍAS NO DISPONIBLES PRÓXIMOS:
 ${closuresText}
+
+SERVICIOS DE LA CLÍNICA (activos, con precios donde están configurados):
+${servicesText}
 
 FECHA Y HORA ACTUAL (hora Uruguay): ${fechaHoy}, ${horaHoy}
 
@@ -680,6 +729,32 @@ TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 orac
           required: ['full_name'],
         },
       }] : []),
+      {
+        name:        'add_to_waitlist',
+        description: 'Anota al paciente en la lista de espera para que lo avisen cuando se libere un turno. Usar cuando el paciente dice "avisarme si hay un turno", "lista de espera", "quiero uno antes", "si se libera algo", "si cancela alguien". SIEMPRE llamar este tool — nunca confirmar la inscripción de forma verbal sin haberlo llamado primero.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            preferred_service: {
+              type:        'string',
+              description: 'Servicio que quiere el paciente (opcional). Si lo mencionó, ponerlo aquí.',
+            },
+            preferred_date_from: {
+              type:        'string',
+              description: 'Fecha más temprana que le interesa, formato YYYY-MM-DD (opcional)',
+            },
+            preferred_date_to: {
+              type:        'string',
+              description: 'Fecha más tardía que le interesa, formato YYYY-MM-DD (opcional)',
+            },
+            notes: {
+              type:        'string',
+              description: 'Cualquier detalle adicional que mencionó el paciente (opcional)',
+            },
+          },
+          required: [],
+        },
+      },
     ];
 
     // ─── Helper: extraer texto del response de Claude ─────────────────────────
@@ -841,6 +916,37 @@ TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 orac
           if (confirmErr) { console.error('[ai-agent-reply] confirm error:', confirmErr.message); return { success: false, error: confirmErr.message }; }
           console.log('[ai-agent-reply] Confirmed appointment:', input.appointment_id);
           return { success: true, message: 'Turno confirmado correctamente.' };
+
+        // ── Tool: add_to_waitlist ────────────────────────────────────────────────
+        } else if (toolBlock.name === 'add_to_waitlist') {
+          const input = toolBlock.input as {
+            preferred_service?: string; preferred_date_from?: string;
+            preferred_date_to?: string; notes?: string;
+          };
+          console.log('[ai-agent-reply] Tool: add_to_waitlist', JSON.stringify(input));
+
+          // Try to get fresh full_name if patient was just registered this round
+          let finalFullName = String(patient?.full_name ?? '');
+          if (!finalFullName && resolvedPatientId) {
+            const { data: freshPat } = await supabase.from('patients').select('full_name').eq('id', resolvedPatientId).maybeSingle();
+            finalFullName = String(freshPat?.full_name ?? conv.phone_number);
+          }
+          if (!finalFullName) finalFullName = String(conv.phone_number);
+
+          const { error: wlErr } = await supabase.from('waiting_list').insert({
+            clinic_id:    clinicId,
+            patient_id:   resolvedPatientId ?? null,
+            phone_number: conv.phone_number,
+            full_name:    finalFullName,
+            service:      input.preferred_service ?? null,
+            date_from:    input.preferred_date_from ?? null,
+            date_to:      input.preferred_date_to   ?? null,
+            notes:        input.notes ?? null,
+            status:       'pending',
+          });
+          if (wlErr) { console.error('[ai-agent-reply] waitlist error:', wlErr.message); return { success: false, error: wlErr.message }; }
+          console.log('[ai-agent-reply] Added to waitlist:', finalFullName, '| service:', input.preferred_service ?? 'any');
+          return { success: true, message: `${finalFullName} anotado/a en lista de espera${input.preferred_service ? ' para ' + input.preferred_service : ''}. El sistema avisará cuando se libere un turno.` };
         }
 
         return { success: false, error: `Tool no reconocido: ${toolBlock.name}` };

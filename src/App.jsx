@@ -19,6 +19,7 @@ import { Automatizaciones }from './pages/Automatizaciones';
 import { Inbox }           from './pages/Inbox';
 import { Reportes }        from './pages/Reportes';
 import { Configuracion }   from './pages/Configuracion';
+import { ListaEspera }    from './pages/ListaEspera';
 import { NotFound }        from './pages/NotFound';
 
 export function App() {
@@ -48,6 +49,7 @@ export function App() {
             <Route path="inbox"            element={<Inbox />} />
             <Route path="reportes"         element={<Reportes />} />
             <Route path="configuracion"    element={<Configuracion />} />
+            <Route path="lista-espera"     element={<ListaEspera />} />
           </Route>
 
           {/* Fallback */}
