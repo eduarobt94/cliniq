@@ -205,8 +205,7 @@ export function DatePicker({ value, onChange, disabled, min, schedule, closures 
 
       {open && (
         <div
-          className="absolute left-0 top-[calc(100%+4px)] z-50 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[12px] shadow-xl"
-          style={{ animation: 'cqModalIn 160ms cubic-bezier(.2,.7,.2,1)' }}
+          className="cq-modal-in-fast absolute left-0 top-[calc(100%+4px)] z-50 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[12px] shadow-xl"
         >
           <Calendar
             value={value}
@@ -276,7 +275,7 @@ function ScrollColumn({ items, selected, onSelect, colRef }) {
             style={{ height: ITEM_H }}
             className={`flex items-center justify-center font-mono text-[15px] cursor-pointer select-none transition-colors rounded-[7px]
               ${item === selected
-                ? 'text-[var(--cq-accent)] font-semibold'
+                ? 'text-[var(--cq-accent)]'
                 : 'text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)]'
               }`}
           >
@@ -354,8 +353,7 @@ export function TimePicker({ value, onChange, disabled }) {
       {/* Dropdown */}
       {open && (
         <div
-          className="absolute left-0 top-[calc(100%+4px)] z-50 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[12px] shadow-xl overflow-hidden"
-          style={{ animation: 'cqModalIn 160ms cubic-bezier(.2,.7,.2,1)' }}
+          className="cq-modal-in-fast absolute left-0 top-[calc(100%+4px)] z-50 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[12px] shadow-xl overflow-hidden"
         >
           <div className="flex items-center px-2 pt-3 pb-2 gap-1">
             <ScrollColumn items={HOURS}   selected={hStr} onSelect={selectH} colRef={hRef} />

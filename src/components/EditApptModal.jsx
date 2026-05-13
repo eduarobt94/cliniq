@@ -83,8 +83,7 @@ export function EditApptModal({ appt, onClose, onSuccess }) {
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div
         ref={containerRef}
-        className="relative w-full max-w-[480px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6 max-h-[90vh] overflow-y-auto"
-        style={{ animation: 'cqModalIn 220ms cubic-bezier(.2,.7,.2,1)' }}
+        className="cq-modal-in relative w-full max-w-[480px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6 max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-start justify-between mb-5">
           <div>

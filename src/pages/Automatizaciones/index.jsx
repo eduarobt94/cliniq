@@ -37,6 +37,7 @@ const PREVIEW_VARS = {
   clinic_name:  'Consultorio Ejemplo',
   date:         'martes 4 de junio',
   time:         '10:00',
+  review_url:   'https://g.page/r/ejemplo/review',
 };
 
 // ─── EditModal ────────────────────────────────────────────────────────────────
@@ -50,8 +51,8 @@ function EditModal({ automation, onSave, onClose }) {
   const [message,        setMessage]        = useState(
     automation.message_template ??
     (automation.type === 'patient_reactivation'
-      ? 'Hola {patient_name}! 👋 Hace un tiempo que no te vemos en {clinic_name}. ¿Querés agendar una consulta? Respondé este mensaje y te ayudamos.'
-      : '¡Gracias por tu visita a {clinic_name}, {patient_name}! 🙏 Si te pareció bien la atención, nos ayudaría mucho una reseña en Google. ¡Muchas gracias!')
+      ? 'Hola {patient_name}! 👋 Hace un tiempo que no te vemos en {clinic_name}. ¿Quiere agendar una consulta? Responda este mensaje y le ayudamos.'
+      : '¡Gracias por su visita a {clinic_name}, {patient_name}! 🙏 Si le pareció bien la atención, nos ayudaría mucho una reseña en Google: {review_url} ¡Muchas gracias!')
   );
 
   const [saving, setSaving] = useState(false);
@@ -111,6 +112,7 @@ function EditModal({ automation, onSave, onClose }) {
           </div>
           <button
             onClick={onClose}
+            aria-label="Cerrar"
             className="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)]"
           >
             <Icons.Close size={16} />
@@ -198,7 +200,7 @@ function EditModal({ automation, onSave, onClose }) {
                 value={message}
                 onChange={setMessage}
                 preview={preview}
-                placeholders={['patient_name', 'clinic_name']}
+                placeholders={['patient_name', 'clinic_name', 'review_url']}
               />
             </>
           )}
@@ -231,6 +233,7 @@ const PLACEHOLDER_LABELS = {
   clinic_name:  'Nombre de la clínica',
   date:         'Fecha del turno',
   time:         'Hora del turno',
+  review_url:   'Link de reseña Google',
 };
 
 // ─── Message editor with preview ─────────────────────────────────────────────
@@ -393,10 +396,10 @@ export function Automatizaciones() {
     return { error: err };
   }, [updateTemplate, push]);
 
-  const activeCount   = automations.filter(a => a.enabled).length;
-  const inactiveCount = automations.filter(a => !a.enabled).length;
+  const activeCount   = useMemo(() => automations.filter(a =>  a.enabled).length, [automations]);
+  const inactiveCount = useMemo(() => automations.filter(a => !a.enabled).length, [automations]);
 
-  const statCards = [
+  const statCards = useMemo(() => [
     { label: 'Mensajes enviados',  value: stats?.total_sent   != null ? String(stats.total_sent)  : '—' },
     { label: 'Tasa de éxito',      value: stats?.success_rate != null ? `${stats.success_rate}%`  : '—' },
     {
@@ -405,11 +408,14 @@ export function Automatizaciones() {
         ? new Date(stats.last_sent_at).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' })
         : 'Sin datos',
     },
-  ];
+  ], [stats]);
 
   // Preferred display order
   const ORDER = ['appointment_reminder', 'review_request', 'patient_reactivation'];
-  const sorted = [...automations].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type));
+  const sorted = useMemo(
+    () => [...automations].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type)),
+    [automations],
+  );
 
   return (
     <div className="flex flex-col gap-6">

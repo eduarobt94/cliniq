@@ -382,3 +382,34 @@ npx supabase secrets list
 | XSS | ✅ Sin dangerouslySetInnerHTML |
 | SQL injection | ✅ PostgREST parametriza todo |
 | npm audit | ✅ 0 vulnerabilidades |
+
+---
+
+## 🧪 REGRESIÓN PENDIENTE (2026-05-07)
+
+Se aplicaron fixes de auditoría. Usar `claude --chrome` para verificar en el browser:
+
+### Checklist de pruebas
+1. Navegar `localhost:5173/dashboard` → sin errores en consola
+2. KPIs del día muestran números (no error PGRST116)
+3. Abrir modal "Nuevo turno" → se anima al abrir con `.cq-modal-in`
+4. Tabla Pacientes → inspect `<th>` debe tener `scope="col"`
+5. Lista de espera `/dashboard/lista-espera` → carga sin errores
+6. Inbox `/dashboard/inbox` → conversaciones visibles
+7. Reportes `/dashboard/reportes` → gráficos de recharts cargan
+8. Automatizaciones → 3 cards, badge "1 activa · 2 inactivas"
+9. Abrir EditModal en Automatizaciones → botón cerrar tiene `aria-label="Cerrar"`
+10. Configuración → carga sin errores
+
+### Fixes aplicados (verificar no regresión)
+- `DashboardErrorBoundary` envuelve cada ruta del dashboard
+- `useKpis` usa `.maybeSingle()` con fallback a ceros
+- `useAutomations` tiene try/catch/finally
+- `useNotifications` tiene caché de nombres (`_patientNameCache`)
+- `handleStatusChange` en ListaEspera usa `useCallback`
+- `handleConversationCreated/Delete` en Inbox usan `useCallback`
+- Vite: chunks `vendor-recharts` y `vendor-supabase` separados
+- `--cq-fg-muted: oklch(0.48...)` en globals.css
+- Clases `.cq-modal-in` y `.cq-modal-in-fast` en globals.css
+- `scope="col"` en `<th>` de Pacientes, ListaEspera, Reportes
+- `aria-label="Cerrar"` en EditModal de Automatizaciones

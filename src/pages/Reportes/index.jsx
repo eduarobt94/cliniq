@@ -183,11 +183,14 @@ function Skeleton({ className = '' }) {
 
 // ─── KPI card ─────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, hint, loading }) {
+function KpiCard({ label, value, hint, loading, accent }) {
+  const valueColor = accent === 'warn'
+    ? 'text-[var(--cq-warn)]'
+    : 'text-[var(--cq-fg)]';
   return (
     <div className="bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[12px] p-5 flex flex-col gap-3">
       <MonoLabel>{label}</MonoLabel>
-      <div className="text-[30px] font-semibold leading-none text-[var(--cq-fg)]">
+      <div className={`text-[30px] font-semibold leading-none ${valueColor}`}>
         {loading ? <Skeleton className="h-8 w-20" /> : (value ?? '—')}
       </div>
       <p className="text-[12px] text-[var(--cq-fg-muted)]">{hint}</p>
@@ -207,6 +210,8 @@ export function Reportes() {
   const confirmRateStr = data ? `${data.confirmRate}%`        : null;
   const cancelledStr   = data ? String(data.cancelled)         : null;
   const msgCountStr    = data ? data.msgCount.toLocaleString() : null;
+  const noShowStr      = data ? String(data.noShows)           : null;
+  const noShowRateStr  = data ? `${data.noShowRate}%`          : null;
   const autoSentStr    = data?.autoStats?.total_sent != null  ? String(data.autoStats.total_sent)   : null;
   const autoRateStr    = data?.autoStats?.success_rate != null ? `${data.autoStats.success_rate}%` : null;
 
@@ -244,7 +249,7 @@ export function Reportes() {
       )}
 
       {/* KPI cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           label="Tasa de confirmación"
           value={confirmRateStr}
@@ -256,6 +261,13 @@ export function Reportes() {
           value={cancelledStr}
           hint="en el período seleccionado"
           loading={loading}
+        />
+        <KpiCard
+          label="No-shows"
+          value={noShowStr}
+          hint={noShowRateStr ? `${noShowRateStr} del total — sin presentarse ni cancelar` : 'sin presentarse ni cancelar'}
+          loading={loading}
+          accent={data?.noShows > 0 ? 'warn' : undefined}
         />
         <KpiCard
           label="Mensajes enviados"
@@ -302,9 +314,9 @@ export function Reportes() {
             <table className="w-full text-[13.5px]">
               <thead>
                 <tr>
-                  <th className="text-left pb-2"><MonoLabel>Nombre</MonoLabel></th>
-                  <th className="text-center pb-2"><MonoLabel>Visitas</MonoLabel></th>
-                  <th className="text-right pb-2"><MonoLabel>Próximo turno</MonoLabel></th>
+                  <th scope="col" className="text-left pb-2"><MonoLabel>Nombre</MonoLabel></th>
+                  <th scope="col" className="text-center pb-2"><MonoLabel>Visitas</MonoLabel></th>
+                  <th scope="col" className="text-right pb-2"><MonoLabel>Próximo turno</MonoLabel></th>
                 </tr>
               </thead>
               <tbody>

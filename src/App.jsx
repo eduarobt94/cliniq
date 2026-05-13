@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { ErrorBoundary }   from './components/ErrorBoundary';
-import { AuthProvider }    from './context/AuthContext';
+import { ErrorBoundary }          from './components/ErrorBoundary';
+import { DashboardErrorBoundary } from './components/DashboardErrorBoundary';
+import { AuthProvider }           from './context/AuthContext';
 import { ProtectedRoute }  from './components/ProtectedRoute';
 import { Landing }         from './pages/Landing';
 import { Login }           from './pages/Login';
@@ -19,7 +20,7 @@ import { Automatizaciones }from './pages/Automatizaciones';
 import { Inbox }           from './pages/Inbox';
 import { Reportes }        from './pages/Reportes';
 import { Configuracion }   from './pages/Configuracion';
-import { ListaEspera }    from './pages/ListaEspera';
+import { ListaEspera }     from './pages/ListaEspera';
 import { NotFound }        from './pages/NotFound';
 
 export function App() {
@@ -42,14 +43,14 @@ export function App() {
 
           {/* Dashboard — layout compartido con subrutas */}
           <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-            <Route index                   element={<Dashboard />} />
-            <Route path="agenda"           element={<Agenda />} />
-            <Route path="pacientes"        element={<Pacientes />} />
-            <Route path="automatizaciones" element={<Automatizaciones />} />
-            <Route path="inbox"            element={<Inbox />} />
-            <Route path="reportes"         element={<Reportes />} />
-            <Route path="configuracion"    element={<Configuracion />} />
-            <Route path="lista-espera"     element={<ListaEspera />} />
+            <Route index                   element={<DashboardErrorBoundary><Dashboard /></DashboardErrorBoundary>} />
+            <Route path="agenda"           element={<DashboardErrorBoundary><Agenda /></DashboardErrorBoundary>} />
+            <Route path="pacientes"        element={<DashboardErrorBoundary><Pacientes /></DashboardErrorBoundary>} />
+            <Route path="automatizaciones" element={<DashboardErrorBoundary><Automatizaciones /></DashboardErrorBoundary>} />
+            <Route path="inbox"            element={<DashboardErrorBoundary><Inbox /></DashboardErrorBoundary>} />
+            <Route path="reportes"         element={<DashboardErrorBoundary><Reportes /></DashboardErrorBoundary>} />
+            <Route path="lista-espera"     element={<DashboardErrorBoundary><ListaEspera /></DashboardErrorBoundary>} />
+            <Route path="configuracion"    element={<DashboardErrorBoundary><Configuracion /></DashboardErrorBoundary>} />
           </Route>
 
           {/* Fallback */}

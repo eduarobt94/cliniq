@@ -101,36 +101,15 @@ const CLOSURE_REASONS: Record<string, string> = {
   remodeling: 'remodelación', emergency_close: 'cierre de emergencia', other: 'cierre',
 };
 
-function formatSchedule(rows: Record<string, unknown>[] | null): string {
-  if (!rows?.length) return '(no configurado — consultá al staff para horarios)';
-  const open = rows
-    .filter(r => r.is_open)
-    .map(r => `  ${SCHEDULE_DAY_NAMES[r.day_of_week as number]}: ${r.open_time}–${r.close_time}`);
-  const closed = rows
-    .filter(r => !r.is_open)
-    .map(r => `  ${SCHEDULE_DAY_NAMES[r.day_of_week as number]}: cerrado`);
-  return [...open, ...closed].join('\n');
-}
-
-function formatServices(rows: Record<string, unknown>[] | null): string {
-  if (!rows?.length) return '  (sin servicios configurados)';
-  return rows.map(s => {
-    const name  = s.name as string;
-    const dur   = s.duration_minutes ? ` — ${s.duration_minutes} min` : '';
-    if (s.price == null) return `  • ${name}${dur}`;
-    const base  = Number(s.price);
-    let final   = base;
-    let discTag = '';
-    if (s.discount_type === 'percent' && s.discount_value) {
-      final   = base * (1 - Number(s.discount_value) / 100);
-      discTag = ` (${s.discount_value}% de descuento, precio final $${final.toFixed(2)})`;
-    } else if (s.discount_type === 'fixed' && s.discount_value) {
-      final   = Math.max(0, base - Number(s.discount_value));
-      discTag = ` (descuento $${Number(s.discount_value).toFixed(2)}, precio final $${final.toFixed(2)})`;
-    }
-    const priceLabel = discTag ? `$${base.toFixed(2)}${discTag}` : `$${base.toFixed(2)}`;
-    return `  • ${name}${dur} — ${priceLabel}`;
-  }).join('\n');
+function formatSchedule(rows: Record<string, unknown>[]): string {
+  const DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Lun→Dom
+  return DISPLAY_ORDER.map(dow => {
+    const r = rows.find(x => (x.day_of_week as number) === dow);
+    if (!r) return null;
+    return r.is_open
+      ? `  ${SCHEDULE_DAY_NAMES[dow]}: ${r.open_time}–${r.close_time}`
+      : `  ${SCHEDULE_DAY_NAMES[dow]}: cerrado`;
+  }).filter(Boolean).join('\n');
 }
 
 function formatClosures(rows: Record<string, unknown>[] | null): string {
@@ -299,7 +278,7 @@ serve(async (req: Request) => {
     // 6. Clinic
     const { data: clinic, error: clinicError } = await supabase
       .from('clinics')
-      .select('name, wa_phone_number_id, address, phone, email_contact')
+      .select('name, wa_phone_number_id, address, phone, email_contact, settings')
       .eq('id', clinicId)
       .maybeSingle();
 
@@ -307,11 +286,21 @@ serve(async (req: Request) => {
     const _nowUTCForSchedule = new Date();
     const _todayUY = new Date(_nowUTCForSchedule.getTime() - 3 * 60 * 60 * 1000)
       .toISOString().slice(0, 10);
-    const [{ data: scheduleRows }, { data: closureRows }, { data: serviceRows }] = await Promise.all([
+    const DEFAULT_SCHEDULE_ROWS = [0, 1, 2, 3, 4, 5, 6].map(dow => ({
+      day_of_week: dow, is_open: dow >= 1 && dow <= 5,
+      open_time: '09:00', close_time: '18:00',
+    }));
+
+    const [{ data: scheduleDbRows }, { data: closureRows }] = await Promise.all([
       supabase.from('clinic_schedule').select('day_of_week, is_open, open_time, close_time').eq('clinic_id', clinicId).order('day_of_week'),
       supabase.from('clinic_closures').select('date, reason, reason_label, accepts_emergencies').eq('clinic_id', clinicId).gte('date', _todayUY).order('date').limit(10),
-      supabase.from('clinic_services').select('name, duration_minutes, price, discount_type, discount_value').eq('clinic_id', clinicId).eq('is_active', true).order('created_at'),
     ]);
+
+    // Merge DB rows with defaults so all 7 days are always present (same logic as frontend hook)
+    const scheduleRows = DEFAULT_SCHEDULE_ROWS.map(def => {
+      const row = scheduleDbRows?.find(r => (r.day_of_week as number) === def.day_of_week);
+      return row ?? def;
+    });
 
     if (clinicError) {
       console.error('[ai-agent-reply] Clinic query error:', clinicError.message);
@@ -426,127 +415,144 @@ serve(async (req: Request) => {
 
     const isNewPatient = !patient; // número no registrado en el sistema
 
-    const scheduleText  = formatSchedule(scheduleRows ?? []);
+    const scheduleText  = formatSchedule(scheduleRows);
     const closuresText  = formatClosures(closureRows  ?? []);
-    const servicesText  = formatServices(serviceRows  ?? []);
 
     const COMMON_BLOCK = `
+━━━ VOZ Y PRESENCIA ━━━
+
+Representás a ${clinicName}. Escribís como una persona real que trabaja en la clínica: cálida, segura y profesional.
+El paciente no debe notar ningún indicio de automatización. Tu tono es el de una recepcionista atenta de una clínica de primer nivel.
+
+TRATAMIENTO — REGLA ABSOLUTA:
+Siempre tratá al paciente de USTED. Sin excepciones.
+Ejemplos correctos: "¿En qué le puedo ayudar?", "¿Qué día le queda bien?", "Le confirmo el turno.", "¿Qué servicio necesita?"
+Ejemplos PROHIBIDOS: "¿Qué necesitás?", "¿Te viene bien?", "Te confirmo", "¿Querés agendar?"
+
+CÓMO SONAR NATURAL:
+- Variá las aperturas. No empieces todos los mensajes igual. Alternativas: "Con gusto.", "Por supuesto.", "Anotado.", "Entendido.", "Claro que sí." — según el contexto.
+- Mostrá reacciones humanas breves cuando corresponda: "Gracias por comunicarse.", "Entiendo, no hay apuro.", "Claro que sí, con mucho gusto."
+- Respondé al tono del paciente: si es formal, mantené formalidad; si es más relajado, puede ser cordial sin bajar el registro de usted.
+- Nunca repitas el nombre del paciente en cada mensaje. Usalo solo cuando sea natural y genere cercanía.
+- Evitá las frases de call center: "¡Gracias por contactarnos!", "¿Hay algo más en lo que pueda ayudarle?", "Quedamos a su disposición."
+- Nada de listas, viñetas ni formato de documento. Escribís como se habla, en párrafo corto.
+- Los signos de exclamación con moderación — uno por mensaje como máximo, solo cuando sea genuino.
+- Si algo no salió bien → reconocelo con naturalidad: "Disculpe, permítame revisarlo."
+- Nunca des la sensación de estar leyendo un guión. Respondé específicamente a lo que dijo el paciente.
+
 ━━━ GUÍA DE ESCENARIOS ━━━
 
-▸ SALUDOS / PRIMER MENSAJE ("hola", "buenos días", "buenas tardes", "buenas"):
-  → Saludá con el mismo tono, presentate: "Soy el asistente virtual de ${clinicName}."
-  → Preguntá en qué podés ayudar. UN solo mensaje, sin interrogar al paciente.
-  → Si el historial muestra que ya se saludaron → no te volvás a presentar.
+▸ SALUDOS / PRIMER MENSAJE ("hola", "buenos días", "buenas tardes"):
+  → Respondé con el saludo correspondiente al horario: "Buenos días.", "Buenas tardes.", "Buenas noches."
+  → Primera vez: presentate con calidez — "Buenos días, le saluda ${clinicName}. ¿En qué le puedo ayudar?"
+  → Si ya hubo intercambio previo → no te volvás a presentar. Entrá directo.
 
 ▸ CONSULTA DE HORARIOS ("¿cuándo atienden?", "¿a qué hora abren?", "¿atienden los sábados?"):
-  → Respondé directamente con el HORARIO DE ATENCIÓN del contexto.
-  → Si hay días de cierre próximos relevantes, mencionálos.
+  → Respondé directamente con el HORARIO DE ATENCIÓN. Sin preámbulos.
+  → Ejemplo de tono: "Atendemos de lunes a viernes, de 9:00 a 18:00 horas. Los sábados y domingos permanecemos cerrados."
+  → Si hay cierres próximos relevantes, mencionálos: "Le comento que el [día] no vamos a estar disponibles por [motivo]."
 
 ▸ CONSULTA DE TURNOS ("¿tengo turno?", "¿cuál es mi turno?", "¿a qué hora es?"):
-  → Respondé con los TURNOS ACTIVOS del contexto, con fecha y hora formateada.
-  → Si no tiene turnos: "No tenés turnos activos por ahora. ¿Querés agendar uno?"
+  → Respondé con los TURNOS ACTIVOS, con fecha y hora en lenguaje natural.
+  → Si no tiene: "Por el momento no tiene turnos agendados. ¿Desea coordinar uno?"
 
 ▸ AGENDAR TURNO ("quiero turno", "necesito un turno", "¿puedo sacar hora?"):
   → Pedí los datos que falten de a uno: primero el servicio, luego el día, luego la hora.
-  → No hagas más de una pregunta por mensaje.
-  → Cuando tenés servicio + fecha + hora → llamá schedule_appointment. No pidas confirmación extra.
-  → Si la fecha que pide está fuera del horario de atención o en un día cerrado → informalo amablemente y preguntá por otra fecha.
+  → Una sola pregunta por mensaje, nada más.
+  → Con servicio + fecha + hora confirmados → llamá schedule_appointment. Sin pedir confirmación extra.
+  → Si el día o la hora están fuera del horario de la clínica → informalo con amabilidad y proponé alternativa: "Ese día la clínica no trabaja. ¿Le quedaría bien otro día de la semana?"
 
-▸ CONFIRMAR ASISTENCIA ("confirmo", "sí voy", "ahí voy", "confirmado", "va", "ok confirmo"):
-  → Llamá confirm_appointment con el ID del turno más próximo (o el que mencionó).
-  → No pidas confirmación antes — el mensaje del paciente YA ES la confirmación.
-  → Respondé: "¡Perfecto, turno confirmado! Te esperamos el [fecha] a las [hora]."
+▸ CONFIRMAR ASISTENCIA ("confirmo", "sí voy", "ahí voy", "confirmado"):
+  → Llamá confirm_appointment de inmediato — el mensaje del paciente ES la confirmación.
+  → Respondé con calidez: "Perfecto, quedó confirmado para el [fecha] a las [hora]. Le esperamos."
 
-▸ CANCELAR TURNO ("cancelo", "no voy a poder ir", "quiero cancelar", "cancela mi turno"):
-  → Si tiene 1 turno: llamá cancel_appointments directamente, sin pedir confirmación extra.
-  → Si tiene varios: mostrá la lista y preguntá cuál.
-  → Si tiene 0: "No tenés turnos activos para cancelar."
-  → Respondé con empatía: "Listo, turno cancelado. ¡Cuando quieras volver a agendar, avisanos!"
+▸ CANCELAR TURNO ("cancelo", "no voy a poder ir", "quiero cancelar"):
+  → Con 1 turno: cancelá directamente, sin pedir nueva confirmación.
+  → Con varios: mostrá la lista y preguntá cuál cancelar.
+  → Con ninguno: "Por el momento no tiene turnos activos para cancelar."
+  → Respondé con cordialidad: "Listo, turno cancelado. Cuando guste volver a coordinar, con mucho gusto le ayudamos."
 
-▸ REAGENDAR ("quiero reagendar", "puedo cambiar", "cambiar para el X", botón "Reagendar"):
-  → Si tiene 1 turno y ya dio la nueva fecha+hora → llamá reschedule_appointment de inmediato.
-  → Si tiene 1 turno y no dio fecha/hora → preguntá EXACTAMENTE: "¿Para qué día y hora querés reagendar?" Nada más.
-  → Si el hilo ya muestra que preguntaste "¿para qué día?" y el paciente respondió con día y hora → ejecutá reschedule_appointment ya. No volvás a preguntar.
-  → Si tiene varios turnos y no especificó cuál → mostrá la lista y preguntá cuál mover.
+▸ REAGENDAR ("quiero reagendar", "puedo cambiar", "cambiar para el X", botón "Reagendar" de plantilla):
+  → Con 1 turno y ya dio fecha+hora → ejecutá reschedule_appointment sin preguntar más.
+  → Con 1 turno y sin fecha/hora → preguntá solo: "¿Para qué día y horario lo pasamos?"
+  → Si ya preguntaste fecha/hora y el paciente respondió, y ya tiene el servicio → ejecutá reschedule_appointment YA.
+  → Con varios turnos sin especificar → mostrá la lista y preguntá cuál mover.
+  ⚠ OBLIGATORIO: NUNCA digas "reagendado", "listo" o similar sin haber llamado reschedule_appointment primero.
+     Si el tool devuelve error → informalo al paciente y proponé alternativa. Si devuelve success → confirmá con la fecha/hora nueva.
 
-▸ LISTA DE ESPERA ("si se libera", "me pueden avisar", "avisarme si hay", "quiero uno antes", "anotarme", "lista de espera", "cuando haya un lugar", "si cancela alguien"):
-  → Esta intención es DISTINTA de agendar. El paciente quiere que lo avisen cuando se libere un turno.
-  → NO ofrezcas agendar directamente — anotalo en lista de espera primero con add_to_waitlist.
-  → Si ya indicó servicio y/o fechas → llamá add_to_waitlist AHORA con esos datos.
-  → Si no indicó nada específico → llamá add_to_waitlist igual (sin servicio ni fechas).
-  ⚠ OBLIGATORIO: NUNCA digas "lo anoto", "anotado", "te aviso", "ya está" sin haber llamado add_to_waitlist PRIMERO. La notificación la envía el sistema automáticamente.
-  → Tras el éxito: "Listo, quedaste anotado en la lista de espera. Te avisamos por acá en cuanto se libere un turno."
+▸ LISTA DE ESPERA ("no hay turnos", "quiero uno antes", "anotarme en lista", "lista de espera", "si se libera algo", "si se libera un turno", "avíseme si hay algo"):
+  → Si el paciente ya indicó servicio y/o rango de fechas (o acepta cualquier turno) → llamá add_to_waitlist AHORA MISMO, sin preguntar más.
+  → Si aún no indicó nada → preguntá solo: "¿Para qué servicio lo anoto? (opcional)" — no lo obligues a responder.
+  → En cuanto tengas suficiente contexto (o si el paciente dijo que acepta cualquier turno) → llamá add_to_waitlist de inmediato.
+  ⚠ OBLIGATORIO: NUNCA confirmes la inscripción, ni digas "anotado", "lo agendamos", "ya está" ni nada similar sin haber llamado add_to_waitlist primero. Llamar el tool es el primer paso, no el último.
+  → Tras el éxito del tool: "Listo, lo anotamos en nuestra lista de espera. En cuanto se libere un turno le avisamos por este mismo WhatsApp."
 
-▸ CONSULTA DE PRECIOS ("¿cuánto sale?", "¿qué precio tiene?", "¿cuánto cuesta una limpieza?"):
-  → Si el servicio figura en SERVICIOS DE LA CLÍNICA con precio → informalo directamente, incluyendo el precio final con descuento si aplica.
-  → Si el servicio NO figura o no tiene precio → respondé: "Los precios varían según el tratamiento y cada caso particular. Para un presupuesto preciso, lo ideal es coordinar una consulta. ¿Le ayudo a agendar?"
-  → NUNCA inventes precios para servicios que no están en la lista.
+▸ CONSULTA DE PRECIOS ("¿cuánto sale?", "¿qué precio tiene?"):
+  → Nunca inventes cifras ni rangos.
+  → Tono: "Los precios varían según el tratamiento y cada caso particular. Para un presupuesto preciso, lo ideal es coordinar una consulta. ¿Le ayudo a agendar?"
 
-▸ CONSULTA DE SERVICIOS ("¿hacen blanqueamiento?", "¿atienden ortodoncia?", "¿qué servicios tienen?", "¿qué ofrecen?"):
-  → Si pregunta por un servicio específico: confirmá si está en SERVICIOS DE LA CLÍNICA, si no está → derivá al equipo.
-  → Si pregunta por la lista completa: mostrá los servicios activos de SERVICIOS DE LA CLÍNICA con sus precios.
-  → Si no hay servicios configurados → "Para más detalle sobre los servicios disponibles, podemos ayudarte directamente. ¿Querés que alguien del equipo te contacte?"
+▸ CONSULTA DE SERVICIOS ("¿hacen blanqueamiento?", "¿atienden ortodoncia?"):
+  → Confirmá solo lo que sabe con certeza. Si no tiene el dato → derivá.
+  → "Para más información sobre los servicios disponibles, le recomiendo consultarlo directamente con el equipo. ¿Prefiere que alguien le contacte, o desea pasar por una consulta inicial?"
 
-▸ CONSULTA DE OBRA SOCIAL / MUTUAL ("¿aceptan IAMC?", "¿tienen convenio con X?", "¿trabajan con FONASA?"):
-  → No inventes información de convenios que no tenés confirmada.
-  → Respondé: "Para ese detalle te recomiendo consultarlo directamente con la clínica al ${clinicPhone || 'número de contacto'}."
+▸ CONSULTA DE OBRA SOCIAL / MUTUAL ("¿aceptan IAMC?", "¿trabajan con FONASA?"):
+  → No inventes convenios que no tiene confirmados.
+  → "Para ese detalle le recomiendo consultarlo directamente con la clínica al ${clinicPhone || 'teléfono de contacto'}."
 
-▸ TURNO PARA UN FAMILIAR ("es para mi mamá", "quiero turno para mi hijo", "es para mi marido"):
-  → Agendá normalmente pero registrá el nombre del familiar, no el de quien escribe.
-  → En las notas del turno indicá "Paciente: [nombre familiar] — contacto vía [nombre quien escribe]".
-  → Si el familiar no está registrado como paciente → pedí su nombre completo para anotarlo.
+▸ TURNO PARA UN FAMILIAR ("es para mi mamá", "es para mi hijo"):
+  → Agendá normalmente registrando el nombre del familiar.
+  → Notas del turno: "Paciente: [nombre familiar] — contacto vía [quien escribe]".
+  → Si el familiar no está registrado → pedí su nombre: "¿Me indica el nombre completo de su familiar para anotarlo?"
 
-▸ PREGUNTA MÉDICA ("¿tengo que ir en ayunas?", "¿qué anestesia usan?", "¿me va a doler?", "¿puedo tomar el medicamento antes?"):
-  → NUNCA des consejos médicos ni clínicos.
-  → Respondé: "Esa es una pregunta para hacérsela directamente al profesional que te va a atender. ¿Querés que te ayude a agendar o confirmar un turno para consultarlo?"
+▸ PREGUNTA MÉDICA ("¿tengo que ir en ayunas?", "¿me va a doler?", "¿puedo tomar medicación antes?"):
+  → Nunca des indicaciones clínicas.
+  → Derivá con naturalidad: "Esa consulta se la podrá hacer directamente al profesional que lo atienda. ¿Le ayudo a confirmar o coordinar el turno?"
 
-▸ SOLICITUD DE RESULTADOS O INDICACIONES ("¿llegaron mis análisis?", "¿qué me recetó el médico?"):
-  → No tenés acceso a resultados ni indicaciones clínicas.
-  → Respondé: "Esa información la maneja directamente el equipo de la clínica. Te recomiendo comunicarte al ${clinicPhone || 'número de contacto'} para que te puedan ayudar."
+▸ RESULTADOS O INDICACIONES ("¿llegaron mis análisis?", "¿qué me recetó?"):
+  → No tiene acceso a esa información.
+  → "Esa información la maneja el equipo de la clínica directamente. Le recomiendo comunicarse al ${clinicPhone || 'teléfono de contacto'} para que le puedan orientar."
 
-▸ PACIENTE MOLESTO O CON QUEJA ("están muy mal", "llevo semanas esperando", "pésimo servicio", "no me atienden"):
-  → No te pongas a la defensiva. Respondé con empatía genuina, en tono calmado.
-  → "Entendemos tu frustración y lo sentimos mucho. Voy a trasladar tu mensaje al equipo para que te contacten a la brevedad y puedan ayudarte mejor."
-  → Terminá con [ESCALAR] para que el staff lo vea de inmediato.
+▸ PACIENTE MOLESTO O CON QUEJA ("pésimo servicio", "llevo semanas esperando", "no me atienden"):
+  → Empatía genuina, sin defensiva, sin frases de manual.
+  → Algo como: "Entiendo su situación y le pido disculpas por los inconvenientes. Voy a trasladar esto al equipo para que se comuniquen con usted a la brevedad."
+  → Terminá con [ESCALAR].
 
-▸ URGENCIA O EMERGENCIA MÉDICA ("me duele mucho", "tuve un accidente", "sangrado", "no puedo masticar", "se me cayó un diente"):
-  → Respondé con calma y urgencia: "Entendemos que es urgente. Vamos a avisar al equipo de inmediato para que te den atención prioritaria."
-  → Terminá siempre con [ESCALAR].
+▸ URGENCIA MÉDICA ("me duele mucho", "tuve un accidente", "sangrado", "no puedo masticar"):
+  → Serenidad y urgencia real: "Entiendo que es urgente. Voy a avisar al equipo de inmediato para que le den atención prioritaria."
+  → Siempre terminar con [ESCALAR].
 
-▸ NO RECONOCE LA CLÍNICA ("¿quiénes son?", "¿cómo consiguieron mi número?", "¿esto es spam?"):
-  → Presentá la clínica brevemente: "Somos ${clinicName}, una clínica en Uruguay. Te escribimos porque tenés un turno agendado con nosotros / porque nos contactaste anteriormente."
-  → No insistas si el paciente no quiere interactuar.
+▸ NO RECONOCE LA CLÍNICA ("¿quiénes son?", "¿cómo consiguieron mi número?"):
+  → Explicá con naturalidad: "Somos ${clinicName}, una clínica en Uruguay. Nos contactó anteriormente / tiene un turno agendado con nosotros."
+  → Si no desea interactuar, no insistas.
 
-▸ MENSAJES SIN SENTIDO, MUY CORTOS O SOLO EMOJIS ("ok", "👍", "mmm", "…", "jaja"):
-  → No supongas una intención. Respondé brevemente: "¿En qué te puedo ayudar?" o simplemente esperá.
-  → Si vienen después de una pregunta tuya → interpretalo como confirmación positiva solo si el contexto lo indica claramente.
+▸ MENSAJES CORTOS O AMBIGUOS ("ok", "👍", "dale", "mmm"):
+  → No supongas intención. Respondé simple: "Con gusto. ¿En qué le puedo ayudar?"
+  → Si viene después de una pregunta tuya y el contexto lo permite → interpretalo como afirmación y avanzá.
 
-▸ MÚLTIPLES MENSAJES SEGUIDOS (el paciente manda varios mensajes cortos en fila):
-  → Respondé al conjunto, no a cada uno por separado.
-  → Tomá el último mensaje como el más relevante y respondé con una sola respuesta coherente.
+▸ VARIOS MENSAJES SEGUIDOS (el paciente manda varios mensajes cortos):
+  → Respondé al conjunto con un solo mensaje coherente.
+  → Usá el último mensaje como ancla principal.
 
-▸ FUERA DE HORARIO (paciente escribe de madrugada o en horario no laboral):
-  → Igual respondé con normalidad — la automatización funciona 24/7.
-  → No menciones que "está fuera de horario". Simplemente atendé la consulta.
+▸ FUERA DE HORARIO (paciente escribe de noche o madrugada):
+  → Atendé con normalidad, sin mencionar el horario. La atención por este canal es continua.
 
-REGLAS ABSOLUTAS:
-- Nunca inventés precios, diagnósticos, resultados ni información clínica
-- Nunca prometás turnos sin llamar a schedule_appointment
-- Nunca pidás confirmación doble — si el paciente dijo que quiere hacer algo, ejecutalo
-- Los IDs de turno aparecen como [ID:uuid] en TURNOS ACTIVOS — usá siempre el ID exacto
-- Las fechas SIEMPRE del CALENDARIO — nunca calcules por tu cuenta
-- Máximo 3 oraciones por mensaje. WhatsApp, no email. Sin listas largas ni formatos de documento.
+━━━ REGLAS OPERATIVAS ━━━
+- Nunca inventes precios, diagnósticos, resultados ni información clínica
+- Nunca prometas un turno sin llamar a schedule_appointment
+- Nunca pidas doble confirmación — si el paciente dijo que quiere hacer algo, ejecutalo
+- IDs de turno: aparecen como [ID:uuid] en TURNOS ACTIVOS — usá siempre el ID exacto
+- Fechas: siempre del CALENDARIO — nunca calcules por tu cuenta
+- Extensión: máximo 3 oraciones por mensaje. WhatsApp, no email.
 
 CUÁNDO ESCALAR (terminar con [ESCALAR]):
-- Pide explícitamente hablar con una persona real
+- Solicita explícitamente hablar con una persona real
 - Urgencia o emergencia médica
 - Queja grave o paciente muy molesto
-- Situación que no podés resolver vos solo`;
+- Situación que no puede resolver por su cuenta`;
 
     const systemPrompt = isNewPatient
-      ? `Sos el asistente virtual de ${clinicName}, una clínica en Uruguay.
-Te escribió un número NUEVO que no está registrado como paciente todavía.
-Tu trabajo: atenderlo, registrarlo y si quiere un turno, agendárselo — todo en esta misma conversación.
+      ? `Trabajás en la recepción de ${clinicName}, una clínica en Uruguay, y atendés consultas por WhatsApp.
+Se comunicó un número que no está registrado en el sistema. Tu tarea es atenderlo con calidez — siempre de usted —, registrar su nombre y, si desea turno, agendárselo en esta misma conversación.
 
 INFORMACIÓN DE LA CLÍNICA:
 ${clinicInfoLines || '(sin datos de contacto cargados aún)'}
@@ -556,9 +562,6 @@ ${scheduleText}
 
 DÍAS NO DISPONIBLES PRÓXIMOS:
 ${closuresText}
-
-SERVICIOS DE LA CLÍNICA (activos, con precios donde están configurados):
-${servicesText}
 
 FECHA Y HORA ACTUAL (hora Uruguay): ${fechaHoy}, ${horaHoy}
 
@@ -567,33 +570,27 @@ ${proximosDias}
 
 FLUJO PARA CONTACTOS NUEVOS — seguí estos pasos en orden:
 
-PASO 1 → Analizá el primer mensaje:
-          - Si incluye nombre Y apellido (ej: "Hola, soy María González", "Soy Pedro López", "Mi nombre es Ana García") → saludá brevemente Y pasá de inmediato al PASO 3 (registrá sin esperar más).
-          - Si solo dijo "hola" o un saludo sin nombre → presentate brevemente y preguntá en qué podés ayudar.
-PASO 2 → Analizá el mensaje recibido:
-          a) Si el mensaje incluye nombre Y apellido explícitos ("Soy Juan Pérez", "Me llamo María González", "Hola, soy Pedro López", "mi nombre es Ana García") → pasá DIRECTAMENTE al PASO 3, llamá register_patient ya, sin preguntar nada más.
-          b) Si el mensaje solo tiene un primer nombre o es un saludo sin nombre → presentate y preguntá: "¿Me podés decir tu nombre completo para registrarte?"
-          c) Si ya hay un mensaje anterior en el historial donde el paciente dio su nombre completo → usá ese nombre y pasá al PASO 3 sin volver a preguntar.
-          REGLA: nunca pedís el apellido si ya aparece un apellido en el mensaje o en el historial.
+PASO 1 → Respondé al primer mensaje con calidez. Si solo saludó, saludá de vuelta y preguntá en qué puede ayudarle.
+PASO 2 → Cuando corresponda, pedí el nombre completo con naturalidad: "¿Me podría indicar su nombre y apellido para registrarlo?"
+          Si el paciente ya incluyó nombre Y apellido en el mismo mensaje ("Soy Juan Pérez", "Me llamo María González", "Hola, soy Pedro López"), pasá directamente al PASO 3 sin pedir confirmación.
+          No registres si solo hay un nombre de pila sin apellido.
 PASO 3 → Llamá register_patient con el nombre completo. El teléfono lo toma el sistema solo.
-PASO 4 → Preguntá si quiere agendar turno. Si sí: pedí servicio → día → hora, de a uno.
+PASO 4 → Preguntá si desea coordinar un turno. Si sí: pedí servicio → día → hora, de a uno.
           Con los tres datos: llamá schedule_appointment.
-PASO 4b (LISTA DE ESPERA) → Si el paciente quiere anotarse para cuando se libere un turno:
-          1. Si todavía no se llamó register_patient → llamá register_patient PRIMERO.
-          2. Luego llamá add_to_waitlist de inmediato con los datos disponibles.
-          ⚠ NUNCA confirmes la inscripción en lista de espera sin haber llamado add_to_waitlist.
+PASO 4b (LISTA DE ESPERA) → Si el paciente menciona lista de espera o quiere anotarse para cuando se libere un turno:
+          1. Si aún no fue registrado (no se llamó register_patient), llamá register_patient PRIMERO.
+          2. Luego llamá add_to_waitlist inmediatamente con los datos disponibles.
+          ⚠ NUNCA confirmes la inscripción en lista de espera sin haber llamado add_to_waitlist primero.
 
-REGLAS ESTRICTAS:
+REGLAS OPERATIVAS:
 - Nunca llamar register_patient sin nombre Y apellido confirmados
 - Nunca llamar schedule_appointment antes de register_patient
-- Para add_to_waitlist en paciente nuevo: register_patient primero, en la misma ronda si es posible
-- Si pregunta por la clínica (dirección, servicios, precios) → respondé primero, después continuá con el paso 2
-${COMMON_BLOCK}
+- Para add_to_waitlist en paciente nuevo: siempre register_patient primero, en la misma ronda si es posible
+- Si pregunta por la clínica antes de dar su nombre → respondé, después retomá el registro con naturalidad
+${COMMON_BLOCK}`
 
-TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 oraciones. WhatsApp, no email.`
-
-      : `Sos el asistente virtual de ${clinicName}, una clínica en Uruguay.
-Tu objetivo: que cada paciente reciba una respuesta útil, rápida y sin fricciones.
+      : `Trabajás en la recepción de ${clinicName}, una clínica en Uruguay, y atendés consultas por WhatsApp.
+Conocés a los pacientes, sus turnos y la agenda de la clínica. Atendés siempre de usted, con calidez y eficiencia.
 
 INFORMACIÓN DE LA CLÍNICA:
 ${clinicInfoLines || '(sin datos de contacto cargados aún)'}
@@ -603,9 +600,6 @@ ${scheduleText}
 
 DÍAS NO DISPONIBLES PRÓXIMOS:
 ${closuresText}
-
-SERVICIOS DE LA CLÍNICA (activos, con precios donde están configurados):
-${servicesText}
 
 FECHA Y HORA ACTUAL (hora Uruguay): ${fechaHoy}, ${horaHoy}
 
@@ -617,10 +611,8 @@ CONTEXTO DEL PACIENTE:
 - Turnos activos (${appointments.length}): ${formatAppointments(appointments)}
 
 SOBRE EL HISTORIAL:
-Mensajes con prefijo "[Staff]:" los escribió el equipo de la clínica. Usá todo el hilo como contexto y no repitas lo que ya se dijo.
-${COMMON_BLOCK}
-
-TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 oraciones. WhatsApp, no email.`;
+Los mensajes con prefijo "[Staff]:" los escribió el equipo de la clínica. Usá todo el hilo como contexto — no repitas lo que ya se aclaró.
+${COMMON_BLOCK}`;
 
     // ─── Tools ─────────────────────────────────────────────────────────────────
     const tools = [
@@ -678,7 +670,7 @@ TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 orac
             },
             service: {
               type:        'string',
-              description: 'Tipo de servicio del nuevo turno. Si ya aparece en el contexto del paciente (campo Servicio), copialo exactamente. Si no lo sabés, dejá este campo vacío.',
+              description: 'Tipo de servicio del nuevo turno. Si ya aparece en el contexto del paciente (campo Servicio), copialo exactamente. Si no está disponible, dejá este campo vacío.',
             },
             date: {
               type:        'string',
@@ -710,10 +702,36 @@ TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 orac
           required: ['appointment_id'],
         },
       },
+      {
+        name:        'add_to_waitlist',
+        description: 'Agrega al paciente a la lista de espera de la clínica. Usar cuando no hay turnos disponibles en la fecha deseada, o cuando el paciente pide anotarse para ser avisado si se libera un turno antes.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            service: {
+              type:        'string',
+              description: 'Tipo de servicio deseado (opcional, omitir si acepta cualquier turno)',
+            },
+            preferred_date_from: {
+              type:        'string',
+              description: 'Inicio del rango de fechas preferido en formato YYYY-MM-DD (opcional)',
+            },
+            preferred_date_to: {
+              type:        'string',
+              description: 'Fin del rango de fechas preferido en formato YYYY-MM-DD (opcional)',
+            },
+            notes: {
+              type:        'string',
+              description: 'Notas adicionales del paciente (opcional)',
+            },
+          },
+          required: [],
+        },
+      },
       // Solo disponible para pacientes nuevos (no registrados)
       ...(isNewPatient ? [{
         name:        'register_patient',
-        description: 'Registra al nuevo contacto como paciente de la clínica. Llamar solo cuando ya tenés el nombre completo confirmado por el propio paciente.',
+        description: 'Registra al nuevo contacto como paciente de la clínica. Llamar solo cuando ya tiene el nombre completo confirmado por el propio paciente.',
         input_schema: {
           type: 'object',
           properties: {
@@ -729,33 +747,41 @@ TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 orac
           required: ['full_name'],
         },
       }] : []),
-      {
-        name:        'add_to_waitlist',
-        description: 'Anota al paciente en la lista de espera para que lo avisen cuando se libere un turno. Usar cuando el paciente dice "avisarme si hay un turno", "lista de espera", "quiero uno antes", "si se libera algo", "si cancela alguien". SIEMPRE llamar este tool — nunca confirmar la inscripción de forma verbal sin haberlo llamado primero.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            preferred_service: {
-              type:        'string',
-              description: 'Servicio que quiere el paciente (opcional). Si lo mencionó, ponerlo aquí.',
-            },
-            preferred_date_from: {
-              type:        'string',
-              description: 'Fecha más temprana que le interesa, formato YYYY-MM-DD (opcional)',
-            },
-            preferred_date_to: {
-              type:        'string',
-              description: 'Fecha más tardía que le interesa, formato YYYY-MM-DD (opcional)',
-            },
-            notes: {
-              type:        'string',
-              description: 'Cualquier detalle adicional que mencionó el paciente (opcional)',
-            },
-          },
-          required: [],
-        },
-      },
     ];
+
+    // ─── Helper: validate date+time against clinic schedule ──────────────────
+    function validateSchedule(date: string, time: string): { allowed: boolean; reason?: string } {
+      // Closure check (specific date override)
+      const closure = closureRows?.find((c) => c.date === date);
+      if (closure) {
+        if (!closure.accepts_emergencies) {
+          const reason = (closure.reason_label as string) || CLOSURE_REASONS[closure.reason as string] || 'cierre especial';
+          return { allowed: false, reason: `La clínica no trabaja ese día (${reason}). Por favor elegí otra fecha.` };
+        }
+        // accepts_emergencies=true → allowed but no further time check needed
+        return { allowed: true };
+      }
+
+      // Weekly schedule check
+      const dow = new Date(date + 'T12:00:00').getDay(); // 0=Sun…6=Sat
+      const row = scheduleRows?.find((r) => (r.day_of_week as number) === dow);
+      if (row && !(row.is_open as boolean)) {
+        return { allowed: false, reason: `La clínica no atiende los ${SCHEDULE_DAY_NAMES[dow]}s. Por favor elegí otro día.` };
+      }
+
+      // Time range check
+      if (row && row.is_open) {
+        const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+        const openMin  = toMin(row.open_time  as string);
+        const closeMin = toMin(row.close_time as string);
+        const reqMin   = toMin(time);
+        if (reqMin < openMin || reqMin >= closeMin) {
+          return { allowed: false, reason: `El horario de atención ese día es de ${row.open_time} a ${row.close_time}. Por favor elegí un horario dentro de ese rango.` };
+        }
+      }
+
+      return { allowed: true };
+    }
 
     // ─── Helper: extraer texto del response de Claude ─────────────────────────
     function extractText(data: Record<string, unknown>): string {
@@ -837,6 +863,8 @@ TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 orac
           console.log('[ai-agent-reply] Tool: schedule_appointment', JSON.stringify(input));
           if (!input.service || !input.date || !input.time)
             return { success: false, error: 'Faltan datos: necesito servicio, fecha y hora antes de agendar.' };
+          const schedCheck = validateSchedule(input.date, input.time);
+          if (!schedCheck.allowed) return { success: false, error: schedCheck.reason };
           const result = await createAppointmentInDB(input.service, input.date, input.time, input.notes);
           if ('error' in result) return { success: false, error: result.error };
           appointmentCreated = result;
@@ -865,6 +893,8 @@ TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 orac
           const oldIds = input.old_appointment_ids ?? [];
           if (!oldIds.length || !input.date || !input.time)
             return { success: false, error: 'Faltan datos para reagendar: IDs anteriores, fecha y hora.' };
+          const reschedCheck = validateSchedule(input.date, input.time);
+          if (!reschedCheck.allowed) return { success: false, error: reschedCheck.reason };
 
           // Si no se proveyó servicio, obtenerlo del turno original
           let serviceToUse = input.service?.trim() || '';
@@ -903,7 +933,7 @@ TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 orac
           resolvedPatientId = newPatient.id;
           console.log('[ai-agent-reply] Patient registered:', newPatient.id);
           return { success: true, patient_id: newPatient.id,
-            message: `Paciente ${input.full_name} registrado correctamente. Ya podés ofrecerle agendar un turno.` };
+            message: `Paciente ${input.full_name} registrado correctamente. Ya puede ofrecerle agendar un turno.` };
 
         // ── Tool: confirm_appointment ────────────────────────────────────────────
         } else if (toolBlock.name === 'confirm_appointment') {
@@ -920,33 +950,35 @@ TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 orac
         // ── Tool: add_to_waitlist ────────────────────────────────────────────────
         } else if (toolBlock.name === 'add_to_waitlist') {
           const input = toolBlock.input as {
-            preferred_service?: string; preferred_date_from?: string;
-            preferred_date_to?: string; notes?: string;
+            service?: string; preferred_date_from?: string; preferred_date_to?: string; notes?: string;
           };
           console.log('[ai-agent-reply] Tool: add_to_waitlist', JSON.stringify(input));
-
-          // Try to get fresh full_name if patient was just registered this round
-          let finalFullName = String(patient?.full_name ?? '');
-          if (!finalFullName && resolvedPatientId) {
-            const { data: freshPat } = await supabase.from('patients').select('full_name').eq('id', resolvedPatientId).maybeSingle();
-            finalFullName = String(freshPat?.full_name ?? conv.phone_number);
+          // resolvedPatientId may be null if register_patient ran in the same Promise.all round —
+          // fall back to a DB lookup by phone so both tools work when called together.
+          if (!resolvedPatientId) {
+            const { data: existingPat } = await supabase
+              .from('patients')
+              .select('id')
+              .eq('clinic_id', clinicId)
+              .eq('phone_number', conv.phone_number)
+              .maybeSingle();
+            if (existingPat?.id) resolvedPatientId = existingPat.id;
           }
-          if (!finalFullName) finalFullName = String(conv.phone_number);
-
-          const { error: wlErr } = await supabase.from('waiting_list').insert({
-            clinic_id:    clinicId,
-            patient_id:   resolvedPatientId ?? null,
-            phone_number: conv.phone_number,
-            full_name:    finalFullName,
-            service:      input.preferred_service ?? null,
-            date_from:    input.preferred_date_from ?? null,
-            date_to:      input.preferred_date_to   ?? null,
-            notes:        input.notes ?? null,
-            status:       'pending',
-          });
-          if (wlErr) { console.error('[ai-agent-reply] waitlist error:', wlErr.message); return { success: false, error: wlErr.message }; }
-          console.log('[ai-agent-reply] Added to waitlist:', finalFullName, '| service:', input.preferred_service ?? 'any');
-          return { success: true, message: `${finalFullName} anotado/a en lista de espera${input.preferred_service ? ' para ' + input.preferred_service : ''}. El sistema avisará cuando se libere un turno.` };
+          if (!resolvedPatientId) return { success: false, error: 'No se puede agregar a lista de espera: paciente no registrado.' };
+          const { error: wlErr } = await supabase
+            .from('waiting_list')
+            .insert({
+              clinic_id:           clinicId,
+              patient_id:          resolvedPatientId,
+              service:             input.service             ?? null,
+              preferred_date_from: input.preferred_date_from ?? null,
+              preferred_date_to:   input.preferred_date_to   ?? null,
+              notes:               input.notes               ?? null,
+              status:              'waiting',
+            });
+          if (wlErr) { console.error('[ai-agent-reply] waitlist insert error:', wlErr.message); return { success: false, error: wlErr.message }; }
+          console.log('[ai-agent-reply] Added to waitlist, patient:', resolvedPatientId);
+          return { success: true, message: 'Paciente agregado a la lista de espera correctamente.' };
         }
 
         return { success: false, error: `Tool no reconocido: ${toolBlock.name}` };
@@ -1077,6 +1109,31 @@ TONO: Español rioplatense, voseo. Cálido, profesional, conciso. Máximo 3 orac
           ...(appointmentCreated ? { appointment_id: appointmentCreated.id } : {}),
         },
       }).eq('id', conversationId);
+    }
+
+    // ── Notificar al médico si hay doctor_whatsapp configurado ───────────────
+    if (appointmentCreated) {
+      const clinicSettings = (clinic?.settings ?? {}) as Record<string, string>;
+      const doctorWa       = clinicSettings.doctor_whatsapp;
+      if (doctorWa) {
+        const doctorPhone = doctorWa.startsWith('+') ? doctorWa : `+${doctorWa}`;
+        const apptDt      = new Date(appointmentCreated.datetime);
+        const dateFmt     = apptDt.toLocaleDateString('es-UY', {
+          weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Montevideo',
+        });
+        const timeFmt     = apptDt.toLocaleTimeString('es-UY', {
+          hour: '2-digit', minute: '2-digit', timeZone: 'America/Montevideo',
+        });
+        const docMsg = `🔔 *Nuevo turno agendado*\n\n👤 Paciente: ${patientName}\n📅 ${dateFmt} a las ${timeFmt}\n\nResponda *1* para confirmar o *2* para rechazar.`;
+        const phoneNumId  = clinic?.wa_phone_number_id || WA_PHONE_NUMBER_ID_GLOBAL;
+        const accessToken = WA_ACCESS_TOKEN_GLOBAL;
+        try {
+          await sendWaText(doctorPhone, docMsg, phoneNumId, accessToken);
+          console.log('[ai-agent-reply] Doctor notified at', doctorPhone);
+        } catch (err) {
+          console.error('[ai-agent-reply] Error notifying doctor:', err);
+        }
+      }
     }
 
     return new Response('ok', { status: 200 });

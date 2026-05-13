@@ -8,7 +8,7 @@
   --cq-surface-2: oklch(0.97 0.008 220);
   --cq-surface-3: oklch(0.94 0.010 220);
   --cq-fg: oklch(0.32 0.025 235);
-  --cq-fg-muted: oklch(0.55 0.018 230);
+  --cq-fg-muted: oklch(0.48 0.018 230);
   --cq-border: oklch(0.91 0.010 220);
   --cq-accent: oklch(0.58 0.08 195);
   --cq-accent-soft: oklch(0.95 0.025 195);
@@ -91,7 +91,11 @@ body {
   to   { opacity: 0; transform: translateX(16px); }
 }
 
-/* Respeta la preferencia del SO de reducir movimiento */
+/* Modal animation utility — use this class instead of an inline style so that the
+   prefers-reduced-motion media query below can suppress it via !important. */
+.cq-modal-in       { animation: cqModalIn 220ms cubic-bezier(.2,.7,.2,1); }
+.cq-modal-in-fast  { animation: cqModalIn 160ms cubic-bezier(.2,.7,.2,1); }
+
 /* Hide scrollbar inside scroll-columns (TimePicker, etc.) */
 .cq-scroll-hidden::-webkit-scrollbar { display: none; }
 

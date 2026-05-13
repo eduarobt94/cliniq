@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Icons, Badge, Avatar, MonoLabel } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { useWaitlistBadge } from '../../hooks/useWaitingList';
 
 
 const NAV_ITEMS = [
@@ -11,7 +12,7 @@ const NAV_ITEMS = [
   { id: 'pacientes',       label: 'Pacientes',         icon: Icons.Users,    path: '/dashboard/pacientes'                                       },
   { id: 'automatizaciones',label: 'Automatizaciones',  icon: Icons.Zap,      path: '/dashboard/automatizaciones', dynamic: 'automationsCount'  },
   { id: 'inbox',           label: 'Inbox WhatsApp',    icon: Icons.Chat,     path: '/dashboard/inbox',            dynamic: 'inboxCount'        },
-  { id: 'lista-espera',    label: 'Lista de espera',   icon: Icons.Waitlist, path: '/dashboard/lista-espera',     dynamic: 'waitlistCount'   },
+  { id: 'lista-espera',   label: 'Lista de espera',   icon: Icons.Bell,     path: '/dashboard/lista-espera',     dynamic: 'waitlistCount'     },
   { id: 'reportes',        label: 'Reportes',          icon: Icons.Chart,    path: '/dashboard/reportes'                                        },
 ];
 
@@ -116,31 +117,6 @@ function useAutomationsBadge(clinicId) {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [clinicId]);
-
-  return count;
-}
-
-/**
- * Count pending waiting list entries.
- */
-function useWaitlistBadge(clinicId) {
-  const [count, setCount] = useState(null);
-
-  useEffect(() => {
-    if (!clinicId) return;
-
-    async function load() {
-      const { count: n, error } = await supabase
-        .from('waiting_list')
-        .select('id', { count: 'exact', head: true })
-        .eq('clinic_id', clinicId)
-        .eq('status', 'pending');
-      if (error) { setCount(null); return; }
-      setCount(n > 0 ? Math.min(n, 99) : null);
-    }
-
-    load();
   }, [clinicId]);
 
   return count;

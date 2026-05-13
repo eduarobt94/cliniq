@@ -1,285 +1,243 @@
-import { useState } from 'react';
-import { Badge, Icons, MonoLabel } from '../../components/ui';
-import { useClinic } from '../../hooks/useClinic';
-import { useWaitingList } from '../../hooks/useWaitingList';
+import { useState, useCallback, useMemo } from 'react';
+import { useAuth }         from '../../context/AuthContext';
+import { useWaitingList }  from '../../hooks/useWaitingList';
+import { supabase }        from '../../lib/supabase';
+import { Card, MonoLabel, Badge, Icons, useToast } from '../../components/ui';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Status config ────────────────────────────────────────────────────────────
 
-function fmtDate(iso) {
-  if (!iso) return null;
-  return new Date(iso + 'T12:00:00Z').toLocaleDateString('es-UY', {
-    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
-  });
-}
-
-function fmtCreated(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('es-UY', {
-    day: 'numeric', month: 'short', timeZone: 'America/Montevideo',
-  });
-}
-
-const STATUS_MAP = {
-  pending:   { label: 'Pendiente', tone: 'warn'    },
-  notified:  { label: 'Avisado',   tone: 'success'  },
-  cancelled: { label: 'Cancelado', tone: 'outline'  },
+const STATUS_CONFIG = {
+  waiting:  { label: 'Esperando',  tone: 'warn'    },
+  notified: { label: 'Notificado', tone: 'accent'  },
+  booked:   { label: 'Agendado',   tone: 'success' },
+  expired:  { label: 'Expirado',   tone: 'neutral' },
+  cancelled:{ label: 'Cancelado',  tone: 'danger'  },
 };
 
-const FILTERS = [
-  { key: 'all',       label: 'Todos'      },
-  { key: 'pending',   label: 'Pendientes' },
-  { key: 'notified',  label: 'Avisados'   },
-  { key: 'cancelled', label: 'Cancelados' },
-];
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
-// ─── Row ──────────────────────────────────────────────────────────────────────
+function Skeleton({ className = '' }) {
+  return <div className={`animate-pulse bg-[var(--cq-surface-3)] rounded ${className}`} />;
+}
 
-function WaitlistRow({ entry, onNotify, onCancel, onDelete, updating, deleting }) {
-  const { label: statusLabel, tone: statusTone } = STATUS_MAP[entry.status] ?? STATUS_MAP.pending;
-  const busy = updating === entry.id || deleting === entry.id;
+// ─── Empty state ──────────────────────────────────────────────────────────────
 
-  const dateRange = (entry.date_from || entry.date_to)
-    ? [fmtDate(entry.date_from), fmtDate(entry.date_to)].filter(Boolean).join(' → ')
-    : null;
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center gap-3 py-16 text-center">
+      <div className="w-10 h-10 rounded-full bg-[var(--cq-surface-2)] flex items-center justify-center text-[var(--cq-fg-muted)]">
+        <Icons.Bell size={18} />
+      </div>
+      <p className="text-[14px] font-medium text-[var(--cq-fg)]">Sin pacientes en lista de espera</p>
+      <p className="text-[12.5px] text-[var(--cq-fg-muted)] max-w-[300px]">
+        Cuando un paciente pida anotarse, aparecerá aquí. También se agrega automáticamente vía WhatsApp.
+      </p>
+    </div>
+  );
+}
 
-  const displayName = entry.patients?.full_name || entry.full_name || entry.phone_number || '—';
+// ─── Format date range ────────────────────────────────────────────────────────
+
+function formatDateRange(from, to) {
+  if (!from && !to) return '—';
+  const fmt = (d) => new Date(d + 'T12:00:00').toLocaleDateString('es-UY', {
+    day: 'numeric', month: 'short',
+  });
+  if (from && to) return `${fmt(from)} – ${fmt(to)}`;
+  if (from) return `Desde ${fmt(from)}`;
+  return `Hasta ${fmt(to)}`;
+}
+
+// ─── Row actions ──────────────────────────────────────────────────────────────
+
+function WaitlistRow({ entry, onStatusChange }) {
+  const [loading, setLoading] = useState(false);
+  const patient = entry.patients;
+  const statusCfg = STATUS_CONFIG[entry.status] ?? STATUS_CONFIG.waiting;
+
+  const handleMark = async (newStatus) => {
+    setLoading(true);
+    await onStatusChange(entry.id, newStatus);
+    setLoading(false);
+  };
 
   return (
-    <tr className="group border-b border-[var(--cq-border)] last:border-0 hover:bg-[var(--cq-surface-2)] transition-colors">
-      {/* Nombre + teléfono */}
-      <td className="py-3 px-4">
-        <div className="text-[13.5px] font-medium text-[var(--cq-fg)]">{displayName}</div>
-        <div className="text-[12px] text-[var(--cq-fg-muted)] font-mono mt-0.5">{entry.phone_number}</div>
+    <tr className="border-b border-[var(--cq-border)] last:border-0 hover:bg-[var(--cq-surface-2)] transition-colors">
+      {/* Paciente */}
+      <td className="py-3 pl-4 pr-2">
+        <div className="text-[13.5px] font-medium text-[var(--cq-fg)]">{patient?.full_name ?? '—'}</div>
+        <div className="text-[11.5px] text-[var(--cq-fg-muted)] font-mono">{patient?.phone_number ?? ''}</div>
       </td>
 
       {/* Servicio */}
-      <td className="py-3 px-4 text-[13px] text-[var(--cq-fg)]">
-        {entry.service || <span className="text-[var(--cq-fg-muted)] italic">Sin especificar</span>}
+      <td className="py-3 px-2 text-[13px] text-[var(--cq-fg-muted)]">
+        {entry.service ?? <span className="italic text-[var(--cq-fg-muted)]">Cualquiera</span>}
       </td>
 
       {/* Fechas preferidas */}
-      <td className="py-3 px-4 text-[12.5px] text-[var(--cq-fg-muted)]">
-        {dateRange ?? <span className="text-[var(--cq-fg-muted)]">—</span>}
+      <td className="py-3 px-2 text-[12.5px] font-mono text-[var(--cq-fg-muted)]">
+        {formatDateRange(entry.preferred_date_from, entry.preferred_date_to)}
       </td>
 
       {/* Estado */}
-      <td className="py-3 px-4">
-        <Badge tone={statusTone}>{statusLabel}</Badge>
+      <td className="py-3 px-2">
+        <Badge tone={statusCfg.tone}>{statusCfg.label}</Badge>
       </td>
 
-      {/* Recibido */}
-      <td className="py-3 px-4 text-[12px] text-[var(--cq-fg-muted)]">
-        {fmtCreated(entry.created_at)}
+      {/* Anotado */}
+      <td className="py-3 px-2 text-[12px] text-[var(--cq-fg-muted)]">
+        {new Date(entry.created_at).toLocaleDateString('es-UY', {
+          day: 'numeric', month: 'short', year: '2-digit',
+        })}
       </td>
 
       {/* Acciones */}
-      <td className="py-3 px-4">
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {entry.status === 'pending' && (
+      <td className="py-3 px-2 pr-4">
+        {(entry.status === 'waiting' || entry.status === 'notified') && (
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={() => onNotify(entry.id)}
-              disabled={busy}
-              title="Marcar como avisado"
-              className="h-7 px-2 rounded-[6px] text-[11.5px] font-medium bg-[var(--cq-success)]/10 text-[var(--cq-success)] hover:bg-[var(--cq-success)]/20 disabled:opacity-40 transition-colors"
+              onClick={() => handleMark('booked')}
+              disabled={loading}
+              title="Marcar como agendado"
+              className="p-1.5 rounded-[6px] text-[var(--cq-success)] hover:bg-[color-mix(in_oklch,var(--cq-success)_12%,transparent)] transition-colors disabled:opacity-50"
             >
-              Avisar
+              <Icons.Check size={14} />
             </button>
-          )}
-          {entry.status === 'pending' && (
             <button
-              onClick={() => onCancel(entry.id)}
-              disabled={busy}
-              title="Cancelar solicitud"
-              className="h-7 px-2 rounded-[6px] text-[11.5px] font-medium text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-3)] disabled:opacity-40 transition-colors"
+              onClick={() => handleMark('cancelled')}
+              disabled={loading}
+              title="Eliminar de la lista"
+              className="p-1.5 rounded-[6px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-danger)] hover:bg-[color-mix(in_oklch,var(--cq-danger)_12%,transparent)] transition-colors disabled:opacity-50"
             >
-              Cancelar
+              <Icons.Trash size={14} />
             </button>
-          )}
-          <button
-            onClick={() => onDelete(entry.id)}
-            disabled={busy}
-            title="Eliminar"
-            className="w-7 h-7 rounded-[6px] flex items-center justify-center text-[var(--cq-fg-muted)] hover:bg-[var(--cq-danger)]/10 hover:text-[var(--cq-danger)] disabled:opacity-40 transition-colors"
-          >
-            {deleting === entry.id
-              ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-              : <Icons.Close size={12} />
-            }
-          </button>
-        </div>
+          </div>
+        )}
       </td>
     </tr>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Filter tabs ──────────────────────────────────────────────────────────────
+
+const FILTERS = [
+  { id: 'waiting',  label: 'En espera'  },
+  { id: 'notified', label: 'Notificados'},
+  { id: 'all',      label: 'Todos'      },
+];
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export function ListaEspera() {
-  const { clinic } = useClinic();
-  const { entries, loading, error, updateStatus, deleteEntry } = useWaitingList(clinic?.id);
+  const { clinic }          = useAuth();
+  const [filter, setFilter] = useState('waiting');
+  const { toast }           = useToast();
 
-  const [filter,   setFilter]   = useState('all');
-  const [search,   setSearch]   = useState('');
-  const [updating, setUpdating] = useState(null);
-  const [deleting, setDeleting] = useState(null);
+  const statusFilter = filter === 'all' ? null : filter;
+  const { entries, loading, error, refetch } = useWaitingList(clinic?.id, statusFilter);
 
-  const filtered = entries.filter(e => {
-    // 1. status filter — normalize to guard against trailing spaces or case differences
-    const statusVal = (e.status ?? '').toLowerCase().trim();
-    if (filter !== 'all' && statusVal !== filter) return false;
-    // 2. search (only applied when there's text)
-    if (!search) return true;
-    const q   = search.toLowerCase();
-    const name = (e.patients?.full_name ?? e.full_name ?? '').toLowerCase();
-    const tel  = e.phone_number ?? '';
-    const svc  = (e.service ?? '').toLowerCase();
-    return name.includes(q) || tel.includes(q) || svc.includes(q);
-  });
+  const handleStatusChange = useCallback(async (entryId, newStatus) => {
+    const { error: updateErr } = await supabase
+      .from('waiting_list')
+      .update({ status: newStatus })
+      .eq('id', entryId);
 
-  const pendingCount = entries.filter(e => (e.status ?? '').toLowerCase().trim() === 'pending').length;
+    if (updateErr) {
+      toast({ title: 'Error al actualizar', description: updateErr.message, tone: 'danger' });
+    } else {
+      toast({
+        title: newStatus === 'booked' ? 'Marcado como agendado' : 'Eliminado de la lista',
+        tone: 'success',
+      });
+      refetch();
+    }
+  }, [toast, refetch]);
 
-  async function handleNotify(id) {
-    setUpdating(id);
-    try { await updateStatus(id, 'notified'); }
-    catch { /* silencioso */ }
-    finally { setUpdating(null); }
-  }
-
-  async function handleCancel(id) {
-    setUpdating(id);
-    try { await updateStatus(id, 'cancelled'); }
-    catch { /* silencioso */ }
-    finally { setUpdating(null); }
-  }
-
-  async function handleDelete(id) {
-    setDeleting(id);
-    try { await deleteEntry(id); }
-    catch { /* silencioso */ }
-    finally { setDeleting(null); }
-  }
+  const waitingCount = useMemo(() => entries.filter(e => e.status === 'waiting').length, [entries]);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="flex flex-col gap-6 max-w-[1100px] mx-auto">
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-[20px] font-semibold text-[var(--cq-fg)]">Lista de espera</h1>
-          <p className="text-[13px] text-[var(--cq-fg-muted)] mt-0.5">
-            Pacientes que pidieron ser avisados cuando se libere un turno
-            {pendingCount > 0 && (
-              <span className="ml-2 text-[var(--cq-warn)] font-medium">
-                · {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}
-              </span>
-            )}
+          <h1 className="text-[22px] font-semibold text-[var(--cq-fg)]">Lista de espera</h1>
+          <p className="text-[13.5px] text-[var(--cq-fg-muted)] mt-0.5">
+            Pacientes que esperan un turno disponible
           </p>
         </div>
+        {waitingCount > 0 && (
+          <Badge tone="warn" dot>{waitingCount} en espera</Badge>
+        )}
       </div>
 
-      {/* Error — tabla no existe */}
+      {/* Error */}
       {error && (
-        <div className="mb-4 p-3 rounded-[8px] border text-[13px]
-          bg-[color-mix(in_oklch,var(--cq-danger)_8%,transparent)]
-          border-[color-mix(in_oklch,var(--cq-danger)_20%,transparent)]
-          text-[var(--cq-danger)]">
-          {error.includes('relation "waiting_list" does not exist') || error.includes("relation 'waiting_list' does not exist")
-            ? '⚠️ La tabla waiting_list aún no existe. Ejecutá la migración 20260507000004_waiting_list.sql en el SQL Editor de Supabase.'
-            : error}
+        <div className="rounded-[10px] bg-[color-mix(in_oklch,var(--cq-danger)_12%,transparent)] border border-[color-mix(in_oklch,var(--cq-danger)_30%,transparent)] px-4 py-3 text-[13px] text-[var(--cq-danger)]">
+          Error al cargar la lista: {error}
         </div>
       )}
 
-      {/* Filters + search */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        {/* Filter pills */}
-        <div className="flex items-center gap-1 p-1 rounded-[9px] bg-[var(--cq-surface)] border border-[var(--cq-border)]">
-          {FILTERS.map(f => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={`px-3 h-7 rounded-[6px] text-[12.5px] font-medium transition-colors duration-150 ${
-                filter === f.key
-                  ? 'bg-[var(--cq-fg)] text-[var(--cq-bg)]'
-                  : 'text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] hover:bg-[var(--cq-surface-2)]'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+      {/* Info banner */}
+      <div className="rounded-[10px] bg-[color-mix(in_oklch,var(--cq-accent)_8%,transparent)] border border-[color-mix(in_oklch,var(--cq-accent)_20%,transparent)] px-4 py-3 flex items-start gap-3">
+        <Icons.Info size={15} className="text-[var(--cq-accent)] mt-0.5 shrink-0" />
+        <p className="text-[12.5px] text-[var(--cq-fg-muted)]">
+          Cuando un turno se cancela, el sistema notifica automáticamente a los pacientes en espera por WhatsApp.
+          También pueden anotarse enviando un mensaje al bot.
+        </p>
+      </div>
 
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--cq-fg-muted)] pointer-events-none">
-            <Icons.Search size={14} />
-          </span>
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar nombre, teléfono, servicio…"
-            className="w-full h-9 pl-9 pr-3 rounded-[8px] border border-[var(--cq-border)] bg-[var(--cq-surface-2)] text-[13px] text-[var(--cq-fg)] placeholder:text-[var(--cq-fg-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--cq-accent)] transition-shadow"
-          />
-        </div>
+      {/* Filter tabs */}
+      <div className="flex items-center gap-1 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[9px] p-1 w-fit">
+        {FILTERS.map(({ id, label }) => (
+          <button
+            key={id}
+            onClick={() => setFilter(id)}
+            className={`px-3 h-7 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
+              filter === id
+                ? 'bg-[var(--cq-fg)] text-[var(--cq-bg)]'
+                : 'text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] hover:bg-[var(--cq-surface-2)]'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Table */}
-      {loading ? (
-        <div className="flex flex-col gap-2">
-          {[0, 1, 2].map(i => (
-            <div key={i} className="h-14 animate-pulse bg-[var(--cq-surface-2)] rounded-[8px]" />
-          ))}
-        </div>
-      ) : !error && filtered.length === 0 ? (
-        <div className="py-16 text-center">
-          <div className="flex justify-center mb-3 text-[var(--cq-fg-muted)] opacity-40">
-            <Icons.Waitlist size={32} />
+      <Card padded={false}>
+        {loading ? (
+          <div className="flex flex-col gap-2 p-4">
+            {[1,2,3,4].map(i => <Skeleton key={i} className="h-12 w-full" />)}
           </div>
-          <p className="text-[14px] text-[var(--cq-fg-muted)]">
-            {search || filter !== 'all'
-              ? 'No hay resultados para ese filtro.'
-              : 'No hay pacientes en lista de espera todavía.'}
-          </p>
-          {!search && filter === 'all' && (
-            <p className="text-[12px] text-[var(--cq-fg-muted)] mt-1 opacity-70">
-              Cuando el bot anote a alguien, aparecerá aquí.
-            </p>
-          )}
-        </div>
-      ) : !error ? (
-        <div className="rounded-[10px] border border-[var(--cq-border)] overflow-hidden bg-white">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-b border-[var(--cq-border)]">
-              <th className="py-2.5 px-4 text-left font-normal"><MonoLabel>Paciente</MonoLabel></th>
-              <th className="py-2.5 px-4 text-left font-normal"><MonoLabel>Servicio</MonoLabel></th>
-              <th className="py-2.5 px-4 text-left font-normal"><MonoLabel>Fechas pref.</MonoLabel></th>
-              <th className="py-2.5 px-4 text-left font-normal"><MonoLabel>Estado</MonoLabel></th>
-              <th className="py-2.5 px-4 text-left font-normal"><MonoLabel>Recibido</MonoLabel></th>
-              <th className="py-2.5 px-4 text-left font-normal w-10" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(entry => (
-              <WaitlistRow
-                key={entry.id}
-                entry={entry}
-                onNotify={handleNotify}
-                onCancel={handleCancel}
-                onDelete={handleDelete}
-                updating={updating}
-                deleting={deleting}
-              />
-            ))}
-          </tbody>
-        </table>
-        </div>
-      ) : null}
-
-      {/* Count footer */}
-      {!error && !loading && filtered.length > 0 && (
-        <p className="mt-3 text-[12px] text-[var(--cq-fg-muted)]">
-          {filtered.length} resultado{filtered.length !== 1 ? 's' : ''} · {entries.length} en total
-        </p>
-      )}
+        ) : entries.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-[var(--cq-border)]">
+                  <th scope="col" className="py-2.5 pl-4 pr-2"><MonoLabel>Paciente</MonoLabel></th>
+                  <th scope="col" className="py-2.5 px-2"><MonoLabel>Servicio</MonoLabel></th>
+                  <th scope="col" className="py-2.5 px-2"><MonoLabel>Fechas preferidas</MonoLabel></th>
+                  <th scope="col" className="py-2.5 px-2"><MonoLabel>Estado</MonoLabel></th>
+                  <th scope="col" className="py-2.5 px-2"><MonoLabel>Anotado</MonoLabel></th>
+                  <th scope="col" className="py-2.5 px-2 pr-4"><MonoLabel>Acciones</MonoLabel></th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map(entry => (
+                  <WaitlistRow
+                    key={entry.id}
+                    entry={entry}
+                    onStatusChange={handleStatusChange}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

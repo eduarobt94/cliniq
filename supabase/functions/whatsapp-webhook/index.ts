@@ -272,12 +272,12 @@ serve(async (req: Request) => {
       // → intentamos ambos: el ID entrante y el env var global como fallback
       console.log('[webhook] Guest message — incomingPhoneNumId:', incomingPhoneNumId, 'globalId:', WA_PHONE_NUMBER_ID_GLOBAL);
 
-      let clinicForGuest: { id: string } | null = null;
+      let clinicForGuest: { id: string; settings?: Record<string, string>; wa_phone_number_id?: string } | null = null;
 
       // Intento 1: coincidencia exacta con lo que envía Meta
       const { data: c1 } = await supabase
         .from('clinics')
-        .select('id')
+        .select('id, settings, wa_phone_number_id')
         .eq('wa_phone_number_id', incomingPhoneNumId)
         .maybeSingle();
       clinicForGuest = c1;
@@ -286,13 +286,120 @@ serve(async (req: Request) => {
       if (!clinicForGuest && WA_PHONE_NUMBER_ID_GLOBAL) {
         const { data: c2 } = await supabase
           .from('clinics')
-          .select('id')
+          .select('id, settings, wa_phone_number_id')
           .eq('wa_phone_number_id', WA_PHONE_NUMBER_ID_GLOBAL)
           .maybeSingle();
         clinicForGuest = c2;
       }
 
       console.log('[webhook] clinicForGuest found:', !!clinicForGuest);
+
+      // ── ¿Es el médico respondiendo? ──────────────────────────────────────
+      if (clinicForGuest) {
+        const doctorWa = clinicForGuest.settings?.doctor_whatsapp;
+        if (doctorWa) {
+          const doctorPhone = doctorWa.startsWith('+') ? doctorWa : `+${doctorWa}`;
+          if (fromPhone === doctorPhone) {
+            // Handle doctor confirmation / rejection
+            const doctorIntent = rawText.trim();
+            const isConfirm = ['1', 'confirmar', 'confirmo', 'sí', 'si', 'ok'].includes(doctorIntent.toLowerCase());
+            const isReject  = ['2', 'rechazar', 'rechazo', 'bloquear', 'bloqueo', 'no'].includes(doctorIntent.toLowerCase());
+            const replyPhoneNumId = clinicForGuest.wa_phone_number_id || incomingPhoneNumId || WA_PHONE_NUMBER_ID_GLOBAL;
+
+            const sendDoctor = async (text: string) => {
+              const id = await sendWaText(fromPhone, text, replyPhoneNumId);
+              await logAudit(supabase, {
+                clinicId: clinicForGuest!.id, patientId: null, appointmentId: null,
+                direction: 'outbound', phone: fromPhone, message: text, waMessageId: id, status: id ? 'sent' : 'failed',
+              });
+            };
+
+            await logAudit(supabase, {
+              clinicId: clinicForGuest.id, patientId: null, appointmentId: null,
+              direction: 'inbound', phone: fromPhone, message: rawText || `[${msgType}]`,
+              waMessageId, status: 'received',
+            });
+
+            if (!isConfirm && !isReject) {
+              await sendDoctor(`Hola. Responda *1* para confirmar el turno más reciente o *2* para rechazarlo.`);
+              return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+
+            // Find the most recent 'new' appointment for this clinic (not yet confirmed/cancelled)
+            const { data: pendingAppt } = await supabase
+              .from('appointments')
+              .select('id, appointment_datetime, patients!inner(id, full_name, phone_number)')
+              .eq('clinic_id', clinicForGuest.id)
+              .eq('status', 'new')
+              .order('appointment_datetime', { ascending: true })
+              .limit(1)
+              .maybeSingle();
+
+            if (!pendingAppt) {
+              await sendDoctor(`No hay turnos pendientes de confirmación en este momento.`);
+              return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }
+
+            const aptPatient = pendingAppt.patients as Record<string, string>;
+            const apptDt     = new Date(pendingAppt.appointment_datetime);
+            const dtLabel    = apptDt.toLocaleString('es-UY', {
+              weekday: 'short', day: 'numeric', month: 'short',
+              hour: '2-digit', minute: '2-digit', timeZone: 'America/Montevideo',
+            });
+
+            if (isConfirm) {
+              const { data: confirmed } = await supabase
+                .from('appointments')
+                .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
+                .eq('id', pendingAppt.id)
+                .eq('status', 'new')
+                .select('id')
+                .maybeSingle();
+
+              if (!confirmed) {
+                await sendDoctor(`El turno ya fue procesado anteriormente.`);
+              } else {
+                await sendDoctor(`✅ Turno de ${aptPatient.full_name} el ${dtLabel} *confirmado*.`);
+                // Notify patient
+                if (aptPatient.phone_number) {
+                  const patPhoneNumId = clinicForGuest.wa_phone_number_id || WA_PHONE_NUMBER_ID_GLOBAL;
+                  await sendWaText(aptPatient.phone_number, `✅ Su turno del ${dtLabel} fue *confirmado* por el médico. ¡Le esperamos!`, patPhoneNumId);
+                }
+              }
+            } else {
+              const { data: rejected } = await supabase
+                .from('appointments')
+                .update({ status: 'cancelled' })
+                .eq('id', pendingAppt.id)
+                .eq('status', 'new')
+                .select('id')
+                .maybeSingle();
+
+              if (!rejected) {
+                await sendDoctor(`El turno ya fue procesado anteriormente.`);
+              } else {
+                await sendDoctor(`❌ Turno de ${aptPatient.full_name} el ${dtLabel} *rechazado*.`);
+                // Notify patient
+                if (aptPatient.phone_number) {
+                  const patPhoneNumId = clinicForGuest.wa_phone_number_id || WA_PHONE_NUMBER_ID_GLOBAL;
+                  await sendWaText(aptPatient.phone_number, `Le informamos que su turno del ${dtLabel} no pudo confirmarse. Por favor, comuníquese con nosotros para reagendar.`, patPhoneNumId);
+                }
+                // Notify waitlist
+                fetch(`${SUPABASE_URL}/functions/v1/notify-waitlist`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}` },
+                  body: JSON.stringify({ clinic_id: clinicForGuest.id }),
+                }).catch(err => console.error('[webhook] Error triggering notify-waitlist (doctor reject):', err));
+              }
+            }
+
+            return new Response(JSON.stringify({ ok: true, doctor: true }), {
+              status: 200, headers: { 'Content-Type': 'application/json' },
+            });
+          }
+        }
+      }
+      // ── Fin manejo doctor ────────────────────────────────────────────────
 
       await logAudit(supabase, {
         clinicId: clinicForGuest?.id ?? null, patientId: null, appointmentId: null,
@@ -416,23 +523,90 @@ serve(async (req: Request) => {
       });
     };
 
+    // ── Duplicate button press: intent detectado pero no hay turno pendiente ──
+    // El paciente volvió al chat y presionó un botón del recordatorio que ya procesó.
+    // Buscamos si hay un turno próximo ya resuelto y avisamos que la selección ya fue registrada.
+    const isButtonIntent = (msgType === 'button' || msgType === 'interactive') && !!intent;
+    if (isButtonIntent && !appointment) {
+      const { data: resolvedAppt } = await supabase
+        .from('appointments')
+        .select('id, status, appointment_datetime')
+        .eq('patient_id', patient.id)
+        .eq('clinic_id',  patient.clinic_id)
+        .in('status', ['confirmed', 'cancelled', 'rescheduled'])
+        .gte('appointment_datetime', new Date().toISOString())
+        .order('appointment_datetime', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (resolvedAppt) {
+        const STATUS_LABEL: Record<string, string> = {
+          confirmed:   'confirmado ✅',
+          cancelled:   'cancelado',
+          rescheduled: 'reagendado',
+        };
+        const label = STATUS_LABEL[resolvedAppt.status as string] ?? 'procesado';
+        await sendReply(
+          `Su selección ya fue registrada: el turno se encuentra *${label}*. Si desea realizar algún cambio, comuníquese con nosotros.`
+        );
+        return new Response(JSON.stringify({ ok: true, dedup: 'button_already_processed' }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     if (shouldBotReply) {
       if (intent === 'confirm') {
-        await supabase
+        // Atomic update: only succeeds if status is still pending/new (prevents race conditions)
+        const { data: confirmed } = await supabase
           .from('appointments')
           .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
-          .eq('id', appointment!.id);
-        await sendReply(`¡Perfecto, ${patient.full_name}! ✅ Tu turno quedó *confirmado*. Te esperamos.`);
+          .eq('id', appointment!.id)
+          .in('status', ['pending', 'new'])
+          .select('id')
+          .maybeSingle();
+
+        if (!confirmed) {
+          // Race condition: another button press already changed the status
+          await sendReply(`Su selección ya fue registrada. Si desea realizar algún cambio, comuníquese con nosotros.`);
+          return new Response(JSON.stringify({ ok: true, dedup: 'race_condition' }), {
+            status: 200, headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        await sendReply(`Su turno quedó *confirmado* ✅. Le esperamos, ${patient.full_name}.`);
         return new Response(JSON.stringify({ ok: true }), {
           status: 200, headers: { 'Content-Type': 'application/json' },
         });
 
       } else if (intent === 'cancel') {
-        await supabase
+        // Atomic update: only succeeds if status is still pending/new
+        const { data: cancelled } = await supabase
           .from('appointments')
           .update({ status: 'cancelled' })
-          .eq('id', appointment!.id);
-        await sendReply(`Entendido, ${patient.full_name}. Tu turno fue *cancelado*. Cuando quieras reagendar, contactá al consultorio.`);
+          .eq('id', appointment!.id)
+          .in('status', ['pending', 'new'])
+          .select('id')
+          .maybeSingle();
+
+        if (!cancelled) {
+          // Race condition: another button press already changed the status
+          await sendReply(`Su turno ya había sido procesado anteriormente. Si necesita ayuda, comuníquese con nosotros directamente.`);
+          return new Response(JSON.stringify({ ok: true, dedup: 'race_condition' }), {
+            status: 200, headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        await sendReply(`Entendido, ${patient.full_name}. Su turno fue *cancelado*. Cuando desee reagendar, con gusto le ayudamos.`);
+
+        // Fire-and-forget: notificar lista de espera inmediatamente
+        fetch(`${SUPABASE_URL}/functions/v1/notify-waitlist`, {
+          method:  'POST',
+          headers: {
+            'Content-Type':  'application/json',
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+          },
+          body: JSON.stringify({ clinic_id: patient.clinic_id }),
+        }).catch(err => console.error('[webhook] Error triggering notify-waitlist:', err));
+
         return new Response(JSON.stringify({ ok: true }), {
           status: 200, headers: { 'Content-Type': 'application/json' },
         });
@@ -441,6 +615,16 @@ serve(async (req: Request) => {
         // No tocamos el turno acá — el AI agent lo marca como rescheduled
         // cuando ejecuta el tool reschedule_appointment.
         // Caemos al bloque AI agent para que pregunte fecha/hora.
+        // Si el agente NO va a responder (ai_enabled=false o human_takeover activo),
+        // enviamos un mensaje de fallback para que el paciente no quede en silencio.
+        if (!shouldAgentReply(convData, patient)) {
+          await sendReply(
+            `Para reagendar su turno, por favor comuníquese con nosotros directamente o responda este mensaje y un representante lo atenderá a la brevedad.`
+          );
+          return new Response(JSON.stringify({ ok: true, reschedule: 'fallback_sent' }), {
+            status: 200, headers: { 'Content-Type': 'application/json' },
+          });
+        }
       }
     }
 

@@ -156,7 +156,7 @@ serve(async (req: Request) => {
           clinics!inner  ( name, timezone, wa_phone_number_id )
         `)
         .eq('clinic_id',             auto.clinic_id)
-        .eq('status',                'new')
+        .in('status',                ['new', 'confirmed'])
         .is('reminder_sent_at',      null)
         .gte('appointment_datetime', windowStart.toISOString())
         .lte('appointment_datetime', windowEnd.toISOString());
