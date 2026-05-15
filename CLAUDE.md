@@ -5,7 +5,17 @@
 
 **Última sesión completada: 2026-05-15**
 
-### ✅ Completado en esta sesión (2026-05-15)
+### ✅ Completado en esta sesión (2026-05-15) — parte 2
+- **Fix `success_rate` WhatsApp:** porcentaje mostraba "1390%" porque la vista ya devuelve 0-100, no 0-1. Fix: `Math.min(100, Math.round(stats.success_rate))`
+- **Fix sidebar `Icons.Waitlist`:** icono de Lista de espera cambiado de `Icons.Bell` a `Icons.Waitlist`
+- **React Doctor audit (71/100 → corregido):** 38 archivos, 324 issues resueltos:
+  - Correctness: hydration mismatch con `new Date()`, `localStorage` sin versión, `<a href="#">`
+  - Performance: `await` en loops → `Promise.all`, default `[]` props → constantes de módulo, `includes()` en loops → `Set`
+  - Architecture: `w-N h-N` → `size-N` (83 occurrencias), em dashes en JSX
+  - Accessibility: `htmlFor`+`id` en labels, `onKeyDown`+`role` en divs clicables, `href` reales en `<a>`
+  - State & Effects: `clearTimeout` cleanup en efectos con setTimeout
+
+### ✅ Completado en esta sesión (2026-05-15) — parte 1
 - **Audio WhatsApp:** pacientes pueden enviar notas de voz → webhook transcribe con OpenAI Whisper-1 → inbox muestra burbuja con ícono `Icons.Mic`, label "NOTA DE VOZ", transcripción (itálica si falló), sufijo "· transcripto"
 - **Migración `20260512000000_messages_audio.sql`:** columna `message_type` (`text|audio|image|document|sticker|video|unknown`) + índice parcial
 - **Migración `20260515000000_messages_type_video.sql`:** agrega `video` al CHECK constraint (fix QA)
@@ -283,6 +293,80 @@ git push origin develop
 | Configuración → Servicios | ✅ Real | CRUD con descuentos |
 | Configuración → Equipo | ✅ Real | Invitaciones + roles |
 | Configuración → WhatsApp | ⏳ Mock | Pendiente UI real |
+
+---
+
+## 🚨 Estándares de código — reglas aprendidas (react-doctor)
+
+> Estas reglas DEBEN seguirse en todo código nuevo para mantener la calidad del proyecto.
+
+### Tailwind CSS
+- **`w-N h-N` del mismo valor → usar `size-N`** (Tailwind v3.4+). Ej: `w-8 h-8` → `size-8`, `w-4 h-4` → `size-4`
+- No usar `w-[Npx] h-[Npx]` cuando se puede usar `size-[Npx]`
+
+### React — Keys
+- **Nunca usar índice de array como key** (`key={i}`). Siempre usar ID estable: `key={item.id}`, `key={item.slug}`, `key={item.name}`
+- Exception: listas estáticas/constantes donde el orden nunca cambia (ej: lista de beneficios fija)
+
+### React — useEffect cleanup
+- **Todo `setTimeout` en useEffect → retornar `clearTimeout`**
+  ```jsx
+  useEffect(() => {
+    const t = setTimeout(() => { ... }, delay);
+    return () => clearTimeout(t);
+  }, [dep]);
+  ```
+- **Todo `setInterval` → retornar `clearInterval`**
+- **Todo Supabase Realtime `.subscribe()` → retornar `supabase.removeChannel(channel)`** (ya aplica en la mayoría de hooks)
+
+### React — Performance
+- **Default array props → constante de módulo**, no literal inline:
+  ```jsx
+  // ❌ MAL: crea nueva referencia en cada render
+  function Comp({ items = [] }) {}
+  // ✅ BIEN: referencia estable
+  const EMPTY_ITEMS = [];
+  function Comp({ items = EMPTY_ITEMS }) {}
+  ```
+- **`array.includes()` en loops repetidos → convertir a `Set`**:
+  ```js
+  // ❌ O(n) por cada llamada
+  STATUS_LIST.includes(item.status)
+  // ✅ O(1)
+  const STATUS_SET = new Set(STATUS_LIST);
+  STATUS_SET.has(item.status)
+  ```
+- **`await` dentro de `for...of` para operaciones independientes → `Promise.all`**:
+  ```ts
+  // ❌ Secuencial
+  for (const item of items) { await processItem(item); }
+  // ✅ Paralelo
+  await Promise.all(items.map(item => processItem(item)));
+  ```
+
+### React — Correctness
+- **`new Date()` en render/JSX → envolver en `useEffect+useState`** para evitar hydration mismatch
+- **`localStorage` → siempre versionar la key**: `"cliniq:tweaks:v1"` no `"cliniq:tweaks"`
+
+### Accesibilidad
+- **`<a>` sin href real → usar `<button>`** si es un click handler. Si es link, usar href real.
+- **`<div onClick>` no interactivo → agregar `role="button"` + `tabIndex={0}` + `onKeyDown`**:
+  ```jsx
+  <div
+    role="button"
+    tabIndex={0}
+    onClick={handleClick}
+    onKeyDown={e => e.key === 'Enter' && handleClick()}
+  >
+  ```
+- **`<label>` → siempre con `htmlFor` apuntando al `id` del input asociado**:
+  ```jsx
+  <label htmlFor="email-input">Email</label>
+  <input id="email-input" type="email" />
+  ```
+
+### JSX — Texto
+- **No usar em dash literal `—` en JSX text** → usar `{"—"}` o `{" — "}` como expresión JSX
 
 ---
 
