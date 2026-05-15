@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getInviteByToken, acceptInvite } from '../../lib/authService';
@@ -51,7 +51,7 @@ export function AcceptInvite() {
   if (status === 'loading') {
     return (
       <div className="min-h-screen bg-[var(--cq-bg)] flex items-center justify-center">
-        <span className="w-6 h-6 border-2 border-[var(--cq-border)] border-t-[var(--cq-fg)] rounded-full animate-spin" />
+        <span className="size-6 border-2 border-[var(--cq-border)] border-t-[var(--cq-fg)] rounded-full animate-spin" />
       </div>
     );
   }
@@ -99,7 +99,7 @@ export function AcceptInvite() {
                 : 'Verificando tu invitación…'}
             </p>
             {status !== 'done' && (
-              <span className="mt-6 inline-block w-5 h-5 border-2 border-[var(--cq-border)] border-t-[var(--cq-fg)] rounded-full animate-spin" />
+              <span className="mt-6 inline-block size-5 border-2 border-[var(--cq-border)] border-t-[var(--cq-fg)] rounded-full animate-spin" />
             )}
             {status === 'done' && (
               <span className="mt-6 inline-flex items-center gap-2 text-[var(--cq-success)]">
@@ -146,7 +146,7 @@ export function AcceptInvite() {
                 to={`/login?invite=${token}`}
                 className="w-full h-11 rounded-[10px] border border-[var(--cq-border)] bg-[var(--cq-surface)] hover:bg-[var(--cq-surface-2)] hover:border-[var(--cq-fg)] transition-all inline-flex items-center justify-center gap-2 text-[14px] font-medium"
               >
-                Ya tengo cuenta — Iniciar sesión
+                Ya tengo cuenta{" — "}Iniciar sesión
               </Link>
             </div>
 

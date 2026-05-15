@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { Icons, MonoLabel } from './ui';
 import { createPatient } from '../lib/appointmentService';
 import { isValidPhone, filterPhoneInput } from '../lib/phoneUtils';
 
-export function AddPatientModal({ open, onClose, onSuccess, clinicId, push, existingPatients = [] }) {
+const EMPTY_PATIENTS = [];
+export function AddPatientModal({ open, onClose, onSuccess, clinicId, push, existingPatients = EMPTY_PATIENTS }) {
   const [name,       setName]       = useState('');
   const [phone,      setPhone]      = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -13,7 +14,8 @@ export function AddPatientModal({ open, onClose, onSuccess, clinicId, push, exis
   useEffect(() => {
     if (open) {
       setName(''); setPhone(''); setSubmitting(false); setError(null);
-      setTimeout(() => nameRef.current?.focus(), 60);
+      const t = setTimeout(() => nameRef.current?.focus(), 60);
+      return () => clearTimeout(t);
     }
   }, [open]);
 
@@ -79,7 +81,7 @@ export function AddPatientModal({ open, onClose, onSuccess, clinicId, push, exis
           </div>
           <button
             onClick={onClose}
-            className="w-11 h-11 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
+            className="size-11 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
             aria-label="Cerrar"
           >
             <Icons.Close size={16} />

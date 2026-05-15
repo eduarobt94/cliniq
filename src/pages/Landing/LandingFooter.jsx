@@ -1,4 +1,4 @@
-import { Icons, MonoLabel, Divider } from '../../components/ui';
+﻿import { Icons, MonoLabel, Divider } from '../../components/ui';
 import { Reveal } from './Reveal';
 
 export function LandingFooter({ onSignup }) {
@@ -7,7 +7,7 @@ export function LandingFooter({ onSignup }) {
       <section className="max-w-[1280px] mx-auto px-5 md:px-8">
         <Reveal>
           <div className="bg-[var(--cq-fg)] text-[var(--cq-bg)] rounded-[20px] p-10 md:p-16 relative overflow-hidden">
-            <div className="absolute -right-20 -top-20 w-72 h-72 rounded-full bg-[var(--cq-accent)] opacity-30 blur-3xl" />
+            <div className="absolute -right-20 -top-20 size-72 rounded-full bg-[var(--cq-accent)] opacity-30 blur-3xl" />
             <MonoLabel className="text-[var(--cq-bg)]/60">[ Cliniq · 2026 ]</MonoLabel>
             <h2 className="mt-4 text-[40px] md:text-[72px] leading-[0.98] tracking-[-0.03em] font-semibold max-w-[900px]">
               Tu clínica es buena.
@@ -52,13 +52,13 @@ export function LandingFooter({ onSignup }) {
                 <a href="#producto" className="hover:text-[var(--cq-accent)]">Automatizaciones</a>
               </li>
               <li>
-                <a href="#" className="hover:text-[var(--cq-accent)]">Dashboard</a>
+                <a href="#dashboard" className="hover:text-[var(--cq-accent)]">Dashboard</a>
               </li>
               <li>
-                <a href="#" className="hover:text-[var(--cq-accent)]">Integraciones</a>
+                <a href="#integraciones" className="hover:text-[var(--cq-accent)]">Integraciones</a>
               </li>
               <li>
-                <a href="#" className="hover:text-[var(--cq-accent)]">Precios</a>
+                <a href="#precios" className="hover:text-[var(--cq-accent)]">Precios</a>
               </li>
             </ul>
           </div>
@@ -66,13 +66,13 @@ export function LandingFooter({ onSignup }) {
             <MonoLabel>Legal</MonoLabel>
             <ul className="mt-3 space-y-2 text-[13.5px]">
               <li>
-                <a href="#" className="hover:text-[var(--cq-accent)]">Privacidad</a>
+                <a href="/privacy" className="hover:text-[var(--cq-accent)]">Privacidad</a>
               </li>
               <li>
-                <a href="#" className="hover:text-[var(--cq-accent)]">Términos</a>
+                <a href="/terms" className="hover:text-[var(--cq-accent)]">Términos</a>
               </li>
               <li>
-                <a href="#" className="hover:text-[var(--cq-accent)]">LSSI / DGI</a>
+                <a href="/legal" className="hover:text-[var(--cq-accent)]">LSSI / DGI</a>
               </li>
             </ul>
           </div>

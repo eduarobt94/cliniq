@@ -58,7 +58,7 @@ function RevenueChart({ series, labels }) {
         />
         {pts.map(([x, y], i) => (
           <circle
-            key={i}
+            key={`${x}-${y}`}
             cx={x}
             cy={y}
             r={i === pts.length - 1 ? 4 : 2.5}

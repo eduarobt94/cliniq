@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Icons, MonoLabel } from '../../components/ui';
@@ -61,7 +61,7 @@ export function VerifyEmail() {
         </div>
 
         {/* Ícono */}
-        <div className="w-14 h-14 rounded-2xl bg-[color-mix(in_oklch,var(--cq-success)_12%,transparent)] border border-[color-mix(in_oklch,var(--cq-success)_25%,transparent)] flex items-center justify-center mb-6">
+        <div className="size-14 rounded-2xl bg-[color-mix(in_oklch,var(--cq-success)_12%,transparent)] border border-[color-mix(in_oklch,var(--cq-success)_25%,transparent)] flex items-center justify-center mb-6">
           <Icons.Mail size={24} className="text-[var(--cq-success)]" />
         </div>
 
@@ -98,7 +98,7 @@ export function VerifyEmail() {
           >
             {sending ? (
               <>
-                <span className="w-4 h-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
+                <span className="size-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
                 Enviando…
               </>
             ) : cooldown > 0 ? (

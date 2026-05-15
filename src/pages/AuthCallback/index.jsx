@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Icons } from '../../components/ui';
@@ -41,7 +41,7 @@ export function AuthCallback() {
     return (
       <main className="min-h-screen bg-[var(--cq-bg)] text-[var(--cq-fg)] flex items-center justify-center p-6">
         <div className="w-full max-w-[420px] text-center">
-          <div className="w-14 h-14 rounded-full bg-[color-mix(in_oklch,var(--cq-danger)_12%,transparent)] flex items-center justify-center mx-auto mb-6">
+          <div className="size-14 rounded-full bg-[color-mix(in_oklch,var(--cq-danger)_12%,transparent)] flex items-center justify-center mx-auto mb-6">
             <Icons.Alert size={22} className="text-[var(--cq-danger)]" />
           </div>
           <h1 className="text-[22px] font-semibold tracking-tight">
@@ -72,7 +72,7 @@ export function AuthCallback() {
 
   return (
     <div className="min-h-screen bg-[var(--cq-bg)] flex flex-col items-center justify-center gap-3">
-      <span className="w-6 h-6 border-2 border-[var(--cq-border)] border-t-[var(--cq-fg)] rounded-full animate-spin" />
+      <span className="size-6 border-2 border-[var(--cq-border)] border-t-[var(--cq-fg)] rounded-full animate-spin" />
       <p className="text-[13px] text-[var(--cq-fg-muted)]">Conectando con Google…</p>
     </div>
   );

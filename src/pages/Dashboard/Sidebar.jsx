@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Icons, Badge, Avatar, MonoLabel } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -189,7 +189,7 @@ export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobil
           {!isIconOnly && variant !== 'icon' && (
             <button
               onClick={() => setCollapsed(true)}
-              className="hidden lg:inline-flex w-8 h-8 items-center justify-center rounded-[6px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] hover:bg-[var(--cq-surface-2)]"
+              className="hidden lg:inline-flex size-8 items-center justify-center rounded-[6px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] hover:bg-[var(--cq-surface-2)]"
               aria-label="Colapsar menú"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -200,7 +200,7 @@ export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobil
           {isIconOnly && variant !== 'icon' && (
             <button
               onClick={() => setCollapsed(false)}
-              className="hidden lg:inline-flex w-8 h-8 absolute top-4 right-[-16px] items-center justify-center rounded-full bg-[var(--cq-surface)] border border-[var(--cq-border)] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)]"
+              className="hidden lg:inline-flex size-8 absolute top-4 right-[-16px] items-center justify-center rounded-full bg-[var(--cq-surface)] border border-[var(--cq-border)] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)]"
               aria-label="Expandir menú"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -208,7 +208,7 @@ export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobil
               </svg>
             </button>
           )}
-          <button onClick={() => setMobileOpen(false)} className="lg:hidden w-11 h-11 flex items-center justify-center" aria-label="Cerrar menú">
+          <button onClick={() => setMobileOpen(false)} className="lg:hidden size-11 flex items-center justify-center" aria-label="Cerrar menú">
             <Icons.Close size={16} />
           </button>
         </div>
@@ -217,7 +217,7 @@ export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobil
         {!isIconOnly && (
           <div className="px-3 pt-3">
             <button className="w-full flex items-center gap-2.5 px-2.5 h-11 rounded-[9px] hover:bg-[var(--cq-surface-2)] transition-colors border border-[var(--cq-border)] text-left">
-              <div className="w-7 h-7 rounded-[6px] bg-[var(--cq-fg)] text-[var(--cq-bg)] flex items-center justify-center text-[11px] font-semibold shrink-0">
+              <div className="size-7 rounded-[6px] bg-[var(--cq-fg)] text-[var(--cq-bg)] flex items-center justify-center text-[11px] font-semibold shrink-0">
                 {clinic ? clinicInitials(clinic.name) : '…'}
               </div>
               <div className="flex-1 min-w-0">
@@ -303,7 +303,7 @@ export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobil
         {/* Upgrade card */}
         {!isIconOnly && (
           <div className="m-3 p-4 rounded-[12px] bg-[var(--cq-fg)] text-[var(--cq-bg)] relative overflow-hidden">
-            <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-[var(--cq-accent)] opacity-40 blur-2xl" />
+            <div className="absolute -right-6 -top-6 size-24 rounded-full bg-[var(--cq-accent)] opacity-40 blur-2xl" />
             <MonoLabel className="text-[var(--cq-bg)]/60">Plan Pro</MonoLabel>
             <div className="mt-2 text-[13px] font-medium leading-snug">Sumá Sistema Completo</div>
             <p className="mt-1 text-[12px] text-[var(--cq-bg)]/70">CRM, chatbot y facturación DGI.</p>

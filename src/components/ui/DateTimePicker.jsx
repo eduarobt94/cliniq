@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { Icons } from './Icons';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -76,7 +76,7 @@ function Calendar({ value, onChange, min, schedule, closures }) {
       <div className="flex items-center justify-between mb-3">
         <button
           onClick={prevMonth}
-          className="w-7 h-7 rounded-[6px] flex items-center justify-center hover:bg-[var(--cq-surface-3)] transition-colors"
+          className="size-7 rounded-[6px] flex items-center justify-center hover:bg-[var(--cq-surface-3)] transition-colors"
         >
           <Icons.ChevronLeft size={13} />
         </button>
@@ -85,7 +85,7 @@ function Calendar({ value, onChange, min, schedule, closures }) {
         </span>
         <button
           onClick={nextMonth}
-          className="w-7 h-7 rounded-[6px] flex items-center justify-center hover:bg-[var(--cq-surface-3)] transition-colors"
+          className="size-7 rounded-[6px] flex items-center justify-center hover:bg-[var(--cq-surface-3)] transition-colors"
         >
           <Icons.ChevronRight size={13} />
         </button>
@@ -139,7 +139,7 @@ function Calendar({ value, onChange, min, schedule, closures }) {
               {/* Small dot for emergency-only days */}
               {kind === 'emergency' && !sel && (
                 <span
-                  className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
+                  className="absolute bottom-1 left-1/2 -translate-x-1/2 size-1 rounded-full"
                   style={{ background: 'var(--cq-warn)' }}
                 />
               )}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Button, Badge, Icons, MonoLabel } from '../../components/ui';
 import { useClinicServices } from '../../hooks/useClinicServices';
 
@@ -23,7 +23,7 @@ function Toggle({ on, onChange, disabled }) {
         disabled:opacity-50 disabled:cursor-default
         ${on ? 'bg-[var(--cq-success)]' : 'bg-[var(--cq-surface-3)]'}`}
     >
-      <span className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${on ? 'translate-x-4' : 'translate-x-0'}`} />
+      <span className={`size-4 rounded-full bg-white shadow-sm transition-transform ${on ? 'translate-x-4' : 'translate-x-0'}`} />
     </button>
   );
 }
@@ -39,7 +39,7 @@ function finalPrice(price, discountType, discountValue) {
 }
 
 function PriceDisplay({ price, discountType, discountValue }) {
-  if (price == null) return <span className="text-[var(--cq-fg-muted)]">—</span>;
+  if (price == null) return <span className="text-[var(--cq-fg-muted)]">{"—"}</span>;
   const original = Number(price);
   const final    = finalPrice(original, discountType, discountValue ? Number(discountValue) : null);
   const hasDisc  = final !== original && final != null;
@@ -255,7 +255,7 @@ function ServiceRow({ service, onEdit, onToggle, onDelete, isOwner, toggling, de
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           <button
             onClick={() => onEdit(service)}
-            className="w-8 h-8 rounded-[6px] hover:bg-[var(--cq-surface-3)] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] flex items-center justify-center"
+            className="size-8 rounded-[6px] hover:bg-[var(--cq-surface-3)] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] flex items-center justify-center"
             aria-label={`Editar ${service.name}`}
           >
             <Icons.Edit size={13} />
@@ -263,11 +263,11 @@ function ServiceRow({ service, onEdit, onToggle, onDelete, isOwner, toggling, de
           <button
             onClick={() => onDelete(service.id)}
             disabled={deleting === service.id}
-            className="w-8 h-8 rounded-[6px] hover:bg-[var(--cq-danger)]/10 text-[var(--cq-fg-muted)] hover:text-[var(--cq-danger)] flex items-center justify-center disabled:opacity-40"
+            className="size-8 rounded-[6px] hover:bg-[var(--cq-danger)]/10 text-[var(--cq-fg-muted)] hover:text-[var(--cq-danger)] flex items-center justify-center disabled:opacity-40"
             aria-label={`Eliminar ${service.name}`}
           >
             {deleting === service.id
-              ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+              ? <span className="size-3 border border-current border-t-transparent rounded-full animate-spin" />
               : <Icons.Close size={13} />
             }
           </button>

@@ -1,4 +1,4 @@
-import { Component } from 'react';
+﻿import { Component } from 'react';
 
 /**
  * Dashboard-scoped error boundary.
@@ -28,7 +28,7 @@ export class DashboardErrorBoundary extends Component {
       return (
         <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-8 text-center">
           <div
-            className="w-12 h-12 rounded-full flex items-center justify-center text-[22px]"
+            className="size-12 rounded-full flex items-center justify-center text-[22px]"
             style={{ backgroundColor: 'color-mix(in oklch, var(--cq-warn) 12%, transparent)' }}
           >
             ⚠️

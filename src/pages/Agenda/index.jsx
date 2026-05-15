@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect, memo } from 'react';
+﻿import { useState, useMemo, useCallback, useRef, useEffect, memo } from 'react';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Badge, Button, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
 import { EditApptModal } from '../../components/EditApptModal';
@@ -166,7 +166,7 @@ const SkeletonRow = memo(function SkeletonRow() {
   return (
     <li className="flex items-center gap-4 px-5 py-3">
       <div className="w-12 shrink-0 animate-pulse bg-[var(--cq-surface-2)] rounded h-4" />
-      <div className="animate-pulse bg-[var(--cq-surface-2)] rounded-full h-9 w-9 shrink-0" />
+      <div className="animate-pulse bg-[var(--cq-surface-2)] rounded-full size-9 shrink-0" />
       <div className="flex-1 min-w-0 flex flex-col gap-1.5">
         <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-4 w-40" />
         <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-3 w-28" />
@@ -197,7 +197,7 @@ function ActionsMenu({ appt, onStatusChange, onEdit, onDelete }) {
     <div ref={ref} className="relative shrink-0">
       <button
         onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
-        className="w-8 h-8 rounded-[6px] flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[var(--cq-surface-2)] transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[var(--cq-accent)]"
+        className="size-8 rounded-[6px] flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-[var(--cq-surface-2)] transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[var(--cq-accent)]"
         aria-label="Acciones del turno"
       >
         <Icons.More size={14} />
@@ -557,7 +557,7 @@ function MonthView({ currentDate, appointments, loading, onNew }) {
                   <div className="flex items-center justify-between mb-0.5 px-0.5">
                     <button
                       onClick={() => onNew(iso)}
-                      className={`w-6 h-6 flex items-center justify-center rounded-full text-[12px] font-medium leading-none transition-colors ${
+                      className={`size-6 flex items-center justify-center rounded-full text-[12px] font-medium leading-none transition-colors ${
                         isToday
                           ? 'bg-[var(--cq-accent)] text-white text-[11px]'
                           : 'hover:bg-[var(--cq-surface-3)]'
@@ -745,7 +745,7 @@ export function Agenda() {
         <div className="flex items-center gap-1.5">
           <button
             onClick={goPrev}
-            className="w-8 h-8 rounded-[7px] border border-[var(--cq-border)] flex items-center justify-center hover:bg-[var(--cq-surface-2)] transition-colors"
+            className="size-8 rounded-[7px] border border-[var(--cq-border)] flex items-center justify-center hover:bg-[var(--cq-surface-2)] transition-colors"
             aria-label="Período anterior"
           >
             <ChevronLeft />
@@ -755,7 +755,7 @@ export function Agenda() {
           </div>
           <button
             onClick={goNext}
-            className="w-8 h-8 rounded-[7px] border border-[var(--cq-border)] flex items-center justify-center hover:bg-[var(--cq-surface-2)] transition-colors"
+            className="size-8 rounded-[7px] border border-[var(--cq-border)] flex items-center justify-center hover:bg-[var(--cq-surface-2)] transition-colors"
             aria-label="Período siguiente"
           >
             <ChevronRight />

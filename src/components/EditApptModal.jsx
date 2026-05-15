@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { Button, Icons, MonoLabel } from './ui';
 import { updateAppointment } from '../lib/appointmentService';
 
@@ -94,7 +94,7 @@ export function EditApptModal({ appt, onClose, onSuccess }) {
           </div>
           <button
             onClick={onClose}
-            className="w-10 h-10 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
+            className="size-10 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
             aria-label="Cerrar"
           >
             <Icons.Close size={15} />

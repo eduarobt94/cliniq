@@ -10,7 +10,7 @@ export function LandingNav({ onLogin, onSignup }) {
       className="sticky top-0 z-30 bg-[color-mix(in_oklch,var(--cq-bg)_82%,transparent)] backdrop-blur-md border-b border-[var(--cq-border)]"
     >
       <div className="max-w-[1280px] mx-auto px-5 md:px-8 h-16 flex items-center justify-between">
-        <a href="#" className="flex items-center gap-2.5" aria-label="Cliniq — inicio">
+        <a href="/" className="flex items-center gap-2.5" aria-label="Cliniq — inicio">
           <Icons.Logo size={22} />
           <span className="text-[17px] font-semibold tracking-tight">Cliniq</span>
           <Badge tone="outline" className="ml-2 hidden sm:inline-flex">

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
+﻿import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Badge, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
@@ -14,7 +14,8 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('es-UY', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-const NO_SHOW_CUTOFF_MS = 2 * 60 * 60 * 1000; // 2 hours
+const NO_SHOW_CUTOFF_MS    = 2 * 60 * 60 * 1000; // 2 hours
+const NO_SHOW_STATUSES_SET = new Set(['pending', 'new']);
 
 function derivePatient(raw) {
   const now    = new Date();
@@ -32,7 +33,7 @@ function derivePatient(raw) {
 
   // No-show: past appointment still in pending/new (no confirmation, no cancellation)
   const noShowCount = appts.filter(
-    a => ['pending', 'new'].includes(a.status) && new Date(a.appointment_datetime) < cutoff,
+    a => NO_SHOW_STATUSES_SET.has(a.status) && new Date(a.appointment_datetime) < cutoff,
   ).length;
 
   let status = 'activo';
@@ -61,7 +62,8 @@ const FILTERS = [
 ];
 
 // ─── Edit patient modal ───────────────────────────────────────────────────────
-function EditPatientModal({ patient, onClose, onSuccess, existingPatients = [] }) {
+const EMPTY_PATIENTS = [];
+function EditPatientModal({ patient, onClose, onSuccess, existingPatients = EMPTY_PATIENTS }) {
   const [name,       setName]       = useState(patient.full_name);
   const [phone,      setPhone]      = useState(patient.phone_number);
   const [submitting, setSubmitting] = useState(false);
@@ -69,7 +71,8 @@ function EditPatientModal({ patient, onClose, onSuccess, existingPatients = [] }
   const nameRef = useRef(null);
 
   useEffect(() => {
-    setTimeout(() => nameRef.current?.focus(), 60);
+    const t = setTimeout(() => nameRef.current?.focus(), 60);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -131,7 +134,7 @@ function EditPatientModal({ patient, onClose, onSuccess, existingPatients = [] }
           </div>
           <button
             onClick={onClose}
-            className="w-11 h-11 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
+            className="size-11 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
             aria-label="Cerrar"
           >
             <Icons.Close size={16} />
@@ -285,7 +288,7 @@ function PatientActionsMenu({ patient, onEdit, onDelete }) {
         ref={btnRef}
         onClick={handleToggle}
         aria-label="Acciones del paciente"
-        className="opacity-0 group-hover:opacity-100 w-8 h-8 rounded-[6px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center transition-opacity"
+        className="opacity-0 group-hover:opacity-100 size-8 rounded-[6px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center transition-opacity"
       >
         <Icons.More size={15} />
       </button>
@@ -300,7 +303,7 @@ const SkeletonRow = memo(function SkeletonRow() {
     <tr>
       <td className="px-5 py-3.5">
         <div className="flex items-center gap-3">
-          <div className="animate-pulse bg-[var(--cq-surface-2)] rounded-full h-9 w-9 shrink-0" />
+          <div className="animate-pulse bg-[var(--cq-surface-2)] rounded-full size-9 shrink-0" />
           <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-4 w-36" />
         </div>
       </td>

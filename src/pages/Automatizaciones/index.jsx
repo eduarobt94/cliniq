@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+﻿import { useState, useCallback, useMemo } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useAutomations } from '../../hooks/useAutomations';
@@ -99,7 +99,10 @@ function EditModal({ automation, onSave, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div
         className="bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] w-full max-w-[520px] shadow-xl flex flex-col max-h-[90vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[var(--cq-border)]">
@@ -113,7 +116,7 @@ function EditModal({ automation, onSave, onClose }) {
           <button
             onClick={onClose}
             aria-label="Cerrar"
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)]"
+            className="size-7 flex items-center justify-center rounded-lg text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)]"
           >
             <Icons.Close size={16} />
           </button>
@@ -131,11 +134,12 @@ function EditModal({ automation, onSave, onClose }) {
                 </p>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[12px] font-medium text-[var(--cq-fg-muted)] uppercase tracking-wide">
+                <label htmlFor="hours-before" className="text-[12px] font-medium text-[var(--cq-fg-muted)] uppercase tracking-wide">
                   Horas antes del turno
                 </label>
                 <div className="flex items-center gap-3">
                   <input
+                    id="hours-before"
                     type="number" min={1} max={168}
                     value={hoursBefore}
                     onChange={(e) => setHoursBefore(e.target.value)}
@@ -154,11 +158,12 @@ function EditModal({ automation, onSave, onClose }) {
           {automation.type === 'patient_reactivation' && (
             <>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[12px] font-medium text-[var(--cq-fg-muted)] uppercase tracking-wide">
+                <label htmlFor="months-inactive" className="text-[12px] font-medium text-[var(--cq-fg-muted)] uppercase tracking-wide">
                   Meses sin visita
                 </label>
                 <div className="flex items-center gap-3">
                   <input
+                    id="months-inactive"
                     type="number" min={1} max={24}
                     value={monthsInactive}
                     onChange={(e) => setMonthsInactive(e.target.value)}
@@ -183,11 +188,12 @@ function EditModal({ automation, onSave, onClose }) {
           {automation.type === 'review_request' && (
             <>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[12px] font-medium text-[var(--cq-fg-muted)] uppercase tracking-wide">
+                <label htmlFor="hours-after" className="text-[12px] font-medium text-[var(--cq-fg-muted)] uppercase tracking-wide">
                   Horas después de la visita
                 </label>
                 <div className="flex items-center gap-3">
                   <input
+                    id="hours-after"
                     type="number" min={1} max={72}
                     value={hoursAfter}
                     onChange={(e) => setHoursAfter(e.target.value)}
@@ -242,7 +248,7 @@ function MessageEditor({ value, onChange, preview, placeholders }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <label className="text-[12px] font-medium text-[var(--cq-fg-muted)] uppercase tracking-wide">
+        <label htmlFor="message-template" className="text-[12px] font-medium text-[var(--cq-fg-muted)] uppercase tracking-wide">
           Texto del mensaje
         </label>
         <span className={`text-[11px] font-mono ${remaining < 100 ? 'text-[var(--cq-warn)]' : 'text-[var(--cq-fg-muted)]'}`}>
@@ -250,6 +256,7 @@ function MessageEditor({ value, onChange, preview, placeholders }) {
         </span>
       </div>
       <textarea
+        id="message-template"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         maxLength={1000}
@@ -307,7 +314,7 @@ function AutomationCard({ automation, stats, onToggle, onEdit }) {
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="shrink-0 w-8 h-8 rounded-[8px] bg-[var(--cq-surface-2)] border border-[var(--cq-border)] flex items-center justify-center text-[var(--cq-fg-muted)]">
+          <span className="shrink-0 size-8 rounded-[8px] bg-[var(--cq-surface-2)] border border-[var(--cq-border)] flex items-center justify-center text-[var(--cq-fg-muted)]">
             {meta.Icon && <meta.Icon size={15} />}
           </span>
           <span className="font-medium text-[14px] text-[var(--cq-fg)] leading-snug">{meta.name}</span>
@@ -318,7 +325,7 @@ function AutomationCard({ automation, stats, onToggle, onEdit }) {
           aria-label={isActive ? 'Desactivar' : 'Activar'}
         >
           <span
-            className="w-2 h-2 rounded-full transition-colors"
+            className="size-2 rounded-full transition-colors"
             style={{ backgroundColor: isActive ? 'var(--cq-success)' : 'var(--cq-fg-muted)' }}
           />
           <span className="text-[var(--cq-fg-muted)]">{isActive ? 'Activo' : 'Inactivo'}</span>

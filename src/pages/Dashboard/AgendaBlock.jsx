@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, useEffect, useCallback, useRef } from 'react';
+﻿import { memo, useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Icons, Badge, Card, Avatar, MonoLabel, Divider } from '../../components/ui';
@@ -84,7 +84,7 @@ function ApptActionsMenu({ appt, onEdit, onStatusChange }) {
         ref={btnRef}
         onClick={handleToggle}
         aria-label="Acciones del turno"
-        className="w-9 h-9 rounded-[6px] hover:bg-[var(--cq-surface-3)] opacity-0 group-hover:opacity-100 flex items-center justify-center focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[var(--cq-accent)]"
+        className="size-9 rounded-[6px] hover:bg-[var(--cq-surface-3)] opacity-0 group-hover:opacity-100 flex items-center justify-center focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[var(--cq-accent)]"
       >
         <Icons.More size={14} />
       </button>
@@ -159,7 +159,7 @@ const AppointmentRow = memo(function AppointmentRow({ appt, isNow, isReal, onEdi
       {isReal ? (
         <ApptActionsMenu appt={appt} onEdit={onEdit} onStatusChange={onStatusChange} />
       ) : (
-        <div className="w-9 h-9" />
+        <div className="size-9" />
       )}
     </li>
   );

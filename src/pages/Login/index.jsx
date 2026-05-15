@@ -1,13 +1,13 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate, Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { acceptInvite } from '../../lib/authService';
 import { Icons, MonoLabel, Divider, ToastContainer, useToast } from '../../components/ui';
 
-function Field({ label, icon, right, error, success, children }) {
+function Field({ id, label, icon, right, error, success, children }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="flex items-center justify-between">
+      <label htmlFor={id} className="flex items-center justify-between">
         <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--cq-fg-muted)]">
           {label}
         </span>
@@ -120,8 +120,8 @@ export function Login() {
           aria-hidden="true"
           className="hidden lg:flex flex-col justify-between p-10 bg-[var(--cq-fg)] text-[var(--cq-bg)] relative overflow-hidden"
         >
-          <div className="absolute -left-32 -top-32 w-96 h-96 rounded-full bg-[var(--cq-accent)] opacity-30 blur-3xl" />
-          <div className="absolute right-10 bottom-10 w-64 h-64 rounded-full bg-[var(--cq-accent)] opacity-15 blur-3xl" />
+          <div className="absolute -left-32 -top-32 size-96 rounded-full bg-[var(--cq-accent)] opacity-30 blur-3xl" />
+          <div className="absolute right-10 bottom-10 size-64 rounded-full bg-[var(--cq-accent)] opacity-15 blur-3xl" />
           <div className="relative flex items-center gap-2.5">
             <Icons.Logo size={22} color="currentColor" />
             <span className="text-[17px] font-semibold tracking-tight">Cliniq</span>
@@ -141,7 +141,7 @@ export function Login() {
             <ul className="mt-8 space-y-3">
               {BENEFITS.map((item, i) => (
                 <li
-                  key={i}
+                  key={item}
                   className="flex items-center gap-3 text-[13.5px]"
                   style={{
                     opacity: 0,
@@ -150,7 +150,7 @@ export function Login() {
                   }}
                 >
                   <span
-                    className="w-5 h-5 rounded-full bg-[var(--cq-accent)] flex items-center justify-center shrink-0"
+                    className="size-5 rounded-full bg-[var(--cq-accent)] flex items-center justify-center shrink-0"
                     style={{
                       opacity: 0,
                       animation: 'cqFadeSlideUp 0.35s ease forwards',
@@ -217,7 +217,7 @@ export function Login() {
                   aria-label="Continuar con Google"
                 >
                   {googleLoading ? (
-                    <span className="w-4 h-4 border-2 border-[var(--cq-border)] border-t-[var(--cq-fg)] rounded-full animate-spin" />
+                    <span className="size-4 border-2 border-[var(--cq-border)] border-t-[var(--cq-fg)] rounded-full animate-spin" />
                   ) : (
                     <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
                       <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -239,12 +239,14 @@ export function Login() {
               <form onSubmit={onSubmit} className="mt-6 space-y-5" noValidate>
                 <fieldset disabled={submitting || googleLoading} className="contents">
                   <Field
+                    id="login-email"
                     label="Correo electrónico"
                     icon={<Icons.Mail size={15} />}
                     error={emailError && 'Ingresá un correo válido'}
                     success={touched.email && emailValid}
                   >
                     <input
+                      id="login-email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -256,6 +258,7 @@ export function Login() {
                   </Field>
 
                   <Field
+                    id="login-password"
                     label="Contraseña"
                     icon={<Icons.Lock size={15} />}
                     error={pwdError && 'Mínimo 6 caracteres'}
@@ -272,6 +275,7 @@ export function Login() {
                     }
                   >
                     <input
+                      id="login-password"
                       type={showPwd ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -299,7 +303,7 @@ export function Login() {
                     >
                       {submitting ? (
                         <>
-                          <span className="w-4 h-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
+                          <span className="size-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
                           Verificando…
                         </>
                       ) : (

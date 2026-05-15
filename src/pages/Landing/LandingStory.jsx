@@ -1,4 +1,4 @@
-import { MonoLabel, SectionLabel } from '../../components/ui';
+﻿import { MonoLabel, SectionLabel } from '../../components/ui';
 import { Reveal } from './Reveal';
 
 const antes = [
@@ -34,9 +34,9 @@ export function LandingStory() {
           <div className="bg-[var(--cq-bg)] p-8 md:p-10 h-full">
             <MonoLabel className="mb-6 block">[ Antes de Cliniq ]</MonoLabel>
             <ul className="space-y-4">
-              {antes.map((item, i) => (
-                <li key={i} className="flex items-start gap-3 text-[15px] text-[var(--cq-fg-muted)]">
-                  <span className="mt-1 w-4 h-4 rounded-full border border-[var(--cq-border)] shrink-0 flex items-center justify-center">
+              {antes.map((item) => (
+                <li key={item} className="flex items-start gap-3 text-[15px] text-[var(--cq-fg-muted)]">
+                  <span className="mt-1 size-4 rounded-full border border-[var(--cq-border)] shrink-0 flex items-center justify-center">
                     <span className="w-1.5 h-1.5 rounded-full bg-[var(--cq-border)]" />
                   </span>
                   {item}
@@ -51,9 +51,9 @@ export function LandingStory() {
           <div className="bg-[var(--cq-surface-2)] p-8 md:p-10 h-full">
             <MonoLabel className="mb-6 block">[ Con Cliniq ]</MonoLabel>
             <ul className="space-y-4">
-              {despues.map((item, i) => (
-                <li key={i} className="flex items-start gap-3 text-[15px] text-[var(--cq-fg)]">
-                  <span className="mt-1 w-4 h-4 rounded-full bg-[var(--cq-accent)] shrink-0 flex items-center justify-center">
+              {despues.map((item) => (
+                <li key={item} className="flex items-start gap-3 text-[15px] text-[var(--cq-fg)]">
+                  <span className="mt-1 size-4 rounded-full bg-[var(--cq-accent)] shrink-0 flex items-center justify-center">
                     <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
                       <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>

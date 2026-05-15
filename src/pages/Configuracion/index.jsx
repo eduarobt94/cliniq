@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Button, Badge, Avatar, Icons, MonoLabel, Divider } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -70,7 +70,7 @@ function Toggle({ on, onChange, disabled }) {
         on ? 'bg-[var(--cq-success)]' : 'bg-[var(--cq-surface-3)]'
       }`}
     >
-      <span className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${on ? 'translate-x-5' : 'translate-x-0'}`} />
+      <span className={`size-4 rounded-full bg-white shadow-sm transition-transform ${on ? 'translate-x-5' : 'translate-x-0'}`} />
     </button>
   );
 }
@@ -87,7 +87,7 @@ function ToggleRow({ label, on, onChange, disabled, last = false }) {
 function SkeletonRow() {
   return (
     <div className="flex items-center gap-3 py-2.5">
-      <div className="w-8 h-8 rounded-full bg-[var(--cq-surface-3)] animate-pulse shrink-0" />
+      <div className="size-8 rounded-full bg-[var(--cq-surface-3)] animate-pulse shrink-0" />
       <div className="flex-1">
         <div className="h-3 w-32 bg-[var(--cq-surface-3)] rounded animate-pulse" />
         <div className="h-2.5 w-20 bg-[var(--cq-surface-3)] rounded animate-pulse mt-1" />
@@ -202,7 +202,7 @@ export function Configuracion() {
     email_notifications:          clinic?.settings?.email_notifications          ?? true,
     auto_reminders:               clinic?.settings?.auto_reminders               ?? true,
     default_appointment_duration: clinic?.settings?.default_appointment_duration ?? 30,
-    compact_mode:                 localStorage.getItem('cq_compact_mode') === 'true',
+    compact_mode:                 localStorage.getItem('cq_compact_mode:v1') === 'true',
   }));
   const [savingPrefs, setSavingPrefs] = useState(false);
 
@@ -219,8 +219,8 @@ export function Configuracion() {
   async function handlePrefChange(key, value) {
     setPrefs(prev => ({ ...prev, [key]: value }));
     if (key === 'compact_mode') {
-      localStorage.setItem('cq_compact_mode', String(value));
-      window.dispatchEvent(new Event('cq_compact_mode'));
+      localStorage.setItem('cq_compact_mode:v1', String(value));
+      window.dispatchEvent(new Event('cq_compact_mode:v1'));
       return;
     }
     if (!clinic?.id) return;
@@ -509,7 +509,7 @@ export function Configuracion() {
 
             {waLoading ? (
               <div className="h-12 flex items-center justify-center">
-                <span className="w-5 h-5 border-2 border-[var(--cq-accent)] border-t-transparent rounded-full animate-spin" />
+                <span className="size-5 border-2 border-[var(--cq-accent)] border-t-transparent rounded-full animate-spin" />
               </div>
             ) : waConnected ? (
               <div className="flex flex-col gap-3">

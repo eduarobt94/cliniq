@@ -11,7 +11,8 @@ const OUTBOUND = new Set(['outbound', 'outbound_ai', 'system_template']);
  * Uses a single query (all conversations at once) and computes client-side.
  * Re-runs whenever conversationIds changes.
  */
-export function useUnreadCounts(conversationIds = []) {
+const EMPTY_IDS = [];
+export function useUnreadCounts(conversationIds = EMPTY_IDS) {
   const [counts, setCounts] = useState(new Map());
 
   useEffect(() => {

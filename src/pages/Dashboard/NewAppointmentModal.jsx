@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+﻿import { useState, useEffect, useRef, useCallback } from 'react';
 import { Icons, Button, MonoLabel } from '../../components/ui';
 import { DatePicker, TimePicker } from '../../components/ui/DateTimePicker';
 import { searchPatients, createPatient, createAppointment } from '../../lib/appointmentService';
@@ -137,6 +137,11 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
   const [submitting,     setSubmitting]     = useState(false);
   const [success,        setSuccess]        = useState(false);
   const [error,          setError]          = useState(null);
+  const [today,          setToday]          = useState('');
+
+  useEffect(() => {
+    setToday(new Date().toISOString().slice(0, 10));
+  }, []);
 
   const { schedule, closures, refetch: refetchSchedule } = useClinicSchedule(clinicId);
 
@@ -348,7 +353,7 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
           </div>
           <button
             onClick={onClose}
-            className="w-11 h-11 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
+            className="size-11 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
             aria-label="Cerrar"
           >
             <Icons.Close size={16} />
@@ -357,7 +362,7 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
 
         {success ? (
           <div className="flex flex-col items-center justify-center py-10 gap-3">
-            <div className="w-14 h-14 rounded-full bg-[var(--cq-success)]/15 flex items-center justify-center">
+            <div className="size-14 rounded-full bg-[var(--cq-success)]/15 flex items-center justify-center">
               <Icons.Check size={28} />
             </div>
             <p className="text-[15px] font-medium">Turno agendado</p>
@@ -452,7 +457,7 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                   <DatePicker
                     value={date}
                     onChange={setDate}
-                    min={new Date().toISOString().slice(0, 10)}
+                    min={today}
                     schedule={schedule}
                     closures={closures}
                   />

@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
-const UY_TZ   = 'America/Montevideo';
-const STATUSES = ['confirmed', 'pending', 'new', 'rescheduled', 'cancelled'];
+const UY_TZ              = 'America/Montevideo';
+const STATUSES           = ['confirmed', 'pending', 'new', 'rescheduled', 'cancelled'];
+const STATUSES_SET       = new Set(STATUSES);
+const NO_SHOW_STATUSES   = new Set(['pending', 'new']);
+const SKIP_COUNT_STATUSES = new Set(['cancelled', 'rescheduled']);
 
 function getRangeStart(range) {
   const d = new Date();
@@ -26,7 +29,7 @@ function buildMonthSeries(appts) {
       monthMap[key] = { confirmed: 0, pending: 0, new: 0, rescheduled: 0, cancelled: 0 };
     }
     const s = appt.status;
-    if (STATUSES.includes(s)) monthMap[key][s]++;
+    if (STATUSES_SET.has(s)) monthMap[key][s]++;
   }
 
   const allYears  = new Set(Object.keys(monthMap).map(k => k.slice(0, 4)));
@@ -126,7 +129,7 @@ export function useReportes(clinicId, range = '1a') {
         // ── No-shows: past appointments still in pending/new (never confirmed/cancelled) ──
         const noShowCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
         const noShows      = allAppts.filter(
-          a => ['pending', 'new'].includes(a.status) && a.appointment_datetime < noShowCutoff,
+          a => NO_SHOW_STATUSES.has(a.status) && a.appointment_datetime < noShowCutoff,
         ).length;
         const noShowRate   = total > 0 ? Math.round(noShows / total * 100) : 0;
 
@@ -137,7 +140,7 @@ export function useReportes(clinicId, range = '1a') {
         // ── Top 5 patients ────────────────────────────────────────────────────
         const patientCounts = {};
         for (const appt of allAppts) {
-          if (appt.patient_id && !['cancelled', 'rescheduled'].includes(appt.status)) {
+          if (appt.patient_id && !SKIP_COUNT_STATUSES.has(appt.status)) {
             patientCounts[appt.patient_id] = (patientCounts[appt.patient_id] ?? 0) + 1;
           }
         }

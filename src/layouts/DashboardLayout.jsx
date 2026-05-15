@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+﻿import { useState, useCallback, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from '../pages/Dashboard/Sidebar';
 import { TopBar } from '../pages/Dashboard/TopBar';
@@ -14,12 +14,12 @@ export function DashboardLayout() {
   const { toasts, push, dismiss } = useToast();
   const { notifications, unreadCount, markAllRead } = useNotifications(clinic?.id, push);
 
-  const [compact, setCompact] = useState(() => localStorage.getItem('cq_compact_mode') === 'true');
+  const [compact, setCompact] = useState(() => localStorage.getItem('cq_compact_mode:v1') === 'true');
 
   useEffect(() => {
-    const sync = () => setCompact(localStorage.getItem('cq_compact_mode') === 'true');
-    window.addEventListener('cq_compact_mode', sync);
-    return () => window.removeEventListener('cq_compact_mode', sync);
+    const sync = () => setCompact(localStorage.getItem('cq_compact_mode:v1') === 'true');
+    window.addEventListener('cq_compact_mode:v1', sync);
+    return () => window.removeEventListener('cq_compact_mode:v1', sync);
   }, []);
 
   const [collapsed,     setCollapsed]     = useState(false);

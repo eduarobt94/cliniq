@@ -142,7 +142,8 @@ serve(async (req: Request) => {
     }
 
     // ── 2. For each clinic, find appointments in the reminder window ────────
-    for (const auto of automations) {
+    async function processAutomation(auto: { clinic_id: string; hours_before: number }): Promise<{ sent: number; failed: number; skipped: number }> {
+      const r = { sent: 0, failed: 0, skipped: 0 };
       const now         = new Date();
       const windowStart = new Date(now.getTime() + (auto.hours_before * 60 - 30) * 60 * 1000);
       const windowEnd   = new Date(now.getTime() + (auto.hours_before * 60 + 30) * 60 * 1000);
@@ -163,19 +164,19 @@ serve(async (req: Request) => {
 
       if (apptError) {
         console.error(`Error loading appointments for clinic ${auto.clinic_id}:`, apptError);
-        continue;
+        return r;
       }
 
       for (const appt of (appointments ?? [])) {
         const patient = appt.patients as Record<string, string>;
         const clinic  = appt.clinics  as Record<string, string>;
 
-        if (!patient?.phone_number) { results.skipped++; continue; }
+        if (!patient?.phone_number) { r.skipped++; continue; }
 
         const phoneNumberId = clinic?.wa_phone_number_id || WA_PHONE_NUMBER_ID_GLOBAL;
         if (!phoneNumberId) {
           console.error(`Clinic ${auto.clinic_id} has no WA phone number configured`);
-          results.skipped++;
+          r.skipped++;
           continue;
         }
 
@@ -244,7 +245,7 @@ serve(async (req: Request) => {
           });
 
           console.log(`✅ Reminder sent to ${patient.phone_number} (waId: ${waId})`);
-          results.sent++;
+          r.sent++;
         } else {
           // ── Failed send — just log it ─────────────────────────────────────
           await supabase.from('whatsapp_message_log').insert({
@@ -259,9 +260,17 @@ serve(async (req: Request) => {
           });
 
           console.log(`❌ Reminder failed for ${patient.phone_number}`);
-          results.failed++;
+          r.failed++;
         }
       }
+      return r;
+    }
+
+    const perClinic = await Promise.all(automations.map(processAutomation));
+    for (const r of perClinic) {
+      results.sent    += r.sent;
+      results.failed  += r.failed;
+      results.skipped += r.skipped;
     }
 
     return new Response(JSON.stringify({ ok: true, ...results }), {

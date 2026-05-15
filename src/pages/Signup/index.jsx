@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate, Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getInviteByToken } from '../../lib/authService';
 import { Icons, MonoLabel, Divider, ToastContainer, useToast } from '../../components/ui';
 
-function Field({ label, icon, error, success, children }) {
+function Field({ id, label, icon, error, success, children }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="flex items-center justify-between">
+      <label htmlFor={id} className="flex items-center justify-between">
         <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--cq-fg-muted)]">
           {label}
         </span>
@@ -104,7 +104,7 @@ export function Signup() {
   if (inviteLoading) {
     return (
       <div className="min-h-screen bg-[var(--cq-bg)] flex items-center justify-center">
-        <span className="w-6 h-6 border-2 border-[var(--cq-border)] border-t-[var(--cq-fg)] rounded-full animate-spin" />
+        <span className="size-6 border-2 border-[var(--cq-border)] border-t-[var(--cq-fg)] rounded-full animate-spin" />
       </div>
     );
   }
@@ -115,7 +115,7 @@ export function Signup() {
     <main className="min-h-screen bg-[var(--cq-bg)] text-[var(--cq-fg)] grid lg:grid-cols-[1.1fr_1fr]">
       {/* Panel izquierdo */}
       <aside aria-hidden="true" className="hidden lg:flex flex-col justify-between p-10 bg-[var(--cq-fg)] text-[var(--cq-bg)] relative overflow-hidden">
-        <div className="absolute -left-32 -top-32 w-96 h-96 rounded-full bg-[var(--cq-accent)] opacity-30 blur-3xl" />
+        <div className="absolute -left-32 -top-32 size-96 rounded-full bg-[var(--cq-accent)] opacity-30 blur-3xl" />
         <div className="relative flex items-center gap-2.5">
           <Icons.Logo size={22} color="currentColor" />
           <span className="text-[17px] font-semibold tracking-tight">Cliniq</span>
@@ -154,7 +154,7 @@ export function Signup() {
               : ['Recordatorios automáticos por WhatsApp', 'Dashboard con KPIs en tiempo real', 'Invitá a tu equipo sin costo adicional']
             ).map((item) => (
               <div key={item} className="flex items-center gap-3 text-[13.5px]">
-                <span className="w-5 h-5 rounded-full bg-[var(--cq-accent)] flex items-center justify-center shrink-0">
+                <span className="size-5 rounded-full bg-[var(--cq-accent)] flex items-center justify-center shrink-0">
                   <Icons.Check size={10} />
                 </span>
                 <span className="text-[var(--cq-bg)]/85">{item}</span>
@@ -201,11 +201,13 @@ export function Signup() {
                 {/* Nombre y apellido en fila */}
                 <div className="grid grid-cols-2 gap-3">
                   <Field
+                    id="signup-first-name"
                     label="Nombre"
                     error={touched.firstName && !firstNameValid ? 'Requerido' : ''}
                     success={touched.firstName && firstNameValid}
                   >
                     <input
+                      id="signup-first-name"
                       type="text"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
@@ -216,11 +218,13 @@ export function Signup() {
                     />
                   </Field>
                   <Field
+                    id="signup-last-name"
                     label="Apellido"
                     error={touched.lastName && !lastNameValid ? 'Requerido' : ''}
                     success={touched.lastName && lastNameValid}
                   >
                     <input
+                      id="signup-last-name"
                       type="text"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
@@ -234,12 +238,14 @@ export function Signup() {
 
                 {!isInviteMode && (
                   <Field
+                    id="signup-clinic"
                     label="Nombre de la clínica"
                     icon={<Icons.Home size={15} />}
                     error={touched.clinic && !clinicValid ? 'Mínimo 2 caracteres' : ''}
                     success={touched.clinic && clinicValid}
                   >
                     <input
+                      id="signup-clinic"
                       type="text"
                       value={clinicName}
                       onChange={(e) => setClinicName(e.target.value)}
@@ -253,12 +259,14 @@ export function Signup() {
                 <Divider />
 
                 <Field
+                  id="signup-email"
                   label="Correo electrónico"
                   icon={<Icons.Mail size={15} />}
                   error={touched.email && !emailValid ? 'Correo inválido' : ''}
                   success={touched.email && emailValid}
                 >
                   <input
+                    id="signup-email"
                     type="email"
                     value={email}
                     onChange={isInviteMode ? undefined : (e) => setEmail(e.target.value)}
@@ -271,12 +279,14 @@ export function Signup() {
                 </Field>
 
                 <Field
+                  id="signup-password"
                   label="Contraseña"
                   icon={<Icons.Lock size={15} />}
                   error={touched.password && !passwordValid ? 'Mínimo 6 caracteres' : ''}
                   success={touched.password && passwordValid}
                 >
                   <input
+                    id="signup-password"
                     type={showPwd ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -301,7 +311,7 @@ export function Signup() {
                 >
                   {submitting ? (
                     <>
-                      <span className="w-4 h-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
+                      <span className="size-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
                       Creando tu clínica…
                     </>
                   ) : (
@@ -319,9 +329,9 @@ export function Signup() {
             </p>
             <p className="mt-3 text-center text-[12px] text-[var(--cq-fg-muted)]">
               Al registrarte aceptás los{' '}
-              <a href="#" className="underline underline-offset-2 hover:text-[var(--cq-fg)]">Términos de servicio</a>
+              <a href="/terms" className="underline underline-offset-2 hover:text-[var(--cq-fg)]">Términos de servicio</a>
               {' '}y la{' '}
-              <a href="#" className="underline underline-offset-2 hover:text-[var(--cq-fg)]">Política de privacidad</a>.
+              <a href="/privacy" className="underline underline-offset-2 hover:text-[var(--cq-fg)]">Política de privacidad</a>.
             </p>
           </div>
         </div>

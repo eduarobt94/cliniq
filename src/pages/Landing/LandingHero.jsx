@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Icons, Badge, Button, MonoLabel, Divider } from '../../components/ui';
 import { Reveal } from './Reveal';
 
@@ -43,13 +43,13 @@ function PreviewCard() {
           </div>
 
           <div className="space-y-2">
-            {steps.map((s, i) => (
+            {steps.map((s) => (
               <div
-                key={i}
+                key={s.t}
                 className="flex items-center gap-3 px-3 h-10 rounded-lg bg-[var(--cq-surface-2)] border border-[var(--cq-border)]"
               >
                 <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
+                  className={`size-5 rounded-full flex items-center justify-center transition-all ${
                     s.done
                       ? 'bg-[var(--cq-success)] text-white'
                       : 'bg-[var(--cq-surface)] border border-[var(--cq-border)]'
@@ -70,7 +70,7 @@ function PreviewCard() {
           <Divider className="my-4" />
 
           <div className="flex items-start gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[var(--cq-accent-soft)] text-[var(--cq-accent)] flex items-center justify-center shrink-0">
+            <div className="size-8 rounded-full bg-[var(--cq-accent-soft)] text-[var(--cq-accent)] flex items-center justify-center shrink-0">
               <Icons.Whatsapp size={16} />
             </div>
             <div className="flex-1 bg-[var(--cq-surface-2)] border border-[var(--cq-border)] rounded-[10px] rounded-tl-sm p-3">
@@ -165,9 +165,9 @@ export function LandingHero({ onLogin, onSignup }) {
               { Icon: Icons.Calendar,  l: 'Agenda siempre al día',      s: 'confirmaciones en tiempo real' },
               { Icon: Icons.Zap,       l: 'Seguimiento de presupuestos', s: 'sin llamadas manuales' },
               { Icon: Icons.Chart,     l: 'Reportes semanales',         s: 'en tu correo cada lunes' },
-            ].map((m, i) => (
-              <div key={i} className="bg-[var(--cq-bg)] p-5 md:p-6">
-                <div className="w-9 h-9 rounded-[10px] bg-[var(--cq-accent-soft)] text-[var(--cq-accent)] flex items-center justify-center">
+            ].map((m) => (
+              <div key={m.l} className="bg-[var(--cq-bg)] p-5 md:p-6">
+                <div className="size-9 rounded-[10px] bg-[var(--cq-accent-soft)] text-[var(--cq-accent)] flex items-center justify-center">
                   <m.Icon size={18} />
                 </div>
                 <div className="mt-4 text-[14px] font-medium text-[var(--cq-fg)]">{m.l}</div>

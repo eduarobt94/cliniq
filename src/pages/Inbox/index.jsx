@@ -47,7 +47,7 @@ function SkeletonList() {
     <div className="flex flex-col gap-0">
       {[0, 1, 2, 3].map((i) => (
         <div key={i} className="px-3 py-3 flex items-start gap-3">
-          <div className="w-9 h-9 rounded-full bg-[var(--cq-surface-3)] animate-pulse shrink-0" />
+          <div className="size-9 rounded-full bg-[var(--cq-surface-3)] animate-pulse shrink-0" />
           <div className="flex-1 flex flex-col gap-1.5 pt-0.5">
             <div className="h-3 w-24 bg-[var(--cq-surface-3)] rounded animate-pulse" />
             <div className="h-2.5 w-36 bg-[var(--cq-surface-3)] rounded animate-pulse" />
@@ -146,7 +146,7 @@ function AIToggle({ enabled, onChange, disabled }) {
       >
         {/* Thumb */}
         <div
-          className="absolute top-0.5 w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm"
+          className="absolute top-0.5 size-4 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm"
           style={{
             left:            enabled ? '18px' : '2px',
             backgroundColor: 'white',
@@ -299,7 +299,7 @@ function ReactivationBanner({ count, onReactivate, onDismiss, loading }) {
         >
           {loading ? (
             <>
-              <div className="w-3 h-3 rounded-full border-2 animate-spin" style={{ borderColor: 'white', borderTopColor: 'transparent' }} />
+              <div className="size-3 rounded-full border-2 animate-spin" style={{ borderColor: 'white', borderTopColor: 'transparent' }} />
               Reactivando…
             </>
           ) : (
@@ -322,7 +322,7 @@ function ReactivationBanner({ count, onReactivate, onDismiss, loading }) {
 function EmptyConversationState() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center p-8">
-      <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--cq-surface-2)' }}>
+      <div className="size-12 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--cq-surface-2)' }}>
         <Icons.Chat size={20} />
       </div>
       <div>
@@ -336,7 +336,7 @@ function EmptyConversationState() {
 function NoConversationsState({ onNew }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center p-8">
-      <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--cq-surface-2)' }}>
+      <div className="size-12 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--cq-surface-2)' }}>
         <Icons.Whatsapp size={20} />
       </div>
       <div>
@@ -432,7 +432,7 @@ function NewConversationModal({ clinicId, onClose, onCreated }) {
       <ModalShell onClose={onClose}>
         <div className="flex flex-col items-center gap-4 py-4 text-center">
           <div
-            className="w-12 h-12 rounded-full flex items-center justify-center"
+            className="size-12 rounded-full flex items-center justify-center"
             style={{ backgroundColor: 'color-mix(in oklch, var(--cq-success) 15%, white)' }}
           >
             <span className="text-[22px]">✅</span>
@@ -586,7 +586,9 @@ function ModalShell({ children, title, onClose }) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
+      role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
     >
       <div
         className="w-full max-w-[360px] rounded-[12px] shadow-xl p-4"
@@ -676,7 +678,7 @@ function MessageBubble({ msg }) {
         {isAudio ? (
           <div className="flex items-start gap-2">
             <div
-              className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center mt-0.5"
+              className="flex-shrink-0 size-7 rounded-full flex items-center justify-center mt-0.5"
               style={{ backgroundColor: 'color-mix(in srgb, currentColor 15%, transparent)' }}
             >
               <Icons.Mic size={13} />
@@ -878,7 +880,7 @@ function ConversationView({ conv, onDelete }) {
             <button
               onClick={() => setShowPanel((v) => !v)}
               title={showPanel ? 'Cerrar panel de contexto' : 'Ver contexto del lead'}
-              className={`hidden lg:flex w-8 h-8 rounded-[6px] items-center justify-center transition-colors ${
+              className={`hidden lg:flex size-8 rounded-[6px] items-center justify-center transition-colors ${
                 showPanel
                   ? 'bg-[var(--cq-accent-soft)] text-[var(--cq-accent)]'
                   : 'hover:bg-[var(--cq-surface-2)] text-[var(--cq-fg-muted)]'
@@ -891,7 +893,7 @@ function ConversationView({ conv, onDelete }) {
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowMenu((v) => !v)}
-                className="w-8 h-8 rounded-[6px] flex items-center justify-center hover:bg-[var(--cq-surface-2)] transition-colors text-[var(--cq-fg-muted)]"
+                className="size-8 rounded-[6px] flex items-center justify-center hover:bg-[var(--cq-surface-2)] transition-colors text-[var(--cq-fg-muted)]"
               >
                 <Icons.More size={16} />
               </button>
@@ -954,7 +956,7 @@ function ConversationView({ conv, onDelete }) {
           {loading ? (
             <div className="flex-1 flex items-center justify-center">
               <div
-                className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
+                className="size-5 rounded-full border-2 border-t-transparent animate-spin"
                 style={{ borderColor: 'var(--cq-accent)', borderTopColor: 'transparent' }}
               />
             </div>
@@ -999,11 +1001,11 @@ function ConversationView({ conv, onDelete }) {
           <button
             onClick={handleSend}
             disabled={!windowOpen || !inputValue.trim() || sending}
-            className="w-9 h-9 rounded-[8px] flex items-center justify-center text-white transition-opacity hover:opacity-80 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="size-9 rounded-[8px] flex items-center justify-center text-white transition-opacity hover:opacity-80 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ backgroundColor: 'var(--cq-accent)' }}
           >
             {sending
-              ? <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor: 'white', borderTopColor: 'transparent' }} />
+              ? <div className="size-4 rounded-full border-2 animate-spin" style={{ borderColor: 'white', borderTopColor: 'transparent' }} />
               : <Icons.Arrow size={15} />
             }
           </button>
@@ -1079,7 +1081,7 @@ export function Inbox() {
             <button
               onClick={() => setShowNewModal(true)}
               title="Nueva conversación"
-              className="w-7 h-7 rounded-[6px] flex items-center justify-center text-white transition-opacity hover:opacity-80"
+              className="size-7 rounded-[6px] flex items-center justify-center text-white transition-opacity hover:opacity-80"
               style={{ backgroundColor: 'var(--cq-accent)' }}
             >
               <Icons.Plus size={14} />

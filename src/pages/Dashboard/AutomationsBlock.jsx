@@ -1,4 +1,4 @@
-import { memo } from 'react';
+﻿import { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useAutomations } from '../../hooks/useAutomations';
@@ -36,7 +36,7 @@ const AutomationRow = memo(function AutomationRow({ auto, stats, code }) {
   return (
     <li className="px-5 py-3 hover:bg-[var(--cq-surface-2)] transition-colors cursor-pointer">
       <div className="flex items-center gap-3 mb-1.5">
-        <span className={`w-2 h-2 rounded-full shrink-0 ${DOT[status]}`} />
+        <span className={`size-2 rounded-full shrink-0 ${DOT[status]}`} />
         <MonoLabel>{code}</MonoLabel>
         <MonoLabel className="ml-auto">{lastStr}</MonoLabel>
       </div>

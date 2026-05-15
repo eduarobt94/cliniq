@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+﻿import { useNavigate } from 'react-router-dom';
 import { Icons, MonoLabel } from '../../components/ui';
 
 export function NotFound() {
@@ -6,7 +6,7 @@ export function NotFound() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--cq-bg)] text-[var(--cq-fg)]">
       <div className="text-center max-w-sm p-8">
-        <div className="inline-flex w-14 h-14 rounded-[14px] bg-[var(--cq-surface-2)] items-center justify-center mb-6">
+        <div className="inline-flex size-14 rounded-[14px] bg-[var(--cq-surface-2)] items-center justify-center mb-6">
           <Icons.Search size={24} />
         </div>
         <MonoLabel>Error 404</MonoLabel>

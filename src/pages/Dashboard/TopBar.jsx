@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Icons, Badge, MonoLabel, Avatar, Button } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+
+const EMPTY_NOTIFICATIONS = [];
 
 const ROUTE_LABELS = {
   '/dashboard':                  'Resumen',
@@ -103,7 +105,7 @@ function NotifPanel({ notifications, onClose, onNavigate }) {
         <MonoLabel>Notificaciones</MonoLabel>
         <button
           onClick={onClose}
-          className="w-7 h-7 rounded-[6px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center text-[var(--cq-fg-muted)]"
+          className="size-7 rounded-[6px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center text-[var(--cq-fg-muted)]"
           aria-label="Cerrar"
         >
           <Icons.Close size={12} />
@@ -226,7 +228,7 @@ function SearchPanel({ q, patients, appointments, onSelectPatient, onSelectAppt 
 }
 
 // ─── TopBar ───────────────────────────────────────────────────────────────────
-export function TopBar({ onMobileMenu, onNewAppointment, notifications = [], unreadCount = 0, onMarkAllRead }) {
+export function TopBar({ onMobileMenu, onNewAppointment, notifications = EMPTY_NOTIFICATIONS, unreadCount = 0, onMarkAllRead }) {
   const location = useLocation();
   const navigate  = useNavigate();
   const { clinic } = useAuth();
@@ -324,7 +326,7 @@ export function TopBar({ onMobileMenu, onNewAppointment, notifications = [], unr
       {/* Mobile menu */}
       <button
         onClick={onMobileMenu}
-        className="lg:hidden w-9 h-9 rounded-[8px] border border-[var(--cq-border)] flex items-center justify-center"
+        className="lg:hidden size-9 rounded-[8px] border border-[var(--cq-border)] flex items-center justify-center"
         aria-label="Abrir menú"
       >
         <Icons.Menu size={16} />
@@ -386,7 +388,7 @@ export function TopBar({ onMobileMenu, onNewAppointment, notifications = [], unr
         <div ref={notifRef} className="relative">
           <button
             onClick={openNotifPanel}
-            className="w-10 h-10 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center relative transition-colors"
+            className="size-10 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center relative transition-colors"
             aria-label={`Notificaciones${unreadCount > 0 ? ` — ${unreadCount} sin leer` : ''}`}
           >
             <Icons.Bell size={15} />

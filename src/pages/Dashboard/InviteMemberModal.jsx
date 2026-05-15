@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Icons, MonoLabel } from '../../components/ui';
 import { inviteMember, sendInviteEmail } from '../../lib/authService';
 import { useClinic } from '../../hooks/useClinic';
@@ -225,7 +225,7 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
                 className="flex-1 h-11 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] hover:bg-[var(--cq-accent)] disabled:opacity-60 transition-all active:scale-[0.99] inline-flex items-center justify-center gap-2 text-[13.5px] font-medium"
               >
                 {submitting ? (
-                  <span className="w-4 h-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
+                  <span className="size-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
                 ) : (
                   <><Icons.UserPlus size={14} /> Crear invitación</>
                 )}

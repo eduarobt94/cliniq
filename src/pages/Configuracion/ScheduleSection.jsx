@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Button, Badge, Icons, MonoLabel } from '../../components/ui';
 import { DatePicker, TimePicker } from '../../components/ui/DateTimePicker';
 import { useClinicSchedule } from '../../hooks/useClinicSchedule';
@@ -21,7 +21,7 @@ function Toggle({ on, onChange, disabled }) {
         on ? 'bg-[var(--cq-success)]' : 'bg-[var(--cq-surface-3)]'
       }`}
     >
-      <span className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${on ? 'translate-x-4' : 'translate-x-0'}`} />
+      <span className={`size-4 rounded-full bg-white shadow-sm transition-transform ${on ? 'translate-x-4' : 'translate-x-0'}`} />
     </button>
   );
 }
@@ -124,7 +124,7 @@ function ClosureRow({ closure, onDelete, onNotify, notifying, isOwner }) {
               title="Enviar mensaje de cierre a pacientes con turno ese día"
             >
               {notifying === closure.id ? (
-                <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                <span className="size-3 border border-current border-t-transparent rounded-full animate-spin" />
               ) : (
                 <Icons.Whatsapp size={13} />
               )}
@@ -133,7 +133,7 @@ function ClosureRow({ closure, onDelete, onNotify, notifying, isOwner }) {
           )}
           <button
             onClick={() => onDelete(closure.id)}
-            className="w-8 h-8 rounded-[6px] hover:bg-[var(--cq-danger)]/10 text-[var(--cq-fg-muted)] hover:text-[var(--cq-danger)] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+            className="size-8 rounded-[6px] hover:bg-[var(--cq-danger)]/10 text-[var(--cq-fg-muted)] hover:text-[var(--cq-danger)] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
             aria-label="Eliminar día cerrado"
           >
             <Icons.Close size={13} />
@@ -157,6 +157,11 @@ function AddClosureForm({ onAdd, onCancel }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState(null);
+  const [today,  setToday]  = useState('');
+
+  useEffect(() => {
+    setToday(new Date().toISOString().slice(0, 10));
+  }, []);
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -184,7 +189,7 @@ function AddClosureForm({ onAdd, onCancel }) {
           <DatePicker
             value={form.date}
             onChange={v => set('date', v)}
-            min={new Date().toISOString().slice(0, 10)}
+            min={today}
           />
         </div>
         <div>

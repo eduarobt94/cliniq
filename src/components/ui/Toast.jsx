@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Icons } from './Icons';
 
 export function Toast({ message, type = 'error', duration = 4000, onDismiss }) {
@@ -38,7 +38,7 @@ export function Toast({ message, type = 'error', duration = 4000, onDismiss }) {
       <span className="flex-1">{message}</span>
       <button
         onClick={() => setExiting(true)}
-        className="w-8 h-8 -mr-1 flex items-center justify-center opacity-50 hover:opacity-100 transition-opacity shrink-0 rounded-[6px]"
+        className="size-8 -mr-1 flex items-center justify-center opacity-50 hover:opacity-100 transition-opacity shrink-0 rounded-[6px]"
         aria-label="Cerrar"
       >
         <Icons.Close size={13} />

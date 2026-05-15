@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Icons, MonoLabel } from '../../components/ui';
@@ -32,7 +32,7 @@ export function ForgotPassword() {
     return (
       <main className="min-h-screen bg-[var(--cq-bg)] text-[var(--cq-fg)] flex items-center justify-center p-6">
         <div className="w-full max-w-[420px] text-center">
-          <div className="w-14 h-14 rounded-full bg-[color-mix(in_oklch,var(--cq-success)_15%,transparent)] flex items-center justify-center mx-auto mb-6">
+          <div className="size-14 rounded-full bg-[color-mix(in_oklch,var(--cq-success)_15%,transparent)] flex items-center justify-center mx-auto mb-6">
             <Icons.Check size={22} className="text-[var(--cq-success)]" />
           </div>
           <MonoLabel>[ Email enviado ]</MonoLabel>
@@ -116,7 +116,7 @@ export function ForgotPassword() {
           >
             {loading ? (
               <>
-                <span className="w-4 h-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
+                <span className="size-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
                 Enviando…
               </>
             ) : (

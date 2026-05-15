@@ -1,4 +1,4 @@
-import { Icons, Card, MonoLabel } from '../../components/ui';
+﻿import { Icons, Card, MonoLabel } from '../../components/ui';
 
 const RISK_ITEMS = [
   { name: 'Presupuestos sin respuesta', amount: 'USD 3.240', count: '8 pacientes', tone: 'warn' },
@@ -18,7 +18,7 @@ export function RiskBlock() {
             <span className="text-[var(--cq-accent)] font-medium">USD 4.100</span>
           </div>
         </div>
-        <span className="w-8 h-8 rounded-[8px] bg-[var(--cq-accent-soft)] text-[var(--cq-accent)] flex items-center justify-center">
+        <span className="size-8 rounded-[8px] bg-[var(--cq-accent-soft)] text-[var(--cq-accent)] flex items-center justify-center">
           <Icons.Pulse size={16} />
         </span>
       </div>

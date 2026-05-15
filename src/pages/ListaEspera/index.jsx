@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+﻿import { useState, useCallback, useMemo } from 'react';
 import { useAuth }         from '../../context/AuthContext';
 import { useWaitingList }  from '../../hooks/useWaitingList';
 import { supabase }        from '../../lib/supabase';
@@ -25,7 +25,7 @@ function Skeleton({ className = '' }) {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center gap-3 py-16 text-center">
-      <div className="w-10 h-10 rounded-full bg-[var(--cq-surface-2)] flex items-center justify-center text-[var(--cq-fg-muted)]">
+      <div className="size-10 rounded-full bg-[var(--cq-surface-2)] flex items-center justify-center text-[var(--cq-fg-muted)]">
         <Icons.Bell size={18} />
       </div>
       <p className="text-[14px] font-medium text-[var(--cq-fg)]">Sin pacientes en lista de espera</p>
