@@ -33,10 +33,11 @@ export function AcceptInvite() {
   useEffect(() => {
     if (status !== 'valid' || !user || !invite) return;
 
+    let timer;
     setStatus('accepting');
     acceptInvite(token)
       .then(() => refreshMembership())
-      .then(() => { setStatus('done'); setTimeout(() => navigate('/dashboard', { replace: true }), 1200); })
+      .then(() => { setStatus('done'); timer = setTimeout(() => navigate('/dashboard', { replace: true }), 1200); })
       .catch((err) => {
         const msg = err.message?.includes('email_mismatch')
           ? `Esta invitación es para ${invite.email}. Iniciá sesión con ese correo.`
@@ -46,6 +47,7 @@ export function AcceptInvite() {
         setErrorMsg(msg);
         setStatus('error');
       });
+    return () => { clearTimeout(timer); };
   }, [status, user, invite, token, navigate, refreshMembership]);
 
   if (status === 'loading') {

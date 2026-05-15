@@ -79,8 +79,12 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
     >
       {/* Backdrop */}
       <div
+        role="button"
+        tabIndex={0}
         className="absolute inset-0 bg-[var(--cq-fg)]/40 backdrop-blur-sm"
         onClick={handleClose}
+        onKeyDown={(e) => { if (e.key === 'Escape') handleClose(); }}
+        aria-label="Cerrar modal"
       />
 
       {/* Modal */}
@@ -159,7 +163,7 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
             <div className="flex flex-col gap-1">
-              <label className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--cq-fg-muted)]">
+              <label htmlFor="invite-email" className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--cq-fg-muted)]">
                 Correo electrónico
               </label>
               <div className={`flex items-center gap-2 h-11 px-3.5 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-success)] focus-within:ring-1 focus-within:ring-[var(--cq-success)] ${
@@ -167,6 +171,7 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
               }`}>
                 <span className="text-[var(--cq-fg-muted)] shrink-0"><Icons.Mail size={14} /></span>
                 <input
+                  id="invite-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}

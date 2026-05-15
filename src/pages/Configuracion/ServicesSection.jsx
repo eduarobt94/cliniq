@@ -361,8 +361,8 @@ export function ServicesSection({ clinicId, isOwner, push }) {
       {/* Loading skeleton */}
       {loading ? (
         <div className="flex flex-col gap-2">
-          {[0, 1, 2].map(i => (
-            <div key={i} className="h-10 animate-pulse bg-[var(--cq-surface-3)] rounded-[8px]" />
+          {['sk-0', 'sk-1', 'sk-2'].map(k => (
+            <div key={k} className="h-10 animate-pulse bg-[var(--cq-surface-3)] rounded-[8px]" />
           ))}
         </div>
       ) : (

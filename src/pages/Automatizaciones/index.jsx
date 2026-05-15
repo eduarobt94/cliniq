@@ -420,7 +420,7 @@ export function Automatizaciones() {
   // Preferred display order
   const ORDER = ['appointment_reminder', 'review_request', 'patient_reactivation'];
   const sorted = useMemo(
-    () => [...automations].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type)),
+    () => automations.toSorted((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type)),
     [automations],
   );
 

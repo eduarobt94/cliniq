@@ -37,7 +37,7 @@ export function LandingStory() {
               {antes.map((item) => (
                 <li key={item} className="flex items-start gap-3 text-[15px] text-[var(--cq-fg-muted)]">
                   <span className="mt-1 size-4 rounded-full border border-[var(--cq-border)] shrink-0 flex items-center justify-center">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--cq-border)]" />
+                    <span className="size-1.5 rounded-full bg-[var(--cq-border)]" />
                   </span>
                   {item}
                 </li>

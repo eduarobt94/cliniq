@@ -231,7 +231,7 @@ function ActionsMenu({ appt, onStatusChange, onEdit, onDelete }) {
                 Editar
               </button>
               <div className="h-px bg-[var(--cq-border)] mx-2 my-1" />
-              {STATUS_ACTIONS.filter(a => a.status !== appt.status).map(a => (
+              {STATUS_ACTIONS.flatMap(a => a.status === appt.status ? [] : [
                 <button
                   key={a.status}
                   onClick={(e) => { e.stopPropagation(); close(); onStatusChange(appt.id, a.status); }}
@@ -241,7 +241,7 @@ function ActionsMenu({ appt, onStatusChange, onEdit, onDelete }) {
                 >
                   {a.label}
                 </button>
-              ))}
+              ])}
               {canDelete && (
                 <>
                   <div className="h-px bg-[var(--cq-border)] mx-2 my-1" />
@@ -437,7 +437,8 @@ function WeekView({ currentDate, appointments, loading, onNew }) {
   const [hovered, setHovered] = useState({ appt: null, rect: null });
   const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
   const byDate   = useMemo(() => groupByDate(appointments), [appointments]);
-  const today    = todayISO();
+  const [today, setToday] = useState(todayISO);
+  useEffect(() => { setToday(todayISO()); }, []);
 
   const handleHover = useCallback((appt, rect) => setHovered({ appt, rect }), []);
 
@@ -520,7 +521,8 @@ function MonthView({ currentDate, appointments, loading, onNew }) {
   const m     = parseInt(currentDate.split('-')[1], 10);
   const y     = parseInt(currentDate.split('-')[0], 10);
   const byDate = useMemo(() => groupByDate(appointments), [appointments]);
-  const today  = todayISO();
+  const [today, setToday] = useState(todayISO);
+  useEffect(() => { setToday(todayISO()); }, []);
 
   const handleHover = useCallback((appt, rect) => setHovered({ appt, rect }), []);
 

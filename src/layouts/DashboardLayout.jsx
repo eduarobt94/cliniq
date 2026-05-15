@@ -17,7 +17,10 @@ export function DashboardLayout() {
   const [compact, setCompact] = useState(() => localStorage.getItem('cq_compact_mode:v1') === 'true');
 
   useEffect(() => {
-    const sync = () => setCompact(localStorage.getItem('cq_compact_mode:v1') === 'true');
+    const sync = () => {
+      const stored = localStorage.getItem('cq_compact_mode:v1');
+      setCompact(stored === 'true');
+    };
     window.addEventListener('cq_compact_mode:v1', sync);
     return () => window.removeEventListener('cq_compact_mode:v1', sync);
   }, []);

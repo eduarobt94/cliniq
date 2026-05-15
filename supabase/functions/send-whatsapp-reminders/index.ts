@@ -167,17 +167,17 @@ serve(async (req: Request) => {
         return r;
       }
 
-      for (const appt of (appointments ?? [])) {
+      await Promise.all((appointments ?? []).map(async (appt) => {
         const patient = appt.patients as Record<string, string>;
         const clinic  = appt.clinics  as Record<string, string>;
 
-        if (!patient?.phone_number) { r.skipped++; continue; }
+        if (!patient?.phone_number) { r.skipped++; return; }
 
         const phoneNumberId = clinic?.wa_phone_number_id || WA_PHONE_NUMBER_ID_GLOBAL;
         if (!phoneNumberId) {
           console.error(`Clinic ${auto.clinic_id} has no WA phone number configured`);
           r.skipped++;
-          continue;
+          return;
         }
 
         const tz = clinic?.timezone ?? 'America/Montevideo';
@@ -197,53 +197,54 @@ serve(async (req: Request) => {
           `${patient.full_name}, ${time} en ${clinic.name}`;
 
         if (waId) {
-          // ── Mark appointment as reminded ──────────────────────────────────
-          await supabase
-            .from('appointments')
-            .update({ status: 'pending', reminder_sent_at: new Date().toISOString() })
-            .eq('id', appt.id);
+          // ── Mark appointment as reminded + upsert conversation in parallel ──
+          const [, { data: convRow, error: convErr }] = await Promise.all([
+            supabase
+              .from('appointments')
+              .update({ status: 'pending', reminder_sent_at: new Date().toISOString() })
+              .eq('id', appt.id),
+            supabase
+              .from('conversations')
+              .upsert(
+                {
+                  clinic_id:    auto.clinic_id,
+                  patient_id:   patient.id,
+                  phone_number: patient.phone_number,
+                },
+                { onConflict: 'clinic_id,phone_number', ignoreDuplicates: false },
+              )
+              .select('id')
+              .single(),
+          ]);
 
-          // ── Upsert conversation (get or create) ───────────────────────────
-          const { data: convRow, error: convErr } = await supabase
-            .from('conversations')
-            .upsert(
-              {
-                clinic_id:    auto.clinic_id,
-                patient_id:   patient.id,
-                phone_number: patient.phone_number,
-              },
-              { onConflict: 'clinic_id,phone_number', ignoreDuplicates: false },
-            )
-            .select('id')
-            .single();
+          // ── Inbox message + audit log in parallel ─────────────────────────
+          await Promise.all([
+            ...((!convErr && convRow?.id) ? [
+              supabase.from('messages').insert({
+                conversation_id: convRow.id,
+                clinic_id:       auto.clinic_id,
+                patient_id:      patient.id,
+                direction:       'system_template',
+                content:         msgContent,
+                status:          'sent',
+                meta_message_id: waId,
+              }),
+            ] : []),
+            supabase.from('whatsapp_message_log').insert({
+              clinic_id:      auto.clinic_id,
+              patient_id:     patient.id,
+              appointment_id: appt.id,
+              direction:      'outbound',
+              phone_number:   patient.phone_number,
+              message:        msgContent,
+              wa_message_id:  waId,
+              status:         'sent',
+            }),
+          ]);
 
-          if (convErr || !convRow?.id) {
+          if (convErr) {
             console.error(`Conversation upsert error for ${patient.phone_number}:`, convErr);
-          } else {
-            // ── Insert into messages table (appears in inbox + stops AI followup) ──
-            await supabase.from('messages').insert({
-              conversation_id: convRow.id,
-              clinic_id:       auto.clinic_id,
-              patient_id:      patient.id,
-              direction:       'system_template',
-              content:         msgContent,
-              status:          'sent',
-              meta_message_id: waId,
-            });
           }
-
-          // ── Audit log (legacy) ────────────────────────────────────────────
-          await supabase.from('whatsapp_message_log').insert({
-            clinic_id:      auto.clinic_id,
-            patient_id:     patient.id,
-            appointment_id: appt.id,
-            direction:      'outbound',
-            phone_number:   patient.phone_number,
-            message:        msgContent,
-            wa_message_id:  waId,
-            status:         'sent',
-          });
-
           console.log(`✅ Reminder sent to ${patient.phone_number} (waId: ${waId})`);
           r.sent++;
         } else {
@@ -262,7 +263,7 @@ serve(async (req: Request) => {
           console.log(`❌ Reminder failed for ${patient.phone_number}`);
           r.failed++;
         }
-      }
+      }));
       return r;
     }
 

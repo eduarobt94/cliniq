@@ -63,7 +63,7 @@ function ApptActionsMenu({ appt, onEdit, onStatusChange }) {
         Editar turno
       </button>
       <div className="h-px bg-[var(--cq-border)] mx-2 my-1" />
-      {STATUS_ACTIONS.filter(a => a.status !== appt.status).map(a => (
+      {STATUS_ACTIONS.flatMap(a => a.status === appt.status ? [] : [
         <button
           key={a.status}
           onClick={(e) => { e.stopPropagation(); close(); onStatusChange(appt.id, a.status); }}
@@ -73,7 +73,7 @@ function ApptActionsMenu({ appt, onEdit, onStatusChange }) {
         >
           {a.label}
         </button>
-      ))}
+      ])}
     </div>,
     document.body
   );
@@ -101,7 +101,7 @@ const SkeletonRow = memo(function SkeletonRow() {
         <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-4 w-12" />
         <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-3 w-10" />
       </div>
-      <div className="animate-pulse bg-[var(--cq-surface-2)] rounded-full h-[34px] w-[34px] shrink-0" />
+      <div className="animate-pulse bg-[var(--cq-surface-2)] rounded-full size-[34px] shrink-0" />
       <div className="flex-1 min-w-0 flex flex-col gap-1.5">
         <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-4 w-36" />
         <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-3 w-24" />
@@ -195,8 +195,14 @@ export function AgendaBlock({ appointments, loading, push, refetch }) {
 
   const [editingAppt, setEditingAppt] = useState(null);
 
-  const confirmedCount = displayAppts.filter(a => a.status === 'confirmed').length;
-  const pendingCount   = displayAppts.filter(a => a.status === 'pending').length;
+  const { confirmedCount, pendingCount } = displayAppts.reduce(
+    (acc, a) => {
+      if (a.status === 'confirmed') acc.confirmedCount++;
+      else if (a.status === 'pending') acc.pendingCount++;
+      return acc;
+    },
+    { confirmedCount: 0, pendingCount: 0 },
+  );
   const remainingCount = Math.max(0, displayAppts.length - 6);
 
   const handleStatusChange = useCallback(async (apptId, newStatus) => {

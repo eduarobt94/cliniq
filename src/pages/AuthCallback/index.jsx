@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Icons } from '../../components/ui';
@@ -6,7 +6,7 @@ import { Icons } from '../../components/ui';
 export function AuthCallback() {
   const navigate = useNavigate();
   const { user, needsOnboarding, passwordRecoveryMode } = useAuth();
-  const [timedOut, setTimedOut] = useState(false);
+  const timedOut = useRef(false);
 
   // Detectar error en query params (Supabase redirige con ?error=... cuando falla OAuth)
   const params = new URLSearchParams(window.location.search);
@@ -15,13 +15,13 @@ export function AuthCallback() {
 
   useEffect(() => {
     if (oauthError) return; // No navegar si hay error — mostramos el mensaje
-    const t = setTimeout(() => setTimedOut(true), 10000);
+    const t = setTimeout(() => { timedOut.current = true; }, 10000);
     return () => clearTimeout(t);
   }, [oauthError]);
 
   useEffect(() => {
     if (oauthError) return;
-    if (!user && !timedOut) return;
+    if (!user && !timedOut.current) return;
 
     if (passwordRecoveryMode) {
       navigate('/auth/reset-password', { replace: true });

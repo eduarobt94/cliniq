@@ -40,20 +40,31 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+// Module-level cache: re-use Intl.DateTimeFormat instances per timezone
+const _dtfCache = new Map<string, Intl.DateTimeFormat>();
+function getDateTimeFormat(tz: string): Intl.DateTimeFormat {
+  let fmt = _dtfCache.get(tz);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+    _dtfCache.set(tz, fmt);
+  }
+  return fmt;
+}
+
 /**
  * Returns the wall-clock components of a UTC Date in the given IANA timezone.
  */
 function getLocalComponents(utcDate: Date, tz: string): LocalComponents {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  const fmt = getDateTimeFormat(tz);
 
   const parts = fmt.formatToParts(utcDate);
   const get = (type: string) =>

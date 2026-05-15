@@ -23,9 +23,9 @@ function PreviewCard() {
         {/* Window chrome */}
         <div className="flex items-center justify-between px-4 h-10 border-b border-[var(--cq-border)] bg-[var(--cq-surface-2)]">
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-[var(--cq-border)]" />
-            <span className="w-2.5 h-2.5 rounded-full bg-[var(--cq-border)]" />
-            <span className="w-2.5 h-2.5 rounded-full bg-[var(--cq-border)]" />
+            <span className="size-2.5 rounded-full bg-[var(--cq-border)]" />
+            <span className="size-2.5 rounded-full bg-[var(--cq-border)]" />
+            <span className="size-2.5 rounded-full bg-[var(--cq-border)]" />
           </div>
           <MonoLabel>cliniq.uy / inbox</MonoLabel>
           <span className="w-12" />
@@ -58,7 +58,7 @@ function PreviewCard() {
                   {s.done ? (
                     <Icons.Check size={11} />
                   ) : (
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--cq-fg-muted)]" />
+                    <span className="size-1.5 rounded-full bg-[var(--cq-fg-muted)]" />
                   )}
                 </div>
                 <span className="text-[13px] flex-1">{s.t}</span>
@@ -101,7 +101,7 @@ export function LandingHero({ onLogin, onSignup }) {
           <MonoLabel>[ AX-001 / 2026 ]</MonoLabel>
           <MonoLabel>Montevideo · Uruguay</MonoLabel>
           <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--cq-success)] animate-pulse" />
+            <span className="size-1.5 rounded-full bg-[var(--cq-success)] animate-pulse" />
             <MonoLabel>Sistemas en línea</MonoLabel>
           </span>
         </Reveal>

@@ -79,7 +79,7 @@ export function useConversations(clinicId) {
                   }
                 : c,
             );
-            return [...updated].sort((a, b) => {
+            return updated.toSorted((a, b) => {
               if (!a.last_message_at) return 1;
               if (!b.last_message_at) return -1;
               return new Date(b.last_message_at) - new Date(a.last_message_at);

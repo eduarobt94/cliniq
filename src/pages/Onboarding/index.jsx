@@ -66,7 +66,6 @@ export function Onboarding() {
                 value={clinicName}
                 onChange={(e) => setClinicName(e.target.value)}
                 placeholder="Clínica Bonomi"
-                autoFocus
                 className="flex-1 bg-transparent outline-none text-[15px] placeholder:text-[var(--cq-fg-muted)]"
               />
             </div>

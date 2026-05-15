@@ -208,7 +208,7 @@ export function ListaEspera() {
       <Card padded={false}>
         {loading ? (
           <div className="flex flex-col gap-2 p-4">
-            {[1,2,3,4].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+            {['sk-1','sk-2','sk-3','sk-4'].map(k => <Skeleton key={k} className="h-12 w-full" />)}
           </div>
         ) : entries.length === 0 ? (
           <EmptyState />

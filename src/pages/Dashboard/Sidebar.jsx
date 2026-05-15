@@ -257,7 +257,7 @@ export function Sidebar({ variant, collapsed, setCollapsed, mobileOpen, setMobil
                       <Badge tone={it.badgeTone || 'accent'}>{getDynamicBadge(it)}</Badge>
                     )}
                     {isIconOnly && getDynamicBadge(it) && (
-                      <span className="absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full bg-[var(--cq-accent)]" />
+                      <span className="absolute top-1.5 right-2 size-1.5 rounded-full bg-[var(--cq-accent)]" />
                     )}
                   </button>
                 </li>

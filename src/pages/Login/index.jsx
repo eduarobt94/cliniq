@@ -317,7 +317,7 @@ export function Login() {
               <div className="mt-8 flex items-center justify-between">
                 <MonoLabel>Protocolo seguro · TLS 1.3</MonoLabel>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--cq-success)] animate-pulse" />
+                  <span className="size-1.5 rounded-full bg-[var(--cq-success)] animate-pulse" />
                   <MonoLabel>Servidor UY · activo</MonoLabel>
                 </span>
               </div>

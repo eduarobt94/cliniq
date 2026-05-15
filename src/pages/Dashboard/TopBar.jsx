@@ -208,7 +208,7 @@ function SearchPanel({ q, patients, appointments, onSelectPatient, onSelectAppt 
               onClick={() => onSelectAppt(a)}
               className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--cq-surface-2)] transition-colors text-left"
             >
-              <div className="w-[30px] h-[30px] rounded-full bg-[var(--cq-surface-2)] flex items-center justify-center shrink-0 text-[var(--cq-fg-muted)]">
+              <div className="size-[30px] rounded-full bg-[var(--cq-surface-2)] flex items-center justify-center shrink-0 text-[var(--cq-fg-muted)]">
                 <Icons.Calendar size={13} />
               </div>
               <div className="flex-1 min-w-0">

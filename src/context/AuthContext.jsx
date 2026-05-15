@@ -22,6 +22,9 @@ export function AuthProvider({ children }) {
   // Fallback: si clinic_members no existe todavía (migración pendiente),
   // consulta clinics.owner_id directamente para no bloquear el login.
   const loadMembership = useCallback(async (userId, userMeta = {}) => {
+    // Synchronous guards before any await — avoids unnecessary DB calls
+    if (!userId) return;
+
     const abortController = { cancelled: false };
     loadAbortRef.current = abortController;
 

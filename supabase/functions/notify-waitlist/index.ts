@@ -98,7 +98,8 @@ serve(async (req: Request) => {
     }
 
     // ── 2. Para cada cita cancelada, notificar la lista de espera ───────────
-    for (const appt of cancelledAppts) {
+    const perApptResults = await Promise.all(cancelledAppts.map(async (appt) => {
+      const r = { notified: 0, skipped: 0, failed: 0 };
       const clinic = appt.clinics as Record<string, string>;
 
       // Buscar entradas de lista de espera para esta clínica
@@ -117,7 +118,7 @@ serve(async (req: Request) => {
 
       if (wlErr) {
         console.error(`Error loading waiting list for clinic ${appt.clinic_id}:`, wlErr);
-        continue;
+        return r;
       }
 
       if (!waitlistEntries?.length) {
@@ -126,30 +127,32 @@ serve(async (req: Request) => {
           .from('appointments')
           .update({ waitlist_notified_at: new Date().toISOString() })
           .eq('id', appt.id);
-        results.skipped++;
-        continue;
+        r.skipped++;
+        return r;
       }
 
       const phoneNumberId = clinic?.wa_phone_number_id || WA_PHONE_ID_GLOBAL;
       if (!phoneNumberId) {
         console.error(`Clinic ${appt.clinic_id} has no WA phone number configured`);
-        results.skipped++;
-        continue;
+        r.skipped++;
+        return r;
       }
 
+      // Build a Set for O(1) lookups when checking already-notified patients
+      const apptServiceLower = appt.appointment_type ? (appt.appointment_type as string).toLowerCase() : null;
+
       // Notificar a cada paciente en lista de espera
-      for (const entry of waitlistEntries) {
+      await Promise.all(waitlistEntries.map(async (entry) => {
         const patient = entry.patients as Record<string, string>;
 
-        if (!patient?.phone_number) { results.skipped++; continue; }
+        if (!patient?.phone_number) { r.skipped++; return; }
 
         // Filtro de servicio: si la entrada especifica servicio, verificar coincidencia
-        if (entry.service && appt.appointment_type) {
+        if (entry.service && apptServiceLower) {
           const entryService = entry.service.toLowerCase();
-          const apptService  = (appt.appointment_type as string).toLowerCase();
-          if (!apptService.includes(entryService) && !entryService.includes(apptService)) {
-            results.skipped++;
-            continue;
+          if (!apptServiceLower.includes(entryService) && !entryService.includes(apptServiceLower)) {
+            r.skipped++;
+            return;
           }
         }
 
@@ -174,40 +177,38 @@ serve(async (req: Request) => {
             .select('id')
             .single();
 
-          if (!convErr && convRow?.id) {
-            // Insert message in inbox
-            await supabase.from('messages').insert({
-              conversation_id: convRow.id,
-              clinic_id:       appt.clinic_id,
-              patient_id:      patient.id,
-              direction:       'outbound',
-              sender_type:     'bot',
-              content:         msgContent,
-              status:          'sent',
-              meta_message_id: waId,
-            });
-          }
-
-          // Audit log
-          await supabase.from('whatsapp_message_log').insert({
-            clinic_id:      appt.clinic_id,
-            patient_id:     patient.id,
-            appointment_id: appt.id,
-            direction:      'outbound',
-            phone_number:   patient.phone_number,
-            message:        msgContent,
-            wa_message_id:  waId,
-            status:         'sent',
-          });
-
-          // Marcar entrada de lista de espera como notificada
-          await supabase
-            .from('waiting_list')
-            .update({ status: 'notified', notified_at: new Date().toISOString() })
-            .eq('id', entry.id);
+          // Inbox message + audit log + waitlist update — all independent, run in parallel
+          await Promise.all([
+            ...((!convErr && convRow?.id) ? [
+              supabase.from('messages').insert({
+                conversation_id: convRow.id,
+                clinic_id:       appt.clinic_id,
+                patient_id:      patient.id,
+                direction:       'outbound',
+                sender_type:     'bot',
+                content:         msgContent,
+                status:          'sent',
+                meta_message_id: waId,
+              }),
+            ] : []),
+            supabase.from('whatsapp_message_log').insert({
+              clinic_id:      appt.clinic_id,
+              patient_id:     patient.id,
+              appointment_id: appt.id,
+              direction:      'outbound',
+              phone_number:   patient.phone_number,
+              message:        msgContent,
+              wa_message_id:  waId,
+              status:         'sent',
+            }),
+            supabase
+              .from('waiting_list')
+              .update({ status: 'notified', notified_at: new Date().toISOString() })
+              .eq('id', entry.id),
+          ]);
 
           console.log(`✅ Waitlist notified: ${patient.phone_number} (entry ${entry.id})`);
-          results.notified++;
+          r.notified++;
         } else {
           // Audit log — fallo
           await supabase.from('whatsapp_message_log').insert({
@@ -222,15 +223,22 @@ serve(async (req: Request) => {
           });
 
           console.log(`❌ Waitlist notify failed: ${patient.phone_number}`);
-          results.failed++;
+          r.failed++;
         }
-      }
+      }));
 
       // Marcar la cita como procesada (sin importar cuántos se notificaron)
       await supabase
         .from('appointments')
         .update({ waitlist_notified_at: new Date().toISOString() })
         .eq('id', appt.id);
+      return r;
+    }));
+
+    for (const r of perApptResults) {
+      results.notified += r.notified;
+      results.skipped  += r.skipped;
+      results.failed   += r.failed;
     }
 
     return new Response(JSON.stringify({ ok: true, ...results }), {

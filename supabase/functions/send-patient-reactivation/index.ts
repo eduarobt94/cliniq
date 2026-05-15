@@ -60,7 +60,9 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ ok: true, message: 'No active patient_reactivation automations', ...results }), { status: 200 });
     }
 
-    for (const auto of automations) {
+    type AutoRow = { clinic_id: string; months_inactive: number | null; message_template: string | null };
+    const perAutoResults = await Promise.all(automations.map(async (auto: AutoRow) => {
+      const r = { sent: 0, failed: 0, skipped: 0 };
       const monthsInactive = auto.months_inactive ?? 6;
 
       // Cutoff date: patients with NO appointment after this date are eligible
@@ -70,28 +72,27 @@ serve(async (req: Request) => {
       // Also: don't re-send reactivation within the same inactivity period
       const reactivationCutoff = inactiveSince.toISOString();
 
-      // 2. Get patient IDs with recent (active) appointments — to EXCLUDE
-      const { data: recentAppts } = await supabase
-        .from('appointments')
-        .select('patient_id')
-        .eq('clinic_id', auto.clinic_id)
-        .gte('appointment_datetime', inactiveSince.toISOString())
-        .in('status', ['new', 'pending', 'confirmed', 'completed'])
-        .not('patient_id', 'is', null);
+      // 2+3. Fetch recent and all-time appointments in parallel
+      const [{ data: recentAppts }, { data: anyAppts }] = await Promise.all([
+        supabase
+          .from('appointments')
+          .select('patient_id')
+          .eq('clinic_id', auto.clinic_id)
+          .gte('appointment_datetime', inactiveSince.toISOString())
+          .in('status', ['new', 'pending', 'confirmed', 'completed'])
+          .not('patient_id', 'is', null),
+        supabase
+          .from('appointments')
+          .select('patient_id')
+          .eq('clinic_id', auto.clinic_id)
+          .not('patient_id', 'is', null),
+      ]);
 
       const activeIds = new Set((recentAppts ?? []).map((a: Record<string, string>) => a.patient_id));
-
-      // 3. Get patient IDs who have had at least 1 appointment ever
-      const { data: anyAppts } = await supabase
-        .from('appointments')
-        .select('patient_id')
-        .eq('clinic_id', auto.clinic_id)
-        .not('patient_id', 'is', null);
-
       const patientsWithHistory = [...new Set((anyAppts ?? []).map((a: Record<string, string>) => a.patient_id))];
       const inactiveIds = patientsWithHistory.filter(id => !activeIds.has(id));
 
-      if (!inactiveIds.length) continue;
+      if (!inactiveIds.length) return r;
 
       // 4. Get details for inactive patients (not recently reactivated, with phone)
       const { data: patients, error: patErr } = await supabase
@@ -102,7 +103,7 @@ serve(async (req: Request) => {
 
       if (patErr) {
         console.error(`Patients query error for clinic ${auto.clinic_id}:`, patErr);
-        continue;
+        return r;
       }
 
       // 5. Filter: not reactivated recently
@@ -113,7 +114,7 @@ serve(async (req: Request) => {
         })
         .slice(0, MAX_PER_RUN);
 
-      if (!eligible.length) continue;
+      if (!eligible.length) return r;
 
       // 6. Get clinic config (timezone, WA phone)
       const { data: clinic } = await supabase
@@ -127,10 +128,10 @@ serve(async (req: Request) => {
 
       if (!phoneNumberId) {
         console.error(`Clinic ${auto.clinic_id} has no WA phone number`);
-        continue;
+        return r;
       }
 
-      for (const patient of eligible) {
+      await Promise.all(eligible.map(async (patient) => {
         const p = patient as Record<string, string>;
 
         // 7. Render message
@@ -151,49 +152,55 @@ serve(async (req: Request) => {
 
         if (convErr || !convRow?.id) {
           console.error(`Conversation upsert error for ${p.phone_number}:`, convErr);
-          results.skipped++;
-          continue;
+          r.skipped++;
+          return;
         }
 
         // 9. Send
         const waId = await sendWaText(p.phone_number, text, phoneNumberId);
 
-        // 10. Record in messages table
-        await supabase.from('messages').insert({
-          conversation_id: convRow.id,
-          clinic_id:       auto.clinic_id,
-          patient_id:      p.id,
-          direction:       'system_template',
-          content:         text,
-          status:          waId ? 'sent' : 'failed',
-          meta_message_id: waId ?? null,
-        });
-
-        // 11. Update patient — mark reactivation sent (even on failure, to avoid spam loop)
-        await supabase
-          .from('patients')
-          .update({ last_reactivation_sent_at: new Date().toISOString() })
-          .eq('id', p.id);
-
-        // 12. Audit log
-        await supabase.from('whatsapp_message_log').insert({
-          clinic_id:     auto.clinic_id,
-          patient_id:    p.id,
-          direction:     'outbound',
-          phone_number:  p.phone_number,
-          message:       text,
-          wa_message_id: waId ?? null,
-          status:        waId ? 'sent' : 'failed',
-        });
+        // 10+11+12. Record message, update patient, audit log — all independent, run in parallel
+        await Promise.all([
+          supabase.from('messages').insert({
+            conversation_id: convRow.id,
+            clinic_id:       auto.clinic_id,
+            patient_id:      p.id,
+            direction:       'system_template',
+            content:         text,
+            status:          waId ? 'sent' : 'failed',
+            meta_message_id: waId ?? null,
+          }),
+          // 11. Update patient — mark reactivation sent (even on failure, to avoid spam loop)
+          supabase
+            .from('patients')
+            .update({ last_reactivation_sent_at: new Date().toISOString() })
+            .eq('id', p.id),
+          supabase.from('whatsapp_message_log').insert({
+            clinic_id:     auto.clinic_id,
+            patient_id:    p.id,
+            direction:     'outbound',
+            phone_number:  p.phone_number,
+            message:       text,
+            wa_message_id: waId ?? null,
+            status:        waId ? 'sent' : 'failed',
+          }),
+        ]);
 
         if (waId) {
           console.log(`✅ Reactivation sent to ${p.phone_number}`);
-          results.sent++;
+          r.sent++;
         } else {
           console.log(`❌ Reactivation failed for ${p.phone_number} (may be outside 24h window)`);
-          results.failed++;
+          r.failed++;
         }
-      }
+      }));
+      return r;
+    }));
+
+    for (const r of perAutoResults) {
+      results.sent    += r.sent;
+      results.failed  += r.failed;
+      results.skipped += r.skipped;
     }
 
     return new Response(JSON.stringify({ ok: true, ...results }), {

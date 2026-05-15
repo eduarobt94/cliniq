@@ -19,7 +19,7 @@ export function SystemBlock() {
         {SERVICES.map((s) => (
           <li key={s.n} className="flex items-center justify-between text-[12.5px]">
             <span className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--cq-success)]" />
+              <span className="size-1.5 rounded-full bg-[var(--cq-success)]" />
               {s.n}
             </span>
             <MonoLabel>{s.v}</MonoLabel>

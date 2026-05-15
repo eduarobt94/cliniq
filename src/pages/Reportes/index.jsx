@@ -74,7 +74,7 @@ function ChartLegend() {
     <div className="flex flex-wrap gap-x-5 gap-y-2 justify-center mt-4">
       {STATUS_CONFIG.map(({ key, label, color }) => (
         <div key={key} className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
+          <div className="size-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
           <span className="text-[11px] text-[var(--cq-fg-muted)]">{label}</span>
         </div>
       ))}
@@ -306,7 +306,7 @@ export function Reportes() {
           <h2 className="text-[15px] font-semibold text-[var(--cq-fg)] mb-4">Top pacientes</h2>
           {loading ? (
             <div className="flex flex-col gap-2">
-              {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-8 w-full" />)}
+              {['sk-1','sk-2','sk-3','sk-4','sk-5'].map(k => <Skeleton key={k} className="h-8 w-full" />)}
             </div>
           ) : !data?.topPatients?.length ? (
             <p className="text-[13px] text-[var(--cq-fg-muted)]">Sin datos para el período.</p>
@@ -339,7 +339,7 @@ export function Reportes() {
           </h2>
           {loading ? (
             <div className="flex flex-col gap-2">
-              {[1,2,3].map(i => <Skeleton key={i} className="h-8 w-full" />)}
+              {['sk-1','sk-2','sk-3'].map(k => <Skeleton key={k} className="h-8 w-full" />)}
             </div>
           ) : (
             <div className="flex flex-col gap-4">

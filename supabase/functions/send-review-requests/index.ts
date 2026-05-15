@@ -57,7 +57,9 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ ok: true, message: 'No active review_request automations', ...results }), { status: 200 });
     }
 
-    for (const auto of automations) {
+    type AutoRow = { clinic_id: string; hours_after: number | null; message_template: string | null };
+    const perAutoResults = await Promise.all(automations.map(async (auto: AutoRow) => {
+      const r = { sent: 0, failed: 0, skipped: 0 };
       const hoursAfter = auto.hours_after ?? 2;
       const now        = new Date();
 
@@ -82,17 +84,17 @@ serve(async (req: Request) => {
 
       if (apptErr) {
         console.error(`Appointments error for clinic ${auto.clinic_id}:`, apptErr);
-        continue;
+        return r;
       }
 
-      for (const appt of (appts ?? [])) {
+      await Promise.all((appts ?? []).map(async (appt) => {
         const patient = appt.patients as Record<string, string>;
         const clinic  = appt.clinics  as Record<string, string>;
 
-        if (!patient?.phone_number) { results.skipped++; continue; }
+        if (!patient?.phone_number) { r.skipped++; return; }
 
         const phoneNumberId = clinic?.wa_phone_number_id || WA_PHONE_ID;
-        if (!phoneNumberId) { results.skipped++; continue; }
+        if (!phoneNumberId) { r.skipped++; return; }
 
         // 3. Render message (support {review_url} placeholder)
         const clinicSettings = (clinic?.settings ?? {}) as Record<string, string>;
@@ -115,50 +117,55 @@ serve(async (req: Request) => {
 
         if (convErr || !convRow?.id) {
           console.error(`Conversation upsert error for ${patient.phone_number}:`, convErr);
-          results.skipped++;
-          continue;
+          r.skipped++;
+          return;
         }
 
         // 5. Send
         const waId = await sendWaText(patient.phone_number, text, phoneNumberId);
 
-        // 6. Record in messages table (direction: system_template keeps AI quiet)
-        await supabase.from('messages').insert({
-          conversation_id: convRow.id,
-          clinic_id:       auto.clinic_id,
-          patient_id:      patient.id,
-          direction:       'system_template',
-          content:         text,
-          status:          waId ? 'sent' : 'failed',
-          meta_message_id: waId ?? null,
-        });
-
-        // 7. Mark appointment so we never resend
-        await supabase
-          .from('appointments')
-          .update({ review_request_sent_at: new Date().toISOString() })
-          .eq('id', appt.id);
-
-        // 8. Audit log
-        await supabase.from('whatsapp_message_log').insert({
-          clinic_id:      auto.clinic_id,
-          patient_id:     patient.id,
-          appointment_id: appt.id,
-          direction:      'outbound',
-          phone_number:   patient.phone_number,
-          message:        text,
-          wa_message_id:  waId ?? null,
-          status:         waId ? 'sent' : 'failed',
-        });
+        // 6+7+8. Record message, mark appointment, audit log — all independent, run in parallel
+        await Promise.all([
+          supabase.from('messages').insert({
+            conversation_id: convRow.id,
+            clinic_id:       auto.clinic_id,
+            patient_id:      patient.id,
+            direction:       'system_template',
+            content:         text,
+            status:          waId ? 'sent' : 'failed',
+            meta_message_id: waId ?? null,
+          }),
+          supabase
+            .from('appointments')
+            .update({ review_request_sent_at: new Date().toISOString() })
+            .eq('id', appt.id),
+          supabase.from('whatsapp_message_log').insert({
+            clinic_id:      auto.clinic_id,
+            patient_id:     patient.id,
+            appointment_id: appt.id,
+            direction:      'outbound',
+            phone_number:   patient.phone_number,
+            message:        text,
+            wa_message_id:  waId ?? null,
+            status:         waId ? 'sent' : 'failed',
+          }),
+        ]);
 
         if (waId) {
           console.log(`✅ Review request sent to ${patient.phone_number}`);
-          results.sent++;
+          r.sent++;
         } else {
           console.log(`❌ Review request failed for ${patient.phone_number}`);
-          results.failed++;
+          r.failed++;
         }
-      }
+      }));
+      return r;
+    }));
+
+    for (const r of perAutoResults) {
+      results.sent    += r.sent;
+      results.failed  += r.failed;
+      results.skipped += r.skipped;
     }
 
     return new Response(JSON.stringify({ ok: true, ...results }), {

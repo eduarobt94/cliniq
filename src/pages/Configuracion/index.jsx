@@ -381,7 +381,7 @@ export function Configuracion() {
 
             {membersLoading ? (
               <div className="flex flex-col divide-y divide-[var(--cq-border)]">
-                {[0, 1, 2].map(i => <SkeletonRow key={i} />)}
+                {['sk-0', 'sk-1', 'sk-2'].map(k => <SkeletonRow key={k} />)}
               </div>
             ) : members.length === 0 ? (
               <p className="text-[13px] text-[var(--cq-fg-muted)] py-2">
@@ -409,7 +409,7 @@ export function Configuracion() {
                         aria-label={`Eliminar a ${m.displayName}`}
                       >
                         {removing === m.id
-                          ? <span className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin inline-block" />
+                          ? <span className="size-3.5 border border-current border-t-transparent rounded-full animate-spin inline-block" />
                           : <Icons.Close size={14} />
                         }
                       </button>

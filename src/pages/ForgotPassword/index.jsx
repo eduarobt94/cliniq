@@ -86,18 +86,18 @@ export function ForgotPassword() {
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4" noValidate>
           <div>
-            <label className="block font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--cq-fg-muted)] mb-1.5">
+            <label htmlFor="fp-email" className="block font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--cq-fg-muted)] mb-1.5">
               Correo electrónico
             </label>
             <div className="flex items-center gap-2 h-12 px-4 rounded-[10px] border border-[var(--cq-border)] bg-[var(--cq-surface)] focus-within:border-[var(--cq-fg)] focus-within:ring-2 focus-within:ring-[var(--cq-accent)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--cq-bg)] transition-all">
               <Icons.Mail size={15} className="text-[var(--cq-fg-muted)] shrink-0" />
               <input
+                id="fp-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="maria@clinica.uy"
                 autoComplete="email"
-                autoFocus
                 className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)]"
               />
             </div>

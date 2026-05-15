@@ -55,7 +55,7 @@ export function useAIReactivation(clinicId, conversations) {
     setReactivating(true);
 
     const conversationIds = affectedRef.current.map((a) => a.conversationId);
-    const patientIds      = affectedRef.current.map((a) => a.patientId).filter(Boolean);
+    const patientIds      = affectedRef.current.flatMap((a) => a.patientId ? [a.patientId] : []);
 
     try {
       // Ejecutar ambas actualizaciones en paralelo para evitar estado inconsistente parcial

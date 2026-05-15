@@ -27,7 +27,7 @@ export function useMembers(clinicId) {
       const members = rows ?? [];
 
       // Batch-fetch profiles for active members
-      const userIds = members.filter((m) => m.user_id).map((m) => m.user_id);
+      const userIds = members.flatMap((m) => m.user_id ? [m.user_id] : []);
       let profilesById = {};
       if (userIds.length > 0) {
         const { data: profiles } = await supabase

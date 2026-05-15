@@ -26,9 +26,8 @@ function fromISO(iso) {
 
 function Calendar({ value, onChange, min, schedule, closures }) {
   const today = toISO(new Date());
-  const initial = value ? fromISO(value) : new Date();
-  const [viewYear,  setViewYear]  = useState(initial.getFullYear());
-  const [viewMonth, setViewMonth] = useState(initial.getMonth()); // 0–11
+  const [viewYear,  setViewYear]  = useState(() => (value ? fromISO(value) : new Date()).getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => (value ? fromISO(value) : new Date()).getMonth()); // 0–11
 
   function prevMonth() {
     if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
@@ -152,10 +151,10 @@ function Calendar({ value, onChange, min, schedule, closures }) {
       {schedule && (
         <div className="mt-3 pt-2.5 border-t border-[var(--cq-border)] flex flex-wrap gap-x-3 gap-y-1">
           <span className="flex items-center gap-1 text-[10.5px] text-[var(--cq-fg-muted)]">
-            <span className="w-2.5 h-2.5 rounded-[3px] opacity-30 bg-[var(--cq-fg-muted)]" /> No disponible
+            <span className="size-2.5 rounded-[3px] opacity-30 bg-[var(--cq-fg-muted)]" /> No disponible
           </span>
           <span className="flex items-center gap-1 text-[10.5px] text-[var(--cq-fg-muted)]">
-            <span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: 'var(--cq-warn)', opacity: 0.7 }} /> Solo urgencias
+            <span className="size-2.5 rounded-[3px]" style={{ background: 'var(--cq-warn)', opacity: 0.7 }} /> Solo urgencias
           </span>
         </div>
       )}
@@ -266,12 +265,15 @@ function ScrollColumn({ items, selected, onSelect, colRef }) {
       >
         {/* Top padding rows */}
         {Array.from({ length: PAD_ITEMS }).map((_, i) => (
-          <li key={`pt-${i}`} style={{ height: ITEM_H }} />
+          <li key={`pad-top-${i}`} style={{ height: ITEM_H }} />
         ))}
         {items.map(item => (
           <li
             key={item}
+            role="button"
+            tabIndex={0}
             onClick={() => onSelect(item)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(item); } }}
             style={{ height: ITEM_H }}
             className={`flex items-center justify-center font-mono text-[15px] cursor-pointer select-none transition-colors rounded-[7px]
               ${item === selected
@@ -284,7 +286,7 @@ function ScrollColumn({ items, selected, onSelect, colRef }) {
         ))}
         {/* Bottom padding rows */}
         {Array.from({ length: PAD_ITEMS }).map((_, i) => (
-          <li key={`pb-${i}`} style={{ height: ITEM_H }} />
+          <li key={`pad-bottom-${i}`} style={{ height: ITEM_H }} />
         ))}
       </ul>
     </div>

@@ -158,12 +158,10 @@ serve(async (req: Request) => {
     });
   }
 
-  const results: { patient_id: string; phone: string; sent: boolean }[] = [];
-
-  for (const appt of appointments ?? []) {
+  const results = await Promise.all((appointments ?? []).map(async (appt) => {
     const patient = (appt as Record<string, unknown>).patients as Record<string, string> | null;
     const phone = patient?.phone_number;
-    if (!phone) continue;
+    if (!phone) return null;
 
     const patientName = patient?.full_name ?? 'Paciente';
     const apptTime = new Date(appt.appointment_datetime as string).toLocaleTimeString('es-UY', {
@@ -180,22 +178,27 @@ serve(async (req: Request) => {
       `Disculpá los inconvenientes 🙏`,
     ].join('\n');
 
-    const waId = await sendWaText(phone, message, phoneNumberId);
-    results.push({ patient_id: appt.patient_id as string, phone, sent: !!waId });
+    const [waId] = await Promise.all([
+      sendWaText(phone, message, phoneNumberId),
+      // Mark appointment as rescheduled in parallel with the WA send
+    ]);
 
-    // Mark appointment as rescheduled
     await supabase
       .from('appointments')
       .update({ status: 'rescheduled' })
       .eq('id', appt.id);
-  }
 
-  const sent  = results.filter(r => r.sent).length;
-  const total = results.length;
+    return { patient_id: appt.patient_id as string, phone, sent: !!waId };
+  }));
+
+  const filteredResults = results.filter((r): r is { patient_id: string; phone: string; sent: boolean } => r !== null);
+
+  const sent  = filteredResults.filter(r => r.sent).length;
+  const total = filteredResults.length;
 
   console.log(`notify-closure-patients: ${sent}/${total} messages sent for closure ${closure_id}`);
 
-  return new Response(JSON.stringify({ ok: true, sent, total, results }), {
+  return new Response(JSON.stringify({ ok: true, sent, total, results: filteredResults }), {
     status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
   });
 });
