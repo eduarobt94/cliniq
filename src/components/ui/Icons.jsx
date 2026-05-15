@@ -241,4 +241,11 @@ export const Icons = {
       <path d="M6.5 12H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   ),
+  Mic: ({ size = 14 }) => (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <rect x="4.5" y="1.5" width="5" height="7" rx="2.5" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M2.5 7C2.5 9.5 4.5 11.5 7 11.5C9.5 11.5 11.5 9.5 11.5 7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M7 11.5V13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  ),
 };

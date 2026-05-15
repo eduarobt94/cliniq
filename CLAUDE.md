@@ -3,28 +3,23 @@
 ## ⚡ INICIO RÁPIDO DE SESIÓN
 > Leé esta sección primero. Resume el estado actual y qué hacer a continuación.
 
-**Último trabajo completado (2026-05-01) — Automatizaciones + Reportes + InboxBlock + Express modal:**
+**Último trabajo completado (2026-05-07) — Servicios de clínica + herramienta `add_to_waitlist` del agente IA:**
 
 ### ✅ Completado en esta sesión
-- **Reportes (real data):** reemplazado datos hardcodeados → `useReportes` hook real. Recharts `BarChart` apilado (5 estados). Selector de rango: 3M / 6M / 1A / 2A. Toggle de granularidad mensual/trimestral. Multi-year label detection (`"Ene '25"`).
-- **Nuevos tipos de automatización:** `patient_reactivation` + `review_request` agregados a `clinic_automations.type`. Nuevas columnas: `months_inactive` (default 6), `hours_after` (default 2). Migración `20260430000002_new_automations.sql` creada.
-- **Edge Functions nuevas:**
-  - `send-patient-reactivation` — contacta pacientes inactivos por WhatsApp; max 20/clínica/run; anti-spam
-  - `send-review-requests` — envía link de Google Reviews N horas después de la consulta
-- **Automatizaciones UI:** `EditModal` renovado — campos dinámicos por tipo (horas recordatorio / meses inactivo / horas post-turno), preview de template en vivo con `renderPreview()`
-- **InboxBlock dashboard:** migrado de `whatsapp_message_log` (legacy) → `useConversations` + `useUnreadCounts`. Muestra conversaciones reales con badge de mensajes sin responder.
-- **`useUnreadCounts` hook:** cuenta mensajes inbound consecutivos al final del hilo (sin respuesta del staff). Single query + cálculo client-side.
-- **NewAppointmentModal — Express mode:** `express={true}` pre-carga hora actual redondeada a 15min, status `confirmed` (no `new`), UI comprimida con campos opcionales colapsados. Disparado desde `openModalExpress()` en DashboardLayout.
-- **DashboardLayout:** gestión de modal centralizada con `modalConfig` (`open`, `defaultDate`, `express`). Contexto expuesto via `Outlet context`.
-- **Demo seeds para Reportes:** `supabase/demo_seed.sql` (15 pacientes UY + ~65 turnos ±56d) y `supabase/demo_seed_2years.sql` (PL/pgSQL DO block, 24 meses de datos, distribución realista de estados).
-- **`send-whatsapp-reminders`:** refactoring — escribe en `messages` + `conversations` (aparece en inbox), auto-detecta idioma del template.
+- **Configuración → Servicios:** nueva sección `ServicesSection.jsx` en Configuración. CRUD completo (nombre, duración, precio base, descuento porcentual o fijo, toggle activo/inactivo). Hook `useClinicServices.js`.
+- **Agente IA — servicios reales:** `ai-agent-reply` consulta `clinic_services` en tiempo real. Función `formatServices()` genera texto con precio final calculado. Sistema prompt incluye `SERVICIOS DE LA CLÍNICA` en ambos flujos (nuevo/existente). Reglas actualizadas: CONSULTA DE PRECIOS y CONSULTA DE SERVICIOS usan datos reales.
+- **Fix PASO 1/2 agente:** si el primer mensaje incluye nombre + apellido, registra de inmediato sin volver a preguntar.
+- **Tool `add_to_waitlist`:** bug crítico resuelto — la herramienta estaba en el sistema prompt pero NO en el array `tools`. Claude no podía llamarla. Ahora está implementada: inserta en tabla `waiting_list` (clinic_id, patient_id, phone_number, full_name, service, date_from, date_to, notes, status).
+- **Migración `20260507000003_clinic_services.sql`:** tabla `clinic_services` creada.
+- **Migración `20260507000004_waiting_list.sql`:** tabla `waiting_list` creada — **🔴 PENDIENTE ejecutar en SQL Editor**.
+- **Test suite `agent-test.mjs`:** 20 tests (T01–T20). Cubre UI de servicios + agente IA completo.
 
 ### Próximas tareas priorizadas
-1. 🔴 **Token WhatsApp permanente** — crear System User token en Meta Business Manager → actualizar secret `WHATSAPP_ACCESS_TOKEN`
-2. 🔴 **Ejecutar migración** `20260430000002_new_automations.sql` en Supabase SQL Editor (producción)
-3. 🟡 **Deploy Edge Functions nuevas** — `send-patient-reactivation` y `send-review-requests` (ver comandos abajo)
-4. 🟡 **Configuración → WhatsApp** — UI real para gestionar token y número
-5. 🟠 **Demo seeds** — ejecutar en Supabase SQL Editor para poblar datos de Reportes
+1. 🔴 **Ejecutar migración** `20260507000004_waiting_list.sql` en Supabase SQL Editor → habilita tool `add_to_waitlist`
+2. 🔴 **Ejecutar migración** `20260430000002_new_automations.sql` en Supabase SQL Editor (sigue pendiente)
+3. 🔴 **Token WhatsApp permanente** — crear System User token en Meta Business Manager → actualizar secret `WHATSAPP_ACCESS_TOKEN`
+4. 🟡 **Deploy Edge Functions nuevas** — `send-patient-reactivation` y `send-review-requests` (ver comandos abajo)
+5. 🟡 **Configuración → WhatsApp** — UI real para gestionar token y número
 
 **Usuario de prueba:** `maria@bonomi.uy` / `demo1234`
 **Dev server:** `npm run dev` → localhost:5173
@@ -71,6 +66,7 @@ src/
     useUnreadCounts.js        ← Map<convId, N> de mensajes inbound sin respuesta por conversación
     useReportes.js            ← Reportes reales: confirmRate, cancelled, msgCount, monthSeries,
                                  quarterSeries, topPatients, autoStats. Rangos: 3m/6m/1a/2a
+    useClinicServices.js      ← CRUD servicios de clínica: createService/updateService/toggleActive/deleteService
   lib/
     supabase.js            ← cliente Supabase singleton
     authService.js         ← signUp, signIn, createClinic, inviteMember, acceptInvite
@@ -87,7 +83,7 @@ src/
                               EditModal con campos dinámicos por tipo + preview de template en vivo
     Reportes/              ← Recharts BarChart apilado (5 estados). Rangos: 3M/6M/1A/2A.
                               Toggle granularidad mensual/trimestral. Datos reales de appointments
-    Configuracion/
+    Configuracion/             ← tab Horarios y servicios incluye ServicesSection: CRUD servicios con descuentos
   layouts/DashboardLayout.jsx  ← modalConfig centralizado (open/defaultDate/express),
                                   openModal()/openModalExpress(), cq_appointment_created CustomEvent
 supabase/
@@ -122,6 +118,8 @@ supabase/
 | `conversations` | CRM inbox. `UNIQUE(clinic_id, phone_number)`. `agent_mode`: `bot/human`. `REPLICA IDENTITY FULL` |
 | `messages` | FK → conversations. `direction`: `inbound/outbound/outbound_ai/system/system_template`. `sender_type`: `bot/staff/system`. `REPLICA IDENTITY FULL` |
 | `whatsapp_message_log` | Auditoría legacy — sigue siendo insertada para backward compat |
+| `clinic_services` | Servicios configurados por clínica. Cols: `name`, `duration_minutes`, `price` (numeric 10,2), `discount_type` (percent/fixed), `discount_value`, `is_active`. RLS: miembros leen, solo owner escribe |
+| `waiting_list` | Lista de espera para turnos. Cols: `patient_id` (nullable), `phone_number`, `full_name`, `service`, `date_from`, `date_to`, `notes`, `status` (pending/notified/cancelled) |
 
 ### Vistas
 - `v_today_appointments` — turnos de hoy + paciente + timezone
@@ -150,6 +148,8 @@ supabase/
 | `20260430000000_ai_agent_handoff.sql` | ✅ Ejecutada |
 | `20260430000002_new_automations.sql` | 🔴 PENDIENTE — agregar `patient_reactivation`, `review_request`, cols `months_inactive`/`hours_after` |
 | `20260504000000_fix_views_timezone.sql` | 🔴 PENDIENTE — fix `CURRENT_DATE` (UTC) → `(CURRENT_TIMESTAMP AT TIME ZONE 'America/Montevideo')::date` en `v_today_appointments` y `v_clinic_kpis_today` |
+| `20260507000003_clinic_services.sql` | ✅ Ejecutada |
+| `20260507000004_waiting_list.sql` | 🔴 PENDIENTE — tabla `waiting_list` para tool `add_to_waitlist` del agente IA |
 
 **⚠️ Nunca volver a ejecutar las ya aplicadas en producción.**
 
@@ -185,6 +185,7 @@ for (let round = 0; round < 4; round++) {
 | `reschedule_appointment` | Cambiar fecha/hora | UPDATE viejos → `rescheduled` + INSERT nuevo |
 | `confirm_appointment` | Paciente confirma asistencia | UPDATE status → `confirmed` |
 | `register_patient` | Solo para isNewPatient | INSERT en `patients` + UPDATE conversation.patient_id |
+| `add_to_waitlist` | Paciente quiere ser avisado si se libera turno | INSERT en `waiting_list` con service/date_from/date_to opcionales |
 
 ### Contexto de turnos (`formatAppointments`)
 ```typescript
@@ -322,6 +323,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 | Pacientes | ✅ Real | CRUD + refetch inmediato |
 | Sidebar badges | ✅ Real | useAgendaBadge + useAutomationsBadge |
 | Configuracion → Equipo | ✅ Real | useMembers + InviteMemberModal |
+| Configuracion → Servicios | ✅ Real | useClinicServices — CRUD con descuentos porcentuales y fijos |
 | Configuracion → WhatsApp | ⏳ Mock | Hardcodeado |
 | Reportes | ✅ Real | useReportes — Recharts BarChart apilado, rangos 3M/6M/1A/2A, granularidad mensual/trimestral |
 | Automatizaciones | ✅ Real | 3 tipos, EditModal dinámico, preview de template |
@@ -343,6 +345,8 @@ ANTHROPIC_API_KEY=sk-ant-...
 - **Sin UI optimista en mensajes:** causaba duplicados con Realtime. Realtime < 1s es suficiente.
 - **Realtime DELETE requiere REPLICA IDENTITY FULL:** sin esto los filtros de columna en DELETE no funcionan.
 - **agent_mode 'human':** cualquier mensaje manual del staff silencia el bot. Se reactiva si humano lleva > 2min sin escribir Y hay mensajes del paciente sin responder.
+- **`add_to_waitlist` — tool en tools array:** la herramienta DEBE estar en el array `tools` de la llamada a Claude para que Claude pueda invocarla. Si solo está en el system prompt pero no en `tools`, Claude genera texto verbal como "te anoto" sin ejecutar nada. Mismo patrón para cualquier herramienta nueva.
+- **`formatServices()`:** construye el bloque `SERVICIOS DE LA CLÍNICA` del system prompt. Calcula precio final con descuento en tiempo real. Injected en ambos system prompts (nuevo/existente).
 - **useReportes — `buildMonthSeries` / `buildQuarterSeries`:** agrupa appointments por mes/trimestre en timezone UY. Multi-year label: si hay más de un año en el rango, labels como `"Ene '25"` en vez de `"Ene"`.
 - **useUnreadCounts:** cuenta hacia atrás desde el último mensaje hasta el primer outbound — eso da los inbound sin responder. No usa Realtime (se recalcula al cambiar conversationIds).
 

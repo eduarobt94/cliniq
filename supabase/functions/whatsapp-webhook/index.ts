@@ -7,10 +7,63 @@ const SUPABASE_KEY              = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')  ?? 
 const VERIFY_TOKEN              = Deno.env.get('WHATSAPP_VERIFY_TOKEN')      ?? '';
 const WA_ACCESS_TOKEN           = Deno.env.get('WHATSAPP_ACCESS_TOKEN')      ?? '';
 const WA_PHONE_NUMBER_ID_GLOBAL = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')   ?? '';
+const OPENAI_API_KEY            = Deno.env.get('OPENAI_API_KEY')             ?? '';
 
 // ─── Normalize phone: always store with + prefix ──────────────────────────────
 function normalizePhone(phone: string): string {
   return phone.startsWith('+') ? phone : `+${phone}`;
+}
+
+// ─── Transcribe WhatsApp audio via OpenAI Whisper ─────────────────────────────
+/**
+ * Dado el mediaId de un mensaje de audio de Meta:
+ * 1. Pide la URL temporal a la Graph API
+ * 2. Descarga el binario (ogg/opus)
+ * 3. Lo envía a Whisper y retorna la transcripción en español
+ *
+ * Lanza si no hay OPENAI_API_KEY o si falla alguna llamada.
+ */
+async function transcribeAudio(mediaId: string): Promise<string> {
+  // 1. Resolver URL del media
+  const metaRes = await fetch(`https://graph.facebook.com/v19.0/${mediaId}`, {
+    headers: { 'Authorization': `Bearer ${WA_ACCESS_TOKEN}` },
+  });
+  if (!metaRes.ok) {
+    throw new Error(`Meta media lookup failed: ${metaRes.status} ${await metaRes.text()}`);
+  }
+  const metaData = await metaRes.json() as { url?: string; mime_type?: string };
+  const mediaUrl = metaData?.url;
+  if (!mediaUrl) throw new Error('Meta no devolvió URL de media');
+
+  // 2. Descargar audio
+  const audioRes = await fetch(mediaUrl, {
+    headers: { 'Authorization': `Bearer ${WA_ACCESS_TOKEN}` },
+  });
+  if (!audioRes.ok) {
+    throw new Error(`Audio download failed: ${audioRes.status}`);
+  }
+  const audioBuffer = await audioRes.arrayBuffer();
+
+  // 3. Transcribir con Whisper-1
+  const formData = new FormData();
+  const mimeType  = metaData?.mime_type ?? 'audio/ogg; codecs=opus';
+  const extension = mimeType.includes('mp4') ? 'mp4'
+                  : mimeType.includes('mpeg') ? 'mp3'
+                  : 'ogg';
+  formData.append('file', new Blob([audioBuffer], { type: mimeType }), `audio.${extension}`);
+  formData.append('model',    'whisper-1');
+  formData.append('language', 'es');
+
+  const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+    body:    formData,
+  });
+  if (!whisperRes.ok) {
+    throw new Error(`Whisper API error: ${whisperRes.status} ${await whisperRes.text()}`);
+  }
+  const whisperData = await whisperRes.json() as { text?: string };
+  return (whisperData.text ?? '').trim();
 }
 
 // ─── Send text reply ──────────────────────────────────────────────────────────
@@ -83,6 +136,7 @@ async function insertMessage(
     status:         string;
     metaMessageId:  string | null;
     senderType?:    'bot' | 'staff' | 'system' | null;
+    messageType?:   'text' | 'audio' | 'image' | 'document' | 'sticker' | 'unknown';
   },
 ) {
   const { error } = await supabase.from('messages').insert({
@@ -94,6 +148,7 @@ async function insertMessage(
     status:          opts.status,
     meta_message_id: opts.metaMessageId,
     sender_type:     opts.senderType ?? null,
+    message_type:    opts.messageType ?? 'text',
   });
   if (error) console.error('insertMessage error:', error);
 }
@@ -240,6 +295,30 @@ serve(async (req: Request) => {
         intent = btnId; // fallback: usar el id directo
       }
       console.log(`[webhook] button_reply: id="${btnId}" title="${btnTitle}" → intent="${intent}"`);
+    } else if (msgType === 'audio') {
+      const audio   = message.audio as Record<string, string>;
+      const mediaId = audio?.id;
+      if (mediaId && OPENAI_API_KEY) {
+        try {
+          rawText = await transcribeAudio(mediaId);
+          console.log(`[webhook] audio transcribed (${rawText.length} chars)`);
+        } catch (err) {
+          console.error('[webhook] Audio transcription error:', err);
+          rawText = '[Nota de voz — no se pudo transcribir]';
+        }
+      } else {
+        rawText = OPENAI_API_KEY
+          ? '[Nota de voz]'
+          : '[Nota de voz — transcripción no configurada]';
+      }
+      // Detectar intenciones básicas en la transcripción
+      const lowerAudio = rawText.toLowerCase();
+      if (['confirmo', 'confirmar', 'si ', 'sí '].some(k => lowerAudio.includes(k))) intent = 'confirm';
+      else if (['cancelo', 'cancelar', 'cancelación'].some(k => lowerAudio.includes(k))) intent = 'cancel';
+      else if (['reagendar', 'cambiar turno'].some(k => lowerAudio.includes(k))) intent = 'reschedule';
+    } else if (['image', 'document', 'sticker', 'video'].includes(msgType)) {
+      // Otros tipos de media — registrar sin texto
+      rawText = `[${msgType}]`;
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -419,6 +498,9 @@ serve(async (req: Request) => {
             content:        displayText,
             status:         'received',
             metaMessageId:  waMessageId,
+            messageType:    (['audio','image','document','sticker','video'].includes(msgType)
+                              ? msgType
+                              : 'text') as 'text'|'audio'|'image'|'document'|'sticker'|'unknown',
           });
           // El agente da la bienvenida y registra al nuevo paciente
           if (shouldAgentReply(guestConv, null)) {
@@ -459,6 +541,9 @@ serve(async (req: Request) => {
         status:        'received',
         metaMessageId: waMessageId,
         senderType:    null,
+        messageType:   (['audio','image','document','sticker','video'].includes(msgType)
+                          ? msgType
+                          : 'text') as 'text'|'audio'|'image'|'document'|'sticker'|'unknown',
       });
     }
 

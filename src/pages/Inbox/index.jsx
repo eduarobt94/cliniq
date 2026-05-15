@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+﻿import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Avatar, Badge, Icons }        from '../../components/ui';
 import { useAuth }                     from '../../context/AuthContext';
 import { useConversations }            from '../../hooks/useConversations';
@@ -9,6 +9,12 @@ import { supabase }                    from '../../lib/supabase';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Normaliza acentos y mayúsculas para búsquedas tolerantes. "José" ≡ "jose" */
+function norm(str) {
+  return (str ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
 function formatTime(iso) {
   if (!iso) return '';
   const d   = new Date(iso);
@@ -378,11 +384,11 @@ function NewConversationModal({ clinicId, onClose, onCreated }) {
   useEffect(() => { searchRef.current?.focus(); }, []);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = norm(search.trim());
     if (!q) return patients;
     return patients.filter(
       (p) =>
-        p.full_name.toLowerCase().includes(q) ||
+        norm(p.full_name).includes(q) ||
         (p.phone_number ?? '').includes(q),
     );
   }, [patients, search]);
@@ -602,7 +608,7 @@ function ModalShell({ children, title, onClose }) {
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
 function MessageBubble({ msg }) {
-  const { direction, sender_type, content, status, created_at } = msg;
+  const { direction, sender_type, content, status, created_at, message_type } = msg;
 
   // Internal system notice — centered text, no bubble
   if (sender_type === 'system') {
@@ -618,9 +624,12 @@ function MessageBubble({ msg }) {
     );
   }
 
-  const isOut = direction === 'outbound' || direction === 'system_template' || direction === 'outbound_ai';
-  const isBot = sender_type === 'bot';
+  const isOut    = direction === 'outbound' || direction === 'system_template' || direction === 'outbound_ai';
+  const isBot    = sender_type === 'bot';
   const isFailed = status === 'failed';
+  const isAudio  = message_type === 'audio';
+  // True if the transcription placeholder means no text was recovered
+  const isTranscriptionFailed = isAudio && content.startsWith('[Nota de voz');
 
   return (
     <div className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
@@ -663,7 +672,31 @@ function MessageBubble({ msg }) {
           <p className="text-[10px] opacity-60 mb-1 uppercase tracking-wide">Plantilla</p>
         )}
 
-        <p className="text-[13px] leading-relaxed whitespace-pre-wrap">{content}</p>
+        {/* Audio message */}
+        {isAudio ? (
+          <div className="flex items-start gap-2">
+            <div
+              className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center mt-0.5"
+              style={{ backgroundColor: 'color-mix(in srgb, currentColor 15%, transparent)' }}
+            >
+              <Icons.Mic size={13} />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-[10px] font-medium opacity-70 mb-0.5 uppercase tracking-wide">
+                Nota de voz
+              </span>
+              <p
+                className="text-[13px] leading-relaxed whitespace-pre-wrap"
+                style={{ opacity: isTranscriptionFailed ? 0.55 : 1, fontStyle: isTranscriptionFailed ? 'italic' : 'normal' }}
+              >
+                {content}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-[13px] leading-relaxed whitespace-pre-wrap">{content}</p>
+        )}
+
         <p
           className={`text-[11px] mt-1 opacity-60 flex items-center gap-1 ${isOut ? 'justify-end' : ''}`}
           style={{ color: isBot ? 'var(--cq-accent)' : undefined }}
@@ -671,6 +704,7 @@ function MessageBubble({ msg }) {
           {formatFullTime(created_at)}
           {isFailed && <span>· fallido</span>}
           {isBot && <span>· IA</span>}
+          {isAudio && !isFailed && <span>· transcripto</span>}
         </p>
       </div>
     </div>
@@ -767,22 +801,6 @@ function ConversationView({ conv, onDelete }) {
     setSendError('');
     setInputValue('');
 
-    // Cuando el staff escribe, silencia la IA temporalmente (agent_mode → human)
-    // pero NO cambia ai_enabled — eso solo lo hace el toggle explícito.
-    // Así la IA puede retomar sola después de 2 min de inactividad del staff.
-    setAgentMode('human');
-    const now = new Date().toISOString();
-    supabase.from('conversations')
-      .update({ agent_mode: 'human', agent_last_human_reply_at: now })
-      .eq('id', conv.id)
-      .then(({ error: e }) => { if (e) console.error('agent_mode update error:', e); });
-    if (conv.patient_id) {
-      supabase.from('patients')
-        .update({ last_human_interaction: now })   // ya NO toca ai_enabled
-        .eq('id', conv.patient_id)
-        .then(({ error: e }) => { if (e) console.error('last_human_interaction update error:', e); });
-    }
-
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token ?? '';
@@ -801,8 +819,24 @@ function ConversationView({ conv, onDelete }) {
           setSendError(json?.message ?? json?.error ?? 'Error al enviar.');
         }
         setInputValue(text);
+        // No marcar agent_mode=human si el envío falló
+      } else {
+        // Éxito — silenciar IA temporalmente (agent_mode → human).
+        // NO toca ai_enabled: la IA puede retomar sola después de 2 min.
+        setAgentMode('human');
+        const now = new Date().toISOString();
+        supabase.from('conversations')
+          .update({ agent_mode: 'human', agent_last_human_reply_at: now })
+          .eq('id', conv.id)
+          .then(({ error: e }) => { if (e) console.error('agent_mode update error:', e); });
+        if (conv.patient_id) {
+          supabase.from('patients')
+            .update({ last_human_interaction: now })
+            .eq('id', conv.patient_id)
+            .then(({ error: e }) => { if (e) console.error('last_human_interaction update error:', e); });
+        }
+        // On success: Realtime fires the INSERT and shows the message
       }
-      // On success: Realtime fires the INSERT and shows the message
     } catch {
       setSendError('Error de red. Intentá de nuevo.');
       setInputValue(text);
@@ -827,7 +861,7 @@ function ConversationView({ conv, onDelete }) {
               <span className="text-[14px] font-semibold text-[var(--cq-fg)]">{name}</span>
               {windowOpen
                 ? <Badge tone="success">24h ACTIVA</Badge>
-                : <Badge tone="warning">VENTANA CERRADA</Badge>
+                : <Badge tone="warn">VENTANA CERRADA</Badge>
               }
             </div>
             <span className="text-[11.5px] font-mono text-[var(--cq-fg-muted)]">{conv.phone_number}</span>
@@ -1001,13 +1035,13 @@ export function Inbox() {
   const [showNewModal, setShowNewModal] = useState(false);
 
   const filteredConversations = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = norm(search.trim());
     if (!q) return conversations;
     return conversations.filter(
       (c) =>
-        (c.patients?.full_name ?? '').toLowerCase().includes(q) ||
-        c.phone_number.includes(q) ||
-        (c.last_message ?? '').toLowerCase().includes(q),
+        norm(c.patients?.full_name).includes(q) ||
+        (c.phone_number ?? '').includes(q) ||
+        norm(c.last_message).includes(q),
     );
   }, [conversations, search]);
 
