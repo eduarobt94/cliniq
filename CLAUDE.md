@@ -296,77 +296,327 @@ git push origin develop
 
 ---
 
-## 🚨 Estándares de código — reglas aprendidas (react-doctor)
+## 🚨 Estándares de código — reglas aprendidas (react-doctor audit 71→84/100)
 
-> Estas reglas DEBEN seguirse en todo código nuevo para mantener la calidad del proyecto.
+> **LEER OBLIGATORIO antes de escribir cualquier componente o hook.**
+> Estas reglas vienen de auditorías reales del proyecto. Violarlas genera deuda técnica que toma horas corregir.
 
-### Tailwind CSS
-- **`w-N h-N` del mismo valor → usar `size-N`** (Tailwind v3.4+). Ej: `w-8 h-8` → `size-8`, `w-4 h-4` → `size-4`
-- No usar `w-[Npx] h-[Npx]` cuando se puede usar `size-[Npx]`
+---
 
-### React — Keys
-- **Nunca usar índice de array como key** (`key={i}`). Siempre usar ID estable: `key={item.id}`, `key={item.slug}`, `key={item.name}`
-- Exception: listas estáticas/constantes donde el orden nunca cambia (ej: lista de beneficios fija)
+### 1. Tailwind CSS — tamaños
 
-### React — useEffect cleanup
-- **Todo `setTimeout` en useEffect → retornar `clearTimeout`**
-  ```jsx
-  useEffect(() => {
-    const t = setTimeout(() => { ... }, delay);
-    return () => clearTimeout(t);
-  }, [dep]);
-  ```
-- **Todo `setInterval` → retornar `clearInterval`**
-- **Todo Supabase Realtime `.subscribe()` → retornar `supabase.removeChannel(channel)`** (ya aplica en la mayoría de hooks)
+```jsx
+// ❌ MAL — w-N h-N del mismo valor
+<div className="w-8 h-8" />
+<div className="w-4 h-4" />
 
-### React — Performance
-- **Default array props → constante de módulo**, no literal inline:
-  ```jsx
-  // ❌ MAL: crea nueva referencia en cada render
-  function Comp({ items = [] }) {}
-  // ✅ BIEN: referencia estable
-  const EMPTY_ITEMS = [];
-  function Comp({ items = EMPTY_ITEMS }) {}
-  ```
-- **`array.includes()` en loops repetidos → convertir a `Set`**:
-  ```js
-  // ❌ O(n) por cada llamada
-  STATUS_LIST.includes(item.status)
-  // ✅ O(1)
-  const STATUS_SET = new Set(STATUS_LIST);
-  STATUS_SET.has(item.status)
-  ```
-- **`await` dentro de `for...of` para operaciones independientes → `Promise.all`**:
-  ```ts
-  // ❌ Secuencial
-  for (const item of items) { await processItem(item); }
-  // ✅ Paralelo
-  await Promise.all(items.map(item => processItem(item)));
-  ```
+// ✅ BIEN — shorthand size-N (Tailwind v3.4+)
+<div className="size-8" />
+<div className="size-4" />
+```
+> Aplica a cualquier valor: `size-5`, `size-6`, `size-[14px]`, etc.
 
-### React — Correctness
-- **`new Date()` en render/JSX → envolver en `useEffect+useState`** para evitar hydration mismatch
-- **`localStorage` → siempre versionar la key**: `"cliniq:tweaks:v1"` no `"cliniq:tweaks"`
+---
 
-### Accesibilidad
-- **`<a>` sin href real → usar `<button>`** si es un click handler. Si es link, usar href real.
-- **`<div onClick>` no interactivo → agregar `role="button"` + `tabIndex={0}` + `onKeyDown`**:
-  ```jsx
-  <div
-    role="button"
-    tabIndex={0}
-    onClick={handleClick}
-    onKeyDown={e => e.key === 'Enter' && handleClick()}
-  >
-  ```
-- **`<label>` → siempre con `htmlFor` apuntando al `id` del input asociado**:
-  ```jsx
-  <label htmlFor="email-input">Email</label>
-  <input id="email-input" type="email" />
-  ```
+### 2. React — Keys estables en listas
 
-### JSX — Texto
-- **No usar em dash literal `—` en JSX text** → usar `{"—"}` o `{" — "}` como expresión JSX
+```jsx
+// ❌ MAL — índice como key, rompe en reorder/filter
+items.map((item, i) => <Row key={i} />)
+
+// ✅ BIEN — ID estable del dato
+items.map(item => <Row key={item.id} />)
+items.map(item => <Row key={item.slug} />)
+items.map(item => <Row key={item.name} />)
+
+// ✅ OK para listas ESTÁTICAS que nunca cambian de orden
+STATIC_OPTIONS.map((opt, i) => <Option key={i} />)
+```
+
+---
+
+### 3. useEffect — siempre retornar cleanup
+
+**Timers:**
+```jsx
+// ❌ MAL — leak en cada re-render y en unmount
+useEffect(() => {
+  setTimeout(() => navigate('/dashboard'), 1200);
+}, []);
+
+// ✅ BIEN
+useEffect(() => {
+  const t = setTimeout(() => navigate('/dashboard'), 1200);
+  return () => clearTimeout(t);
+}, []);
+```
+
+**Supabase Realtime — patrón OBLIGATORIO en todos los hooks:**
+```js
+useEffect(() => {
+  if (!clinicId) return;
+
+  async function load() { /* fetch data */ }
+  load();
+
+  // ⚠️ SEPARAR asignación de channel y .subscribe() en dos líneas
+  // para que el static analyzer detecte el cleanup correctamente
+  const channel = supabase.channel(`nombre-${clinicId}`);
+  channel.on('postgres_changes', { event: '*', schema: 'public', table: 'tabla',
+    filter: `clinic_id=eq.${clinicId}` }, load)
+    .subscribe();
+
+  return () => { supabase.removeChannel(channel); };
+}, [clinicId]);
+```
+> **Crítico:** asignar `const channel = supabase.channel(...)` en línea separada antes de `.on().subscribe()`. Si se encadena todo en una línea, el analyzer no detecta el cleanup.
+
+**Event listeners:**
+```jsx
+useEffect(() => {
+  window.addEventListener('resize', handler);
+  return () => window.removeEventListener('resize', handler);
+}, []);
+```
+
+---
+
+### 4. Performance — operaciones independientes en paralelo
+
+```ts
+// ❌ MAL — secuencial, innecesariamente lento
+for (const item of items) {
+  await sendNotification(item);
+}
+
+// ✅ BIEN — paralelo
+await Promise.all(items.map(item => sendNotification(item)));
+
+// ⚠️ EXCEPCIÓN: loops que DEBEN ser secuenciales (ej: ai-agent-reply tool loop)
+// NO paralelizar cuando el resultado de una iteración afecta la siguiente
+```
+
+**Awaits independientes también van en paralelo:**
+```ts
+// ❌ MAL
+const patients = await supabase.from('patients').select('*');
+const appointments = await supabase.from('appointments').select('*');
+
+// ✅ BIEN
+const [patients, appointments] = await Promise.all([
+  supabase.from('patients').select('*'),
+  supabase.from('appointments').select('*'),
+]);
+```
+
+---
+
+### 5. Performance — referencias estables
+
+```jsx
+// ❌ MAL — [] literal crea nueva referencia en cada render
+function Comp({ items = [] }) {}
+
+// ✅ BIEN — constante de módulo, referencia estable
+const EMPTY_ITEMS = [];
+function Comp({ items = EMPTY_ITEMS }) {}
+```
+
+```js
+// ❌ MAL — O(n) por cada llamada en un loop
+items.filter(x => STATUS_LIST.includes(x.status))
+
+// ✅ BIEN — O(1) con Set
+const STATUS_SET = new Set(STATUS_LIST);
+items.filter(x => STATUS_SET.has(x.status))
+```
+
+```js
+// ❌ MAL — itera el array dos veces
+items.map(transform).filter(Boolean)
+
+// ✅ BIEN — una sola pasada
+items.flatMap(x => condition(x) ? [transform(x)] : [])
+```
+
+```js
+// ❌ MAL — copia + sort mutable
+[...array].sort(compareFn)
+
+// ✅ BIEN — ES2023, inmutable sin spread
+array.toSorted(compareFn)
+```
+
+---
+
+### 6. Performance — inicialización lazy de estado
+
+```jsx
+// ❌ MAL — se recalcula en cada render aunque solo se use la primera vez
+const [year, setYear] = useState(new Date().getFullYear());
+
+// ✅ BIEN — función inicializadora, se ejecuta solo una vez
+const [year, setYear] = useState(() => new Date().getFullYear());
+```
+
+```jsx
+// ❌ MAL — localStorage en cada render
+const [compact, setCompact] = useState(localStorage.getItem('key') === 'true');
+// y luego otra llamada más abajo...
+
+// ✅ BIEN — leer una sola vez y cachear
+const stored = localStorage.getItem('cq_compact_mode:v1');
+const [compact, setCompact] = useState(stored === 'true');
+```
+
+---
+
+### 7. Correctness — new Date() en render
+
+```jsx
+// ❌ MAL — new Date() en el cuerpo del componente / JSX
+function MyComp() {
+  const today = new Date().toISOString().slice(0, 10); // distinto en server vs client
+  return <div>{today}</div>;
+}
+
+// ✅ BIEN — solo en cliente, después del mount
+function MyComp() {
+  const [today, setToday] = useState('');
+  useEffect(() => { setToday(new Date().toISOString().slice(0, 10)); }, []);
+  return <div>{today}</div>;
+}
+
+// ✅ También OK — inicializador lazy (evita flash)
+const [today] = useState(() => new Date().toISOString().slice(0, 10));
+```
+
+---
+
+### 8. Correctness — localStorage versionado
+
+```js
+// ❌ MAL — sin versión, crashes si cambia el schema
+localStorage.setItem('cliniq:tweaks', JSON.stringify(data));
+
+// ✅ BIEN — con versión en la key
+localStorage.setItem('cliniq:tweaks:v1', JSON.stringify(data));
+```
+
+---
+
+### 9. useState vs useRef
+
+```jsx
+// ❌ MAL — useState para valores que NUNCA se muestran en el JSX
+const [sent, setSent] = useState(false);
+// ...en handler: setSent(true)
+// ...en JSX: no aparece "sent" en ningún return/render
+
+// ✅ BIEN — useRef para valores que solo se leen en handlers/efectos
+const sentRef = useRef(false);
+// ...en handler: sentRef.current = true
+```
+> Regla: si el valor no aparece en el `return (...)` del componente, usar `useRef`.
+
+---
+
+### 10. Accesibilidad
+
+```jsx
+// ❌ MAL — <a> sin href real
+<a href="#" onClick={handler}>Ver más</a>
+
+// ✅ BIEN — usar <button> para acciones, <a> solo para navegación real
+<button onClick={handler}>Ver más</button>
+<a href="/ruta-real">Ver más</a>
+```
+
+```jsx
+// ❌ MAL — div clicable sin accesibilidad de teclado
+<div onClick={handler}>Acción</div>
+
+// ✅ BIEN — navegable por teclado
+<div
+  role="button"
+  tabIndex={0}
+  onClick={handler}
+  onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handler()}
+>
+  Acción
+</div>
+```
+
+```jsx
+// ❌ MAL — label sin asociar al input
+<label>Email</label>
+<input type="email" />
+
+// ✅ BIEN — htmlFor + id
+<label htmlFor="email-field">Email</label>
+<input id="email-field" type="email" />
+```
+
+```jsx
+// ❌ MAL — botones vagos
+<button onClick={cancelar}>No</button>
+
+// ✅ BIEN — descriptivos
+<button onClick={cancelar}>Cancelar</button>
+<button onClick={confirmDelete}>Eliminar paciente</button>
+```
+
+---
+
+### 11. JSX — texto
+
+```jsx
+// ❌ MAL — em dash literal en JSX
+<p>Servicio — incluye consulta</p>
+
+// ✅ BIEN — expresión JSX
+<p>Servicio {" — "} incluye consulta</p>
+// o simplemente usar coma/dos puntos
+<p>Servicio: incluye consulta</p>
+```
+
+---
+
+### 12. Intl — cachear constructores costosos
+
+```ts
+// ❌ MAL — new Intl.DateTimeFormat() dentro de función, se recrea en cada llamada
+function formatDate(date: Date) {
+  return new Intl.DateTimeFormat('es-UY', { ... }).format(date);
+}
+
+// ✅ BIEN — module scope o Map cache
+const DTF = new Intl.DateTimeFormat('es-UY', { dateStyle: 'short' });
+function formatDate(date: Date) { return DTF.format(date); }
+
+// ✅ Para múltiples locales/opciones — Map cache
+const intlCache = new Map<string, Intl.DateTimeFormat>();
+function getFormatter(locale: string, opts: Intl.DateTimeFormatOptions) {
+  const key = `${locale}-${JSON.stringify(opts)}`;
+  if (!intlCache.has(key)) intlCache.set(key, new Intl.DateTimeFormat(locale, opts));
+  return intlCache.get(key)!;
+}
+```
+
+---
+
+### 13. Lo que NO corregir (no son bugs reales en este proyecto)
+
+| Regla | Por qué ignorar |
+|---|---|
+| `prefer-useReducer` | Refactorizar `useState×5` → `useReducer` en 14 componentes = riesgo alto sin beneficio funcional |
+| `no-cascading-set-state` | Hooks de carga con múltiples setState son correctos aquí |
+| `knip/files` (edge functions) | Supabase Edge Functions no son módulos JS importados — falso positivo del analyzer |
+| `no-fetch-in-effect` | Requeriría migrar a `react-query`, fuera de scope |
+| `no-mutable-in-deps` (location.pathname) | `useLocation()` de React Router es inmutable por render — falso positivo |
+| `no-react19-deprecated-apis` | Estamos en React 18, no 19 — falso positivo |
+| `no-side-tab-border` | El `border-l-2` del ítem activo en Sidebar es una decisión de diseño intencional |
+| `no-giant-component` | Signup/NewAppointmentModal/Configuracion son grandes pero funcionales, refactorizar es riesgo |
 
 ---
 
