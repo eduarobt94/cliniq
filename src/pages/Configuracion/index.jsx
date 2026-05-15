@@ -531,7 +531,7 @@ export function Configuracion() {
                       <span className="font-mono text-[var(--cq-fg)]">{stats.total_sent}</span>
                       {stats.success_rate != null && (
                         <span className="ml-2 text-[var(--cq-success)]">
-                          ({Math.round(stats.success_rate * 100)}% éxito)
+                          ({Math.min(100, Math.round(stats.success_rate))}% éxito)
                         </span>
                       )}
                     </div>

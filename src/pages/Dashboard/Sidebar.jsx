@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { id: 'pacientes',       label: 'Pacientes',         icon: Icons.Users,    path: '/dashboard/pacientes'                                       },
   { id: 'automatizaciones',label: 'Automatizaciones',  icon: Icons.Zap,      path: '/dashboard/automatizaciones', dynamic: 'automationsCount'  },
   { id: 'inbox',           label: 'Inbox WhatsApp',    icon: Icons.Chat,     path: '/dashboard/inbox',            dynamic: 'inboxCount'        },
-  { id: 'lista-espera',   label: 'Lista de espera',   icon: Icons.Bell,     path: '/dashboard/lista-espera',     dynamic: 'waitlistCount'     },
+  { id: 'lista-espera',   label: 'Lista de espera',   icon: Icons.Waitlist, path: '/dashboard/lista-espera',     dynamic: 'waitlistCount'     },
   { id: 'reportes',        label: 'Reportes',          icon: Icons.Chart,    path: '/dashboard/reportes'                                        },
 ];
 
