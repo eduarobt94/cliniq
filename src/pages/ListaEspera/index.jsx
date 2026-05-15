@@ -54,6 +54,9 @@ function WaitlistRow({ entry, onStatusChange }) {
   const [loading, setLoading] = useState(false);
   const patient = entry.patients;
   const statusCfg = STATUS_CONFIG[entry.status] ?? STATUS_CONFIG.waiting;
+  const createdAtStr = new Date(entry.created_at).toLocaleDateString('es-UY', {
+    day: 'numeric', month: 'short', year: '2-digit',
+  });
 
   const handleMark = async (newStatus) => {
     setLoading(true);
@@ -86,9 +89,7 @@ function WaitlistRow({ entry, onStatusChange }) {
 
       {/* Anotado */}
       <td className="py-3 px-2 text-[12px] text-[var(--cq-fg-muted)]">
-        {new Date(entry.created_at).toLocaleDateString('es-UY', {
-          day: 'numeric', month: 'short', year: '2-digit',
-        })}
+        {createdAtStr}
       </td>
 
       {/* Acciones */}

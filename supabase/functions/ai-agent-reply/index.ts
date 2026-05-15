@@ -103,13 +103,13 @@ const CLOSURE_REASONS: Record<string, string> = {
 
 function formatSchedule(rows: Record<string, unknown>[]): string {
   const DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Lun→Dom
-  return DISPLAY_ORDER.map(dow => {
+  return DISPLAY_ORDER.flatMap(dow => {
     const r = rows.find(x => (x.day_of_week as number) === dow);
-    if (!r) return null;
-    return r.is_open
+    if (!r) return [];
+    return [r.is_open
       ? `  ${SCHEDULE_DAY_NAMES[dow]}: ${r.open_time}–${r.close_time}`
-      : `  ${SCHEDULE_DAY_NAMES[dow]}: cerrado`;
-  }).filter(Boolean).join('\n');
+      : `  ${SCHEDULE_DAY_NAMES[dow]}: cerrado`];
+  }).join('\n');
 }
 
 function formatClosures(rows: Record<string, unknown>[] | null): string {

@@ -91,9 +91,8 @@ export function useNotifications(clinicId, push) {
   useEffect(() => {
     if (!clinicId) return;
 
-    const channel = supabase
-      .channel(`notif-${clinicId}`)
-
+    const channel = supabase.channel(`notif-${clinicId}`);
+    channel
       // New appointment created
       .on(
         'postgres_changes',
@@ -138,7 +137,7 @@ export function useNotifications(clinicId, push) {
         }
       });
 
-    return () => { supabase.removeChannel(channel); };
+    return () => supabase.removeChannel(channel);
   }, [clinicId, addNotif, push]);
 
   return { notifications, unreadCount, markAllRead };

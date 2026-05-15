@@ -55,17 +55,15 @@ export function useWaitingList(clinicId, statusFilter = 'waiting') {
   useEffect(() => {
     if (!clinicId) return;
 
-    const channel = supabase
-      .channel(`waiting-list-${clinicId}`)
-      .on('postgres_changes', {
-        event:  '*',
-        schema: 'public',
-        table:  'waiting_list',
-        filter: `clinic_id=eq.${clinicId}`,
-      }, fetchEntries)
-      .subscribe();
+    const channel = supabase.channel(`waiting-list-${clinicId}`);
+    channel.on('postgres_changes', {
+      event:  '*',
+      schema: 'public',
+      table:  'waiting_list',
+      filter: `clinic_id=eq.${clinicId}`,
+    }, fetchEntries).subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => supabase.removeChannel(channel);
   }, [clinicId, fetchEntries]);
 
   return { entries, loading, error, refetch: fetchEntries };
@@ -91,17 +89,15 @@ export function useWaitlistBadge(clinicId) {
 
     load();
 
-    const channel = supabase
-      .channel(`waitlist-badge-${clinicId}`)
-      .on('postgres_changes', {
-        event:  '*',
-        schema: 'public',
-        table:  'waiting_list',
-        filter: `clinic_id=eq.${clinicId}`,
-      }, load)
-      .subscribe();
+    const channel = supabase.channel(`waitlist-badge-${clinicId}`);
+    channel.on('postgres_changes', {
+      event:  '*',
+      schema: 'public',
+      table:  'waiting_list',
+      filter: `clinic_id=eq.${clinicId}`,
+    }, load).subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => supabase.removeChannel(channel);
   }, [clinicId]);
 
   return count;

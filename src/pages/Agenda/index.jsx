@@ -218,7 +218,7 @@ function ActionsMenu({ appt, onStatusChange, onEdit, onDelete }) {
                   onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
                   className="flex-1 px-2 py-1 rounded-[6px] border border-[var(--cq-border)] text-[12px] hover:bg-[var(--cq-surface-2)] transition-colors"
                 >
-                  No
+                  Cancelar
                 </button>
               </div>
             </div>
@@ -580,7 +580,7 @@ function MonthView({ currentDate, appointments, loading, onNew }) {
                       +{overflow} más
                     </span>
                   )}
-                  {loading && isThisMonth && dayAppts.length === 0 && Math.random() > 0.7 && (
+                  {loading && isThisMonth && dayAppts.length === 0 && (
                     <div className="animate-pulse bg-[var(--cq-surface-2)] rounded h-4 w-full" />
                   )}
                 </div>

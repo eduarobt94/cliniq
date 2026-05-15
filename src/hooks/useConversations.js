@@ -53,8 +53,8 @@ export function useConversations(clinicId) {
   useEffect(() => {
     if (!clinicId) return;
 
-    const channel = supabase
-      .channel(`conversations:clinic:${clinicId}`)
+    const channel = supabase.channel(`conversations:clinic:${clinicId}`);
+    channel
       .on(
         'postgres_changes',
         {
@@ -111,7 +111,7 @@ export function useConversations(clinicId) {
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => supabase.removeChannel(channel);
   }, [clinicId, fetch]);
 
   const deleteConversation = useCallback(async (conversationId) => {

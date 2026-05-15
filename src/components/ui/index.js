@@ -5,4 +5,4 @@ export { Card } from './Card';
 export { Avatar } from './Avatar';
 export { MonoLabel, SectionLabel, Divider } from './Typography';
 export { ToastContainer, useToast } from './Toast';
-export { DatePicker, TimePicker } from './DateTimePicker';
+export { TimePicker } from './DateTimePicker';

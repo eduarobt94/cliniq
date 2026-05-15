@@ -42,25 +42,19 @@ export function useAppointments() {
   useEffect(() => {
     if (!user || !clinic?.id) return;
 
-    const channel = supabase
-      .channel(`appointments-clinic-${clinic.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'appointments',
-          filter: `clinic_id=eq.${clinic.id}`,
-        },
-        () => {
-          fetchAppointments();
-        }
-      )
-      .subscribe();
+    const channel = supabase.channel(`appointments-clinic-${clinic.id}`);
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'appointments',
+        filter: `clinic_id=eq.${clinic.id}`,
+      },
+      () => fetchAppointments(),
+    ).subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   }, [user, clinic?.id, fetchAppointments]);
 
   return { appointments, loading, error, refetch: fetchAppointments };

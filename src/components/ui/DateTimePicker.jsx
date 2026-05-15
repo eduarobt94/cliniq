@@ -25,7 +25,8 @@ function fromISO(iso) {
 // ─── Calendar ─────────────────────────────────────────────────────────────────
 
 function Calendar({ value, onChange, min, schedule, closures }) {
-  const today = toISO(new Date());
+  const [today, setToday] = useState(() => toISO(new Date()));
+  useEffect(() => { setToday(toISO(new Date())); }, []);
   const [viewYear,  setViewYear]  = useState(() => (value ? fromISO(value) : new Date()).getFullYear());
   const [viewMonth, setViewMonth] = useState(() => (value ? fromISO(value) : new Date()).getMonth()); // 0–11
 
@@ -102,7 +103,7 @@ function Calendar({ value, onChange, min, schedule, closures }) {
       {/* Day cells */}
       <div className="grid grid-cols-7 gap-y-0.5">
         {cells.map((date, i) => {
-          if (!date) return <div key={`e-${i}`} />;
+          if (!date) return <div key={`empty-${viewYear}-${viewMonth}-${i}`} />;
           const iso   = toISO(date);
           const sel   = iso === value;
           const isToday = iso === today;

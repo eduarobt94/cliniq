@@ -44,14 +44,12 @@ export function useAgendaRange(startDateStr, endDateStr) {
 
   useEffect(() => {
     if (!user || !clinic?.id) return;
-    const channel = supabase
-      .channel(`agenda-range-${clinic.id}-${startDateStr}-${endDateStr}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'appointments', filter: `clinic_id=eq.${clinic.id}` },
-        fetchAppointments,
-      )
-      .subscribe();
+    const channel = supabase.channel(`agenda-range-${clinic.id}-${startDateStr}-${endDateStr}`);
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'appointments', filter: `clinic_id=eq.${clinic.id}` },
+      fetchAppointments,
+    ).subscribe();
     return () => supabase.removeChannel(channel);
   }, [user, clinic?.id, startDateStr, endDateStr, fetchAppointments]);
 

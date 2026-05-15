@@ -28,13 +28,3 @@ export async function updateClinicSettings(clinicId, fields) {
   if (error) throw error;
 }
 
-export async function getClinic(clinicId) {
-  const { data, error } = await supabase
-    .from('clinics')
-    .select('*')
-    .eq('id', clinicId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data;
-}

@@ -257,7 +257,7 @@ function PatientActionsMenu({ patient, onEdit, onDelete }) {
               onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
               className="flex-1 h-7 rounded-[6px] text-[12px] font-medium text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] transition-colors"
             >
-              No
+              Cancelar
             </button>
           </div>
         </div>

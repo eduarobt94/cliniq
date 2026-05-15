@@ -27,8 +27,8 @@ export function useRealtimeMessages(conversationId) {
   useEffect(() => {
     if (!conversationId) return;
 
-    const channel = supabase
-      .channel(`messages:conv:${conversationId}`)
+    const channel = supabase.channel(`messages:conv:${conversationId}`);
+    channel
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
@@ -67,7 +67,7 @@ export function useRealtimeMessages(conversationId) {
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => supabase.removeChannel(channel);
   }, [conversationId]);
 
   const addOptimistic = useCallback((tempMsg) => {

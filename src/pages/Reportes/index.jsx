@@ -214,6 +214,12 @@ export function Reportes() {
   const noShowRateStr  = data ? `${data.noShowRate}%`          : null;
   const autoSentStr    = data?.autoStats?.total_sent != null  ? String(data.autoStats.total_sent)   : null;
   const autoRateStr    = data?.autoStats?.success_rate != null ? `${data.autoStats.success_rate}%` : null;
+  const autoLastSentStr = data?.autoStats?.last_sent_at
+    ? new Date(data.autoStats.last_sent_at).toLocaleString('es-UY', {
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+        timeZone: 'America/Montevideo',
+      })
+    : null;
 
   return (
     <div className="flex flex-col gap-6 max-w-[1200px] mx-auto">
@@ -364,14 +370,11 @@ export function Reportes() {
                 </div>
               </div>
 
-              {data?.autoStats?.last_sent_at && (
+              {autoLastSentStr && (
                 <div className="flex items-center gap-2 text-[12.5px] text-[var(--cq-fg-muted)]">
                   <Icons.Calendar size={13} />
                   Último envío:{' '}
-                  {new Date(data.autoStats.last_sent_at).toLocaleString('es-UY', {
-                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                    timeZone: 'America/Montevideo',
-                  })}
+                  {autoLastSentStr}
                 </div>
               )}
 

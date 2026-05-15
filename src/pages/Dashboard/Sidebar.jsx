@@ -37,15 +37,13 @@ function useInboxBadge(clinicId) {
 
     load();
 
-    const channel = supabase
-      .channel(`inbox-badge-${clinicId}`)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'conversations',
-        filter: `clinic_id=eq.${clinicId}`,
-      }, load)
-      .subscribe();
+    const channel = supabase.channel(`inbox-badge-${clinicId}`);
+    channel.on('postgres_changes', {
+      event: '*', schema: 'public', table: 'conversations',
+      filter: `clinic_id=eq.${clinicId}`,
+    }, load).subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => supabase.removeChannel(channel);
   }, [clinicId]);
 
   return count;
@@ -74,15 +72,13 @@ function useAgendaBadge(clinicId) {
 
     load();
 
-    const channel = supabase
-      .channel(`agenda-badge-${clinicId}`)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'appointments',
-        filter: `clinic_id=eq.${clinicId}`,
-      }, load)
-      .subscribe();
+    const channel = supabase.channel(`agenda-badge-${clinicId}`);
+    channel.on('postgres_changes', {
+      event: '*', schema: 'public', table: 'appointments',
+      filter: `clinic_id=eq.${clinicId}`,
+    }, load).subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => supabase.removeChannel(channel);
   }, [clinicId]);
 
   return count;
@@ -108,15 +104,13 @@ function useAutomationsBadge(clinicId) {
 
     load();
 
-    const channel = supabase
-      .channel(`automations-badge-${clinicId}`)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'clinic_automations',
-        filter: `clinic_id=eq.${clinicId}`,
-      }, load)
-      .subscribe();
+    const channel = supabase.channel(`automations-badge-${clinicId}`);
+    channel.on('postgres_changes', {
+      event: '*', schema: 'public', table: 'clinic_automations',
+      filter: `clinic_id=eq.${clinicId}`,
+    }, load).subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => supabase.removeChannel(channel);
   }, [clinicId]);
 
   return count;

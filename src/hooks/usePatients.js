@@ -41,14 +41,12 @@ export function usePatients() {
   // Realtime: re-fetch on any patient change in this clinic
   useEffect(() => {
     if (!user || !clinic?.id) return;
-    const channel = supabase
-      .channel(`patients-${clinic.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'patients', filter: `clinic_id=eq.${clinic.id}` },
-        fetchPatients,
-      )
-      .subscribe();
+    const channel = supabase.channel(`patients-${clinic.id}`);
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'patients', filter: `clinic_id=eq.${clinic.id}` },
+      fetchPatients,
+    ).subscribe();
     return () => supabase.removeChannel(channel);
   }, [user, clinic?.id, fetchPatients]);
 

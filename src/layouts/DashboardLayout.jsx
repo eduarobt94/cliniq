@@ -14,11 +14,15 @@ export function DashboardLayout() {
   const { toasts, push, dismiss } = useToast();
   const { notifications, unreadCount, markAllRead } = useNotifications(clinic?.id, push);
 
-  const [compact, setCompact] = useState(() => localStorage.getItem('cq_compact_mode:v1') === 'true');
+  const COMPACT_KEY = 'cq_compact_mode:v1';
+  const [compact, setCompact] = useState(() => {
+    const stored = localStorage.getItem(COMPACT_KEY);
+    return stored === 'true';
+  });
 
   useEffect(() => {
     const sync = () => {
-      const stored = localStorage.getItem('cq_compact_mode:v1');
+      const stored = localStorage.getItem(COMPACT_KEY);
       setCompact(stored === 'true');
     };
     window.addEventListener('cq_compact_mode:v1', sync);
