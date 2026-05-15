@@ -54,7 +54,7 @@ function EditModal({ automation, onSave, onClose }) {
   const [message,        setMessage]        = useState(
     automation.message_template ??
     (automation.type === 'appointment_reminder'
-      ? 'Hola {patient_name} 👋 Le recordamos su turno en {clinic_name} para {service} el {appointment_date} a las {appointment_time}.\n\n¿Confirma su asistencia? Responda *Sí* para confirmar o *No* si no puede asistir.'
+      ? 'Hola {patient_name} 👋 Le escribimos desde {clinic_name} para recordarle que tiene un turno el {appointment_date} a las {appointment_time}.\n\n¿Va a poder asistir?'
       : automation.type === 'patient_reactivation'
         ? 'Hola {patient_name}! 👋 Hace un tiempo que no te vemos en {clinic_name}. ¿Quiere agendar una consulta? Responda este mensaje y le ayudamos.'
         : '¡Gracias por su visita a {clinic_name}, {patient_name}! 🙏 Si le pareció bien la atención, nos ayudaría mucho una reseña en Google: {review_url} ¡Muchas gracias!')
@@ -132,66 +132,55 @@ function EditModal({ automation, onSave, onClose }) {
         <form onSubmit={handleSubmit} className="p-5 flex flex-col gap-5">
 
           {/* ── appointment_reminder ── */}
-          {automation.type === 'appointment_reminder' && (
-            <>
-              {/* Horas antes */}
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="hours-before" className="text-[12px] font-medium text-[var(--cq-fg-muted)] uppercase tracking-wide">
-                  Horas antes del turno
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    id="hours-before"
-                    type="number" min={1} max={168}
-                    value={hoursBefore}
-                    onChange={(e) => setHoursBefore(e.target.value)}
-                    className="h-9 w-24 px-3 rounded-[8px] bg-[var(--cq-surface-2)] border border-[var(--cq-border)] text-[14px] text-[var(--cq-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--cq-accent)]"
-                  />
-                  <span className="text-[13px] text-[var(--cq-fg-muted)]">horas (1 – 168)</span>
-                </div>
-              </div>
-
-              {/* Nota dual: comportamiento según el valor configurado */}
-              {(() => {
-                const h = parseInt(hoursBefore, 10);
-                const isConversational = !isNaN(h) && h < 12;
-                return (
-                  <div className={`rounded-[10px] border px-4 py-3 flex items-start gap-2.5 ${
-                    isConversational
-                      ? 'bg-[color-mix(in_oklch,var(--cq-accent)_8%,transparent)] border-[color-mix(in_oklch,var(--cq-accent)_25%,transparent)]'
-                      : 'bg-[var(--cq-surface-2)] border-[var(--cq-border)]'
-                  }`}>
-                    <Icons.Info size={13} className={`shrink-0 mt-0.5 ${isConversational ? 'text-[var(--cq-accent)]' : 'text-[var(--cq-fg-muted)]'}`} />
-                    <div className="flex flex-col gap-0.5">
-                      {isConversational ? (
-                        <>
-                          <p className="text-[12px] font-medium text-[var(--cq-fg)]">Modo conversacional (menos de 12h)</p>
-                          <p className="text-[11.5px] text-[var(--cq-fg-muted)] leading-relaxed">
-                            Se enviará el mensaje de abajo como texto libre y el asistente IA gestionará la respuesta del paciente: si confirma, si quiere reagendar o cancelar.
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-[12px] font-medium text-[var(--cq-fg)]">Modo plantilla de Meta (12h o más)</p>
-                          <p className="text-[11.5px] text-[var(--cq-fg-muted)] leading-relaxed">
-                            Se usará la plantilla aprobada por Meta (<strong>appointment_scheduling</strong>). El mensaje de abajo se usa solo si bajás las horas a menos de 12.
-                          </p>
-                        </>
-                      )}
-                    </div>
+          {automation.type === 'appointment_reminder' && (() => {
+            const h = parseInt(hoursBefore, 10);
+            const isConversational = !isNaN(h) && h < 12;
+            return (
+              <>
+                {/* Horas antes */}
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="hours-before" className="text-[12px] font-medium text-[var(--cq-fg-muted)] uppercase tracking-wide">
+                    Horas antes del turno
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      id="hours-before"
+                      type="number" min={1} max={168}
+                      value={hoursBefore}
+                      onChange={(e) => setHoursBefore(e.target.value)}
+                      className="h-9 w-24 px-3 rounded-[8px] bg-[var(--cq-surface-2)] border border-[var(--cq-border)] text-[14px] text-[var(--cq-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--cq-accent)]"
+                    />
+                    <span className="text-[13px] text-[var(--cq-fg-muted)]">horas (1 – 168)</span>
                   </div>
-                );
-              })()}
+                  <p className="text-[11.5px] text-[var(--cq-fg-muted)]">
+                    {isConversational
+                      ? 'Con este margen de tiempo el asistente puede gestionar la respuesta del paciente en tiempo real.'
+                      : 'Con 12 horas o más de anticipación se usa el mensaje estándar de WhatsApp para garantizar la entrega.'}
+                  </p>
+                </div>
 
-              {/* Editor de mensaje libre (para modo < 12h) */}
-              <MessageEditor
-                value={message}
-                onChange={setMessage}
-                preview={preview}
-                placeholders={['patient_name', 'clinic_name', 'service', 'appointment_date', 'appointment_time']}
-              />
-            </>
-          )}
+                {/* Mensaje personalizable — solo visible cuando < 12h */}
+                {isConversational && (
+                  <MessageEditor
+                    value={message}
+                    onChange={setMessage}
+                    preview={preview}
+                    placeholders={['patient_name', 'clinic_name', 'service', 'appointment_date', 'appointment_time']}
+                  />
+                )}
+
+                {/* Aviso modo estándar — solo visible cuando >= 12h */}
+                {!isConversational && (
+                  <div className="rounded-[10px] bg-[var(--cq-surface-2)] border border-[var(--cq-border)] px-4 py-3 flex items-start gap-2.5">
+                    <Icons.Info size={13} className="shrink-0 mt-0.5 text-[var(--cq-fg-muted)]" />
+                    <p className="text-[12px] text-[var(--cq-fg-muted)] leading-relaxed">
+                      El paciente recibirá un recordatorio estándar de WhatsApp con la fecha y hora de su turno. Si bajás las horas a menos de 12, podrás personalizar el mensaje y agregar una confirmación de asistencia.
+                    </p>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* ── patient_reactivation ── */}
           {automation.type === 'patient_reactivation' && (

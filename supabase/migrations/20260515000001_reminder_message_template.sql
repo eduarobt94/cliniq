@@ -4,8 +4,8 @@
 -- Para hours_before >= 12: se sigue usando la plantilla de Meta.
 
 UPDATE clinic_automations
-SET message_template = 'Hola {patient_name} 👋 Le recordamos su turno en {clinic_name} para {service} el {appointment_date} a las {appointment_time}.
+SET message_template = 'Hola {patient_name} 👋 Le escribimos desde {clinic_name} para recordarle que tiene un turno el {appointment_date} a las {appointment_time}.
 
-¿Confirma su asistencia? Responda *Sí* para confirmar o *No* si no puede asistir.'
+¿Va a poder asistir?'
 WHERE type = 'appointment_reminder'
   AND (message_template IS NULL OR message_template = '');

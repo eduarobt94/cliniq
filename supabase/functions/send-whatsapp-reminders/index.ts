@@ -254,7 +254,7 @@ serve(async (req: Request) => {
         if (useConversational) {
           // ── Conversational path: free-form message with confirmation request ──
           const defaultTemplate =
-            'Hola {patient_name} 👋 Le recordamos su turno en {clinic_name} para {service} el {appointment_date} a las {appointment_time}.\n\n¿Confirma su asistencia? Responda *Sí* para confirmar o *No* si no puede asistir.';
+            'Hola {patient_name} 👋 Le escribimos desde {clinic_name} para recordarle que tiene un turno el {appointment_date} a las {appointment_time}.\n\n¿Va a poder asistir?';
 
           const rendered = renderTemplate(
             auto.message_template ?? defaultTemplate,
