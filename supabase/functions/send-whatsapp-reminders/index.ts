@@ -9,6 +9,9 @@ const WA_PHONE_NUMBER_ID_GLOBAL = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')  ?? '
 const WA_TEMPLATE_NAME          = Deno.env.get('WHATSAPP_TEMPLATE_NAME')    ?? 'appointment_scheduling';
 const WA_TEMPLATE_LANG          = Deno.env.get('WHATSAPP_TEMPLATE_LANG')    ?? 'es';
 
+// ─── Threshold: below this, send conversational message; at or above, use template ──
+const TEMPLATE_THRESHOLD_HOURS = 12;
+
 // ─── Format date/time for a timezone ─────────────────────────────────────────
 function formatForTimezone(iso: string, tz: string): { date: string; time: string } {
   const dt = new Date(iso);
@@ -21,10 +24,17 @@ function formatForTimezone(iso: string, tz: string): { date: string; time: strin
   return { date: date.charAt(0).toUpperCase() + date.slice(1), time };
 }
 
+// ─── Render message template with variables ───────────────────────────────────
+function renderTemplate(
+  template: string,
+  vars: Record<string, string>,
+): string {
+  return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
+}
+
 // All Spanish language codes to try (in order of preference).
-// We auto-detect because Meta's UI shows "Spanish (URY)" which may map to various codes.
 const LANG_CANDIDATES = [
-  WA_TEMPLATE_LANG,          // configured value first
+  WA_TEMPLATE_LANG,
   'es_AR', 'es', 'es_ES', 'es_MX', 'es_US', 'es_UY', 'es_LA',
 ];
 
@@ -104,13 +114,54 @@ async function sendWaTemplate(
     if (seen.has(lang)) continue;
     seen.add(lang);
     const { waId, errorCode } = await trySendWithLang(to, phoneNumberId, patientName, time, clinicName, lang);
-    if (waId) return waId;                // ✅ success
-    if (errorCode !== 132001) return null; // ❌ non-language error, stop retrying
-    // errorCode === 132001 → wrong language, try next
+    if (waId) return waId;
+    if (errorCode !== 132001) return null;
     console.log(`Lang ${lang} not found for template ${WA_TEMPLATE_NAME}, trying next...`);
   }
   console.error(`No valid language found for template ${WA_TEMPLATE_NAME}`);
   return null;
+}
+
+/**
+ * Send a free-form WhatsApp text message (conversational, within 24h window).
+ * Used when hours_before < TEMPLATE_THRESHOLD_HOURS.
+ */
+async function sendWaFreeText(
+  to: string,
+  phoneNumberId: string,
+  text: string,
+): Promise<string | null> {
+  const api = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
+  try {
+    const res = await fetch(api, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${WA_ACCESS_TOKEN}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type:    'individual',
+        to,
+        type: 'text',
+        text: { preview_url: false, body: text },
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      console.error(`WA free-text error sending to ${to}:`, JSON.stringify(body));
+      return null;
+    }
+
+    const data = await res.json() as Record<string, unknown>;
+    const waId = ((data?.messages as Record<string, string>[])?.[0]?.id) ?? null;
+    console.log(`✅ Free-text reminder sent to ${to}, waId=${waId}`);
+    return waId;
+  } catch (err) {
+    console.error(`Fetch error (free-text) sending to ${to}:`, err);
+    return null;
+  }
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -126,7 +177,7 @@ serve(async (req: Request) => {
     // ── 1. Load enabled automations ─────────────────────────────────────────
     const { data: automations, error: autoError } = await supabase
       .from('clinic_automations')
-      .select('clinic_id, hours_before')
+      .select('clinic_id, hours_before, message_template')
       .eq('type',    'appointment_reminder')
       .eq('enabled', true);
 
@@ -142,17 +193,25 @@ serve(async (req: Request) => {
     }
 
     // ── 2. For each clinic, find appointments in the reminder window ────────
-    async function processAutomation(auto: { clinic_id: string; hours_before: number }): Promise<{ sent: number; failed: number; skipped: number }> {
+    async function processAutomation(auto: {
+      clinic_id: string;
+      hours_before: number;
+      message_template: string | null;
+    }): Promise<{ sent: number; failed: number; skipped: number }> {
       const r = { sent: 0, failed: 0, skipped: 0 };
       const now         = new Date();
       const windowStart = new Date(now.getTime() + (auto.hours_before * 60 - 30) * 60 * 1000);
       const windowEnd   = new Date(now.getTime() + (auto.hours_before * 60 + 30) * 60 * 1000);
+
+      // Determine which send strategy to use
+      const useConversational = auto.hours_before < TEMPLATE_THRESHOLD_HOURS;
 
       const { data: appointments, error: apptError } = await supabase
         .from('appointments')
         .select(`
           id,
           appointment_datetime,
+          notes,
           patients!inner ( id, full_name, phone_number, clinic_id ),
           clinics!inner  ( name, timezone, wa_phone_number_id )
         `)
@@ -181,20 +240,48 @@ serve(async (req: Request) => {
         }
 
         const tz = clinic?.timezone ?? 'America/Montevideo';
-        const { time } = formatForTimezone(appt.appointment_datetime, tz);
+        const { date, time } = formatForTimezone(appt.appointment_datetime, tz);
 
-        const waId = await sendWaTemplate(
-          patient.phone_number,
-          phoneNumberId,
-          patient.full_name,
-          time,
-          clinic.name ?? 'el consultorio',
-        );
+        // ── Extract service from appointment notes ────────────────────────
+        const notesStr = String((appt as Record<string, unknown>).notes ?? '');
+        const svcMatch = notesStr.match(/Servicio:\s*([^—\n]+)/);
+        const service  = svcMatch ? svcMatch[1].trim() : 'su consulta';
 
-        // Readable content for the inbox (template placeholder text)
-        const msgContent =
-          `📅 Recordatorio de turno enviado — ${WA_TEMPLATE_NAME} — ` +
-          `${patient.full_name}, ${time} en ${clinic.name}`;
+        let waId: string | null = null;
+        let msgContent: string;
+        let msgDirection: string;
+
+        if (useConversational) {
+          // ── Conversational path: free-form message with confirmation request ──
+          const defaultTemplate =
+            'Hola {patient_name} 👋 Le recordamos su turno en {clinic_name} para {service} el {appointment_date} a las {appointment_time}.\n\n¿Confirma su asistencia? Responda *Sí* para confirmar o *No* si no puede asistir.';
+
+          const rendered = renderTemplate(
+            auto.message_template ?? defaultTemplate,
+            {
+              patient_name:     patient.full_name,
+              clinic_name:      clinic.name ?? 'el consultorio',
+              service,
+              appointment_date: date,
+              appointment_time: time,
+            },
+          );
+
+          waId         = await sendWaFreeText(patient.phone_number, phoneNumberId, rendered);
+          msgContent   = rendered;
+          msgDirection = 'outbound_ai'; // visible en inbox, activa flujo de confirmación del agente IA
+        } else {
+          // ── Template path: Meta approved template (required for ≥12h) ────
+          waId = await sendWaTemplate(
+            patient.phone_number,
+            phoneNumberId,
+            patient.full_name,
+            time,
+            clinic.name ?? 'el consultorio',
+          );
+          msgContent   = `📅 Recordatorio de turno enviado — ${WA_TEMPLATE_NAME} — ${patient.full_name}, ${time} en ${clinic.name}`;
+          msgDirection = 'system_template';
+        }
 
         if (waId) {
           // ── Mark appointment as reminded + upsert conversation in parallel ──
@@ -224,7 +311,7 @@ serve(async (req: Request) => {
                 conversation_id: convRow.id,
                 clinic_id:       auto.clinic_id,
                 patient_id:      patient.id,
-                direction:       'system_template',
+                direction:       msgDirection,
                 content:         msgContent,
                 status:          'sent',
                 meta_message_id: waId,
@@ -245,7 +332,7 @@ serve(async (req: Request) => {
           if (convErr) {
             console.error(`Conversation upsert error for ${patient.phone_number}:`, convErr);
           }
-          console.log(`✅ Reminder sent to ${patient.phone_number} (waId: ${waId})`);
+          console.log(`✅ Reminder (${useConversational ? 'conversational' : 'template'}) sent to ${patient.phone_number} (waId: ${waId})`);
           r.sent++;
         } else {
           // ── Failed send — just log it ─────────────────────────────────────
@@ -255,7 +342,7 @@ serve(async (req: Request) => {
             appointment_id: appt.id,
             direction:      'outbound',
             phone_number:   patient.phone_number,
-            message:        msgContent,
+            message:        msgContent ?? '',
             wa_message_id:  null,
             status:         'failed',
           });
