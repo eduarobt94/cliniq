@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+﻿import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { Avatar, Badge, Icons }        from '../../components/ui';
 import { useAuth }                     from '../../context/AuthContext';
 import { useConversations }            from '../../hooks/useConversations';
@@ -12,7 +12,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 /** Normaliza acentos y mayúsculas para búsquedas tolerantes. "José" ≡ "jose" */
 function norm(str) {
-  return (str ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return (str ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
 function formatTime(iso) {

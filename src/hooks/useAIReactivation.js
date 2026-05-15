@@ -54,31 +54,28 @@ export function useAIReactivation(clinicId, conversations) {
     if (!clinicId || reactivating) return;
     setReactivating(true);
 
+    const conversationIds = affectedRef.current.map((a) => a.conversationId);
+    const patientIds      = affectedRef.current.map((a) => a.patientId).filter(Boolean);
+
     try {
-      const conversationIds = affectedRef.current.map((a) => a.conversationId);
-      const patientIds      = affectedRef.current.map((a) => a.patientId).filter(Boolean);
-
-      // Reactivar IA en conversations
-      if (conversationIds.length > 0) {
-        await supabase
-          .from('conversations')
-          .update({ agent_mode: 'bot' })
-          .in('id', conversationIds);
-      }
-
-      // Reactivar ai_enabled en patients
-      if (patientIds.length > 0) {
-        await supabase
-          .from('patients')
-          .update({ ai_enabled: true })
-          .in('id', patientIds);
-      }
+      // Ejecutar ambas actualizaciones en paralelo para evitar estado inconsistente parcial
+      await Promise.all([
+        conversationIds.length > 0
+          ? supabase.from('conversations').update({ agent_mode: 'bot' }).in('id', conversationIds)
+          : Promise.resolve(),
+        patientIds.length > 0
+          ? supabase.from('patients').update({ ai_enabled: true }).in('id', patientIds)
+          : Promise.resolve(),
+      ]);
     } catch (err) {
       console.error('[useAIReactivation] Error reactivating:', err);
-    } finally {
+      // No cerramos el banner si hubo error — el usuario puede reintentar
       setReactivating(false);
-      setShowBanner(false);
+      return;
     }
+
+    setReactivating(false);
+    setShowBanner(false);
   }, [clinicId, reactivating]);
 
   const handleDismiss = useCallback(() => {

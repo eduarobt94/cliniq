@@ -498,7 +498,7 @@ serve(async (req: Request) => {
             content:        displayText,
             status:         'received',
             metaMessageId:  waMessageId,
-            messageType:    (['audio','image','document','sticker'].includes(msgType)
+            messageType:    (['audio','image','document','sticker','video'].includes(msgType)
                               ? msgType
                               : 'text') as 'text'|'audio'|'image'|'document'|'sticker'|'unknown',
           });
@@ -541,7 +541,7 @@ serve(async (req: Request) => {
         status:        'received',
         metaMessageId: waMessageId,
         senderType:    null,
-        messageType:   (['audio','image','document','sticker'].includes(msgType)
+        messageType:   (['audio','image','document','sticker','video'].includes(msgType)
                           ? msgType
                           : 'text') as 'text'|'audio'|'image'|'document'|'sticker'|'unknown',
       });

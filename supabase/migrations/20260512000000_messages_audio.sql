@@ -6,7 +6,7 @@
 
 ALTER TABLE messages
   ADD COLUMN IF NOT EXISTS message_type TEXT NOT NULL DEFAULT 'text'
-    CHECK (message_type IN ('text', 'audio', 'image', 'document', 'sticker', 'unknown'));
+    CHECK (message_type IN ('text', 'audio', 'image', 'document', 'sticker', 'video', 'unknown'));
 
 -- Índice útil para filtrar por tipo si se necesita en el futuro
 CREATE INDEX IF NOT EXISTS idx_messages_type
