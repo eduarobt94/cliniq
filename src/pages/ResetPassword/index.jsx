@@ -12,13 +12,14 @@ export function ResetPassword() {
   const [showPwd,   setShowPwd]   = useState(false);
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState('');
+  const [success,   setSuccess]   = useState(false);
 
-  // Si no hay sesión de recovery, redirigir al login
+  // Si no hay sesión de recovery Y no acabamos de guardar, redirigir al login
   useEffect(() => {
-    if (!passwordRecoveryMode) {
+    if (!passwordRecoveryMode && !success) {
       navigate('/login', { replace: true });
     }
-  }, [passwordRecoveryMode, navigate]);
+  }, [passwordRecoveryMode, success, navigate]);
 
   const passwordValid = password.length >= 6;
   const passwordMatch = password === password2 && password2.length > 0;
@@ -29,6 +30,7 @@ export function ResetPassword() {
     setLoading(true);
     setError('');
     try {
+      setSuccess(true); // Previene redirect a /login cuando passwordRecoveryMode se limpia
       await updatePassword(password);
       navigate('/dashboard', { replace: true });
     } catch (err) {

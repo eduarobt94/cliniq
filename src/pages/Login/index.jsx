@@ -101,10 +101,13 @@ export function Login() {
 
   const onGoogle = async () => {
     setGoogleLoading(true);
+    // Safety reset: si el popup/redirect no navega en 15s, liberar el botón
+    const resetTimer = setTimeout(() => setGoogleLoading(false), 15000);
     try {
       await loginWithGoogle();
       // La redirección la maneja el AuthCallback al volver de Google
     } catch (err) {
+      clearTimeout(resetTimer);
       pushToast('No se pudo conectar con Google. Intentá de nuevo.', 'error');
       setGoogleLoading(false);
     }

@@ -1,7 +1,7 @@
-# Cliniq — Matriz de Regresión QA (Happy Path)
-
-> Versión: 2.3 | Generado: 2026-05-07 | Agregado grupos NOSH (5), REVIEW (4), DOCCONF (5), AUDIT (8)
-> Consumida por agente automatizado. NO modificar formato de tabla.
+# CLINIQ — Specs de Automatización QA (API-level)
+> Versión: 2.4 | Actualizado: 2026-05-16 | Migrado de `qa-regression-matrix.md` (raíz) → `docs/qa/`
+> **Propósito**: Specs ejecutables por agente automatizado. HTTP exactos + SQL assertions + mocks de fecha.
+> **Complementa**: `QA_WHATSAPP_FLOWS.md` (manual BDD) — este doc es la contraparte automatizable.
 > Stack: React + Vite (localhost:5173) · Supabase · Edge Functions (Deno)
 > Timezone clínica: `America/Montevideo` (UTC-3, sin DST desde 2015)
 > Función estrella: `ai-agent-reply` + `whatsapp-webhook` → sección AI Inbox con 27 casos

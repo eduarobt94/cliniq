@@ -16,10 +16,16 @@ ALTER TABLE public.ai_config ENABLE ROW LEVEL SECURITY;
 -- ─── 2. DELETE policy for waiting_list ───────────────────────────────────────
 -- waiting_list already has SELECT / INSERT / UPDATE policies (from the migration
 -- that created the table). Add the missing DELETE so the dashboard can remove entries.
+-- NOTE: the waiting_list table may not exist yet when this migration runs (it is
+-- created by 20260507000004). The policy is created here only if the table exists;
+-- otherwise 20260507000004 adds it after creating the table.
 
 DO $$
 BEGIN
-  IF NOT EXISTS (
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'waiting_list'
+  ) AND NOT EXISTS (
     SELECT 1 FROM pg_policies
     WHERE schemaname = 'public'
       AND tablename  = 'waiting_list'

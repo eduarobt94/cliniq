@@ -16,7 +16,9 @@ export class DashboardErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    console.error('[DashboardErrorBoundary]', error, info.componentStack);
+    if (import.meta.env.DEV) {
+      console.error('[DashboardErrorBoundary]', error, info.componentStack);
+    }
   }
 
   handleRetry = () => {

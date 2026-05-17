@@ -89,7 +89,7 @@ export function Signup() {
     } catch (err) {
       const msg =
         err.message.includes('already registered')
-          ? 'Ya existe una cuenta con ese correo.'
+          ? 'No se pudo crear la cuenta. Verificá los datos e intentá de nuevo.'
           : err.message.includes('Email signups are disabled')
           ? 'El registro por correo está desactivado. Contactá al administrador.'
           : err.message.includes('sending confirmation email') || err.message.includes('unexpected_failure')

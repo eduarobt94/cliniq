@@ -3,7 +3,16 @@
 ## ⚡ INICIO RÁPIDO DE SESIÓN
 > Leé esta sección primero. Resume el estado actual y qué hacer a continuación.
 
-**Última sesión completada: 2026-05-15**
+**Última sesión completada: 2026-05-16**
+
+### ✅ Completado en esta sesión (2026-05-16)
+- **Fix H2 — AuthCallback timeout:** `timedOut = useRef` no re-triggerea useEffect. Fix: navigate('/login') directamente en setTimeout. Removido useRef innecesario.
+- **Fix W6 — ResetPassword flash:** `setSuccess(true)` antes de `updatePassword()` previene redirect a /login cuando `passwordRecoveryMode` se limpia.
+- **Fix W5 — ErrorBoundary console.error:** wrapped en `if (import.meta.env.DEV)` en ambos ErrorBoundary y DashboardErrorBoundary.
+- **Fix W3 — Email enumeration en Signup:** "Ya existe una cuenta con ese correo" → mensaje genérico.
+- **Fix W2 — googleLoading safety reset:** timeout de 15s resetea el estado si OAuth no redirige.
+- **QA Exhaustivo completo:** 344 test cases documentados en `docs/qa/` cubriendo todos los flujos del sistema.
+- **CLAUDE.md actualizado:** 10 reglas QA críticas para que el agente dev no repita errores.
 
 ### ✅ Completado en esta sesión (2026-05-15) — parte 2
 - **Fix `success_rate` WhatsApp:** porcentaje mostraba "1390%" porque la vista ya devuelve 0-100, no 0-1. Fix: `Math.min(100, Math.round(stats.success_rate))`
@@ -631,3 +640,272 @@ function getFormatter(locale: string, opts: Intl.DateTimeFormatOptions) {
 - **`norm()` regex:** usar `/[̀-ͯ]/g` — nunca bytes literales Unicode (frágiles entre editores).
 - **Realtime DELETE requiere REPLICA IDENTITY FULL.**
 - **`agent_mode = 'human'`** solo se setea DESPUÉS de `res.ok` en handleSend.
+
+---
+
+## 🔬 QA — Reglas para el agente dev
+
+> Estas reglas vienen del audit QA exhaustivo de 2026-05-16. Aplicar ANTES de hacer PR.
+
+### Antes de cualquier PR — ejecutar mentalmente:
+
+**1. Auth flows — 4 reglas críticas:**
+```
+✅ AuthCallback: timeout de 10s navega directamente en setTimeout (NO via ref)
+✅ ResetPassword: setSuccess(true) ANTES de updatePassword() para evitar flash a /login
+✅ Emails de error: NUNCA revelar si un email existe (signup, forgot-password)
+✅ Google loading: siempre tiene safety reset de 15s (no queda infinito)
+```
+
+**2. Race conditions — updates atómicos:**
+```typescript
+// ❌ MAL — dos operaciones separadas, race condition
+await supabase.from('appointments').update({ status: 'confirmed' }).eq('id', id);
+
+// ✅ BIEN — atómico con condición en WHERE
+await supabase.from('appointments')
+  .update({ status: 'confirmed' })
+  .eq('id', id)
+  .in('status', ['pending', 'new']); // CRÍTICO: falla silenciosamente si ya fue procesado
+// Verificar que retorne 1 row afectada
+```
+
+**3. Optimistic updates — SIEMPRE revertir:**
+```jsx
+// ❌ MAL — sin rollback si falla
+const handleToggle = async () => {
+  setEnabled(!enabled); // optimistic
+  await db.update(...);  // si falla, UI queda inconsistente
+};
+
+// ✅ BIEN — revertir en catch
+const handleToggle = async () => {
+  const prev = enabled;
+  setEnabled(!prev); // optimistic
+  try {
+    await db.update(...);
+  } catch {
+    setEnabled(prev); // revert
+    showError();
+  }
+};
+```
+
+**4. Supabase Realtime — cleanup obligatorio:**
+```jsx
+// ❌ MAL — leak de canales
+useEffect(() => {
+  supabase.channel('msgs').on('INSERT', handler).subscribe();
+}, [convId]);
+
+// ✅ BIEN — split + cleanup
+useEffect(() => {
+  const channel = supabase.channel(`msgs:${convId}`);
+  channel.on('postgres_changes', { event: 'INSERT', ... }, handler).subscribe();
+  return () => { supabase.removeChannel(channel); };
+}, [convId]);
+```
+
+**5. success_rate — SIEMPRE usar Math.min:**
+```jsx
+// ❌ MAL — la vista devuelve 0-100, no 0-1
+Math.round(stats.success_rate * 100) // → "1390%"
+
+// ✅ BIEN
+Math.min(100, Math.round(stats.success_rate)) // → "100%"
+```
+
+**6. ErrorBoundary — console.error solo en dev:**
+```jsx
+componentDidCatch(error, info) {
+  if (import.meta.env.DEV) { // ← OBLIGATORIO
+    console.error('[ErrorBoundary]', error, info.componentStack);
+  }
+}
+```
+
+**7. WhatsApp — dedup de botones:**
+```
+Si paciente confirma/cancela y presiona de nuevo → verificar dedup ANTES de actuar
+Pattern: buscar appointment en ['confirmed','cancelled','rescheduled'] → mensaje dedup
+NUNCA doble-confirmar ni doble-cancelar un appointment
+```
+
+**8. AI agent — validaciones de tools:**
+```typescript
+// register_patient: exigir nombre completo (sin apellido → error)
+// schedule_appointment: validar closure + día laborable + horario ANTES de insertar
+// add_to_waitlist: si patient_id null → lookup por phone o error claro
+// Máx 4 rondas de tool use — nunca loop infinito
+```
+
+**9. Timezone — siempre clínica, nunca browser:**
+```
+Todas las fechas visibles al usuario → timezone de clinics.timezone
+Fallback si null → 'America/Montevideo'
+NUNCA usar new Date().toLocaleString() sin timezone explícita
+```
+
+**10. Recordatorios — threshold exacto:**
+```
+hours_before < 12  → free-text conversacional (sendWaFreeText)
+hours_before >= 12 → template Meta aprobado (sendWaTemplate con lang fallback)
+El 12 va al modo TEMPLATE (operador < es estricto)
+reminder_sent_at solo se setea si waId !== null (no marcar si falló)
+```
+
+---
+
+## 🧪 QA AGENT — Protocolo obligatorio
+
+> **LEER COMPLETO antes de iniciar cualquier sesión de QA.**
+> El agente QA NUNCA improvisa test cases. SIEMPRE opera desde los documentos en `docs/qa/`.
+
+---
+
+### Identidad del agente QA
+
+Cuando se te pide "hacer QA", "probar", "verificar", "hacer regresión", o cualquier variante, sos un **Senior QA Automation Engineer** con acceso completo a `docs/qa/`. Tu trabajo es:
+
+1. **Leer** el documento relevante antes de ejecutar cualquier prueba
+2. **Ejecutar** los test cases definidos — no inventar nuevos sobre la marcha
+3. **Reportar** con el formato estándar de la sección "Reporte de resultados" más abajo
+4. **Actualizar** los documentos QA si encontrás casos no cubiertos o si el sistema cambió
+
+---
+
+### Mapa de documentos — qué leer según la tarea
+
+| Si te piden probar... | Leer PRIMERO |
+|----------------------|--------------|
+| Login, signup, OAuth, invitaciones, roles, password reset | `docs/qa/QA_AUTH_FLOWS.md` |
+| WhatsApp inbound, intents, doctor flow, confirmaciones, cancelaciones | `docs/qa/QA_WHATSAPP_FLOWS.md` |
+| AI agent, agendamiento, reagendamiento, escalación, tools | `docs/qa/QA_WHATSAPP_FLOWS.md` (sección AI) |
+| Recordatorios automáticos backend, cron de reminders | `docs/qa/QA_AUTOMATIONS_FLOWS.md` |
+| UI de Automatizaciones, modal de edición, templates | `docs/qa/QA_AUTOMATIONS_FLOWS.md` (sección AUT) |
+| Agenda, Pacientes, Inbox UI, Config, Lista de espera, Dashboard, Reportes | `docs/qa/QA_FRONTEND_FLOWS.md` |
+| Race conditions, límites exactos, seguridad, offline | `docs/qa/QA_EDGE_CASES.md` |
+| Regresión completa pre-deploy | `docs/qa/QA_REGRESSION_CHECKLIST.md` |
+| Tests automatizados API-level con SQL assertions | `docs/qa/QA_AUTOMATION_SPECS.md` |
+| Estrategia general, severidades, entornos | `docs/qa/QA_MASTER_PLAN.md` |
+
+---
+
+### Protocolo de ejecución paso a paso
+
+```
+PASO 1 — LEER el documento del módulo afectado (OBLIGATORIO, no opcional)
+  → Si no leés el doc, no empezás la prueba
+
+PASO 2 — IDENTIFICAR los test cases relevantes por ID
+  → Ej: "AUTH-001", "AG-015", "WH-018", "R-INB-04"
+  → Si el usuario pidió módulo específico: leer TODOS los cases de ese módulo
+  → Si pidió regresión completa: usar QA_REGRESSION_CHECKLIST.md como guía
+
+PASO 3 — EJECUTAR cada test case en orden de severidad
+  → CRÍTICOS primero, luego ALTOS, MEDIOS, BAJOS
+  → Para cada case: describir qué estás probando, resultado obtenido, PASS/FAIL
+
+PASO 4 — REPORTAR en el formato estándar (ver abajo)
+
+PASO 5 — SI encontrás bugs: documentarlos con ID, severidad, pasos para reproducir
+  → Verificar si ya existe un case en docs/qa/ que lo cubra
+  → Si NO existe: AGREGAR el case al archivo correspondiente
+
+PASO 6 — SI el sistema cambió (nuevo feature, fix): ACTUALIZAR docs/qa/
+  → Nunca dejar docs desactualizados respecto al código
+```
+
+---
+
+### Formato de reporte de resultados
+
+```markdown
+## Reporte QA — {Módulo} — {Fecha}
+
+### Resumen ejecutivo
+| Estado | Count |
+|--------|-------|
+| ✅ PASS | N |
+| ❌ FAIL | N |
+| ⏭ SKIP | N |
+| **Total** | **N** |
+
+**Decisión**: ✅ GO / ❌ NO-GO / ⚠️ GO con seguimiento
+
+---
+
+### Resultados por test case
+
+| ID | Descripción | Estado | Notas |
+|----|-------------|--------|-------|
+| AUTH-001 | Login email/password → /dashboard | ✅ PASS | |
+| AUTH-007 | Google OAuth error → pantalla de error | ❌ FAIL | Ver BUG-001 |
+
+---
+
+### Bugs encontrados
+
+#### BUG-001 — {Título corto}
+**Severidad**: CRÍTICA / ALTA / MEDIA / BAJA
+**Test case**: {ID del case}
+**Pasos para reproducir**:
+1. ...
+2. ...
+**Resultado obtenido**: ...
+**Resultado esperado**: ...
+**Archivo afectado**: `src/pages/.../index.jsx` línea N
+```
+
+---
+
+### Reglas inviolables del agente QA
+
+```
+❌ NUNCA ejecutar pruebas sin leer el doc correspondiente primero
+❌ NUNCA marcar PASS si no se verificó explícitamente
+❌ NUNCA inventar test cases que contradigan los documentados
+❌ NUNCA omitir tests de severidad CRÍTICA o ALTA
+❌ NUNCA dejar docs/qa/ desactualizados si el código cambió
+❌ NUNCA reportar "todo bien" sin haber ejecutado al menos el módulo relevante
+
+✅ SIEMPRE leer el doc del módulo antes de empezar
+✅ SIEMPRE reportar con formato estándar
+✅ SIEMPRE ejecutar los CRÍTICOS y ALTOS como mínimo
+✅ SIEMPRE actualizar docs si encontrás gaps de cobertura
+✅ SIEMPRE verificar los edge cases de QA_EDGE_CASES.md para features nuevas
+✅ SIEMPRE consultar QA_AUTOMATION_SPECS.md para tests API-level (tiene SQL assertions exactas)
+```
+
+---
+
+### Cuándo actualizar los documentos QA
+
+| Situación | Qué hacer |
+|-----------|-----------|
+| Se agregó una feature nueva | Agregar test cases en el archivo del módulo correspondiente |
+| Se encontró un bug no cubierto por ningún case | Agregar el case + marcar si era un gap de cobertura |
+| Se cambió comportamiento existente | Actualizar el caso afectado + resultado esperado |
+| Se corrigió un bug | Agregar case de regresión específico para ese fix |
+| Se cambió un umbral (ej: 12h → 6h) | Actualizar BC-005 en QA_EDGE_CASES.md + cases afectados |
+| Nuevo módulo de UI | Crear sección nueva en QA_FRONTEND_FLOWS.md |
+| Nueva edge function | Crear sección nueva en QA_WHATSAPP_FLOWS.md o QA_AUTOMATIONS_FLOWS.md |
+
+Después de actualizar un doc: actualizar también el contador de test cases en `QA_MASTER_PLAN.md` (tabla final).
+
+---
+
+### Índice de documentos QA (`docs/qa/`)
+
+| Archivo | Módulo | Cases | Última actualización |
+|---------|--------|-------|---------------------|
+| `QA_MASTER_PLAN.md` | Plan maestro, estrategia, criterios GO/NO-GO | — | 2026-05-16 |
+| `QA_AUTH_FLOWS.md` | AUTH | 42 | 2026-05-16 |
+| `QA_WHATSAPP_FLOWS.md` | WH + AI + DEPLOY | 95 | 2026-05-16 |
+| `QA_AUTOMATIONS_FLOWS.md` | REM + AUT | 50 | 2026-05-16 |
+| `QA_FRONTEND_FLOWS.md` | AG + PAC + INB + CFG + LSE + DASH + REG | 179 | 2026-05-16 |
+| `QA_EDGE_CASES.md` | RC + BC + DI + PL + SEC + NET + UX | 40+ | 2026-05-16 |
+| `QA_REGRESSION_CHECKLIST.md` | Regresión pre-deploy (95 checks) | 95 | 2026-05-16 |
+| `QA_AUTOMATION_SPECS.md` | API-level, SQL assertions, NLP mocks | 27+ | 2026-05-16 |
+
+**Total documentado**: ~350 test cases

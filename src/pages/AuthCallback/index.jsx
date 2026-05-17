@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef } from 'react';
+﻿import { useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Icons } from '../../components/ui';
@@ -6,35 +6,32 @@ import { Icons } from '../../components/ui';
 export function AuthCallback() {
   const navigate = useNavigate();
   const { user, needsOnboarding, passwordRecoveryMode } = useAuth();
-  const timedOut = useRef(false);
 
   // Detectar error en query params (Supabase redirige con ?error=... cuando falla OAuth)
   const params = new URLSearchParams(window.location.search);
   const oauthError = params.get('error');
   const oauthErrorDesc = params.get('error_description');
 
+  // Fallback: si pasados 10s no hay sesión, redirigir al login
   useEffect(() => {
-    if (oauthError) return; // No navegar si hay error — mostramos el mensaje
-    const t = setTimeout(() => { timedOut.current = true; }, 10000);
+    if (oauthError) return;
+    const t = setTimeout(() => {
+      navigate('/login', { replace: true });
+    }, 10000);
     return () => clearTimeout(t);
-  }, [oauthError]);
+  }, [oauthError, navigate]);
 
   useEffect(() => {
     if (oauthError) return;
-    if (!user && !timedOut.current) return;
+    if (!user) return;
 
     if (passwordRecoveryMode) {
       navigate('/auth/reset-password', { replace: true });
       return;
     }
 
-    if (user) {
-      navigate(needsOnboarding ? '/onboarding' : '/dashboard', { replace: true });
-      return;
-    }
-
-    navigate('/login', { replace: true });
-  }, [user, needsOnboarding, passwordRecoveryMode, navigate, timedOut, oauthError]);
+    navigate(needsOnboarding ? '/onboarding' : '/dashboard', { replace: true });
+  }, [user, needsOnboarding, passwordRecoveryMode, navigate, oauthError]);
 
   // Error de OAuth (credenciales mal configuradas, secret incorrecto, etc.)
   if (oauthError) {

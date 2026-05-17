@@ -41,6 +41,15 @@ ALTER TABLE public.clinic_schedule ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clinic_closures  ENABLE ROW LEVEL SECURITY;
 
 -- clinic_schedule: any member can read, only owner can write
+DROP POLICY IF EXISTS "clinic_schedule_select" ON public.clinic_schedule;
+DROP POLICY IF EXISTS "clinic_schedule_insert" ON public.clinic_schedule;
+DROP POLICY IF EXISTS "clinic_schedule_update" ON public.clinic_schedule;
+DROP POLICY IF EXISTS "clinic_schedule_delete" ON public.clinic_schedule;
+DROP POLICY IF EXISTS "clinic_closures_select" ON public.clinic_closures;
+DROP POLICY IF EXISTS "clinic_closures_insert" ON public.clinic_closures;
+DROP POLICY IF EXISTS "clinic_closures_update" ON public.clinic_closures;
+DROP POLICY IF EXISTS "clinic_closures_delete" ON public.clinic_closures;
+
 CREATE POLICY "clinic_schedule_select" ON public.clinic_schedule
   FOR SELECT USING (
     EXISTS (

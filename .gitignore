@@ -3,3 +3,7 @@ dist
 .env
 .env.local
 supabase/.temp
+
+# Documentos Word — no subir al repo (contienen info comercial/costos)
+docs/*.docx
+*.docx

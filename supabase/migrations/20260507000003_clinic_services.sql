@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS public.clinic_services (
 
 -- Un servicio con descuento en % no puede superar 100
 ALTER TABLE public.clinic_services
+  DROP CONSTRAINT IF EXISTS chk_discount_percent;
+ALTER TABLE public.clinic_services
   ADD CONSTRAINT chk_discount_percent
     CHECK (discount_type <> 'percent' OR discount_value <= 100);
 
@@ -25,6 +27,11 @@ CREATE INDEX IF NOT EXISTS idx_clinic_services_clinic
 
 -- RLS
 ALTER TABLE public.clinic_services ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "clinic_services_select" ON public.clinic_services;
+DROP POLICY IF EXISTS "clinic_services_insert" ON public.clinic_services;
+DROP POLICY IF EXISTS "clinic_services_update" ON public.clinic_services;
+DROP POLICY IF EXISTS "clinic_services_delete" ON public.clinic_services;
 
 -- Miembros de la clínica pueden leer
 CREATE POLICY "clinic_services_select" ON public.clinic_services

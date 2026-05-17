@@ -44,3 +44,12 @@ CREATE POLICY "members_delete_waiting_list" ON waiting_list
   FOR DELETE USING (
     clinic_id IN (SELECT clinic_id FROM clinic_members WHERE user_id = auth.uid() AND status = 'active')
   );
+
+-- DELETE policy also referenced from 20260507000002 (applied before this table existed)
+DROP POLICY IF EXISTS "clinic_delete_waiting_list" ON waiting_list;
+CREATE POLICY "clinic_delete_waiting_list" ON waiting_list
+  FOR DELETE USING (
+    clinic_id IN (
+      SELECT clinic_id FROM clinic_members WHERE user_id = auth.uid()
+    )
+  );
