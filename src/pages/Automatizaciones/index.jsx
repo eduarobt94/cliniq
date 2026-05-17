@@ -51,13 +51,18 @@ function EditModal({ automation, onSave, onClose }) {
   const [hoursBefore,    setHoursBefore]    = useState(String(automation.hours_before   ?? 24));
   const [monthsInactive, setMonthsInactive] = useState(String(automation.months_inactive ?? 6));
   const [hoursAfter,     setHoursAfter]     = useState(String(automation.hours_after    ?? 2));
+  const DEFAULT_REMINDER_MSG = 'Hola {patient_name} 👋 Le escribimos desde {clinic_name} para recordarle que tiene un turno el {appointment_date} a las {appointment_time}.\n\n¿Va a poder asistir?';
+
+  // Si el template guardado es el antiguo formato robótico (contiene *1* o *2*), usar el nuevo
+  const savedTemplate = automation.message_template;
+  const isLegacyTemplate = savedTemplate && (savedTemplate.includes('*1*') || savedTemplate.includes('*2*') || savedTemplate.includes('{time}'));
+
   const [message,        setMessage]        = useState(
-    automation.message_template ??
-    (automation.type === 'appointment_reminder'
-      ? 'Hola {patient_name} 👋 Le escribimos desde {clinic_name} para recordarle que tiene un turno el {appointment_date} a las {appointment_time}.\n\n¿Va a poder asistir?'
+    automation.type === 'appointment_reminder'
+      ? (isLegacyTemplate ? DEFAULT_REMINDER_MSG : (savedTemplate ?? DEFAULT_REMINDER_MSG))
       : automation.type === 'patient_reactivation'
-        ? 'Hola {patient_name}! 👋 Hace un tiempo que no te vemos en {clinic_name}. ¿Quiere agendar una consulta? Responda este mensaje y le ayudamos.'
-        : '¡Gracias por su visita a {clinic_name}, {patient_name}! 🙏 Si le pareció bien la atención, nos ayudaría mucho una reseña en Google: {review_url} ¡Muchas gracias!')
+        ? (savedTemplate ?? 'Hola {patient_name}! 👋 Hace un tiempo que no te vemos en {clinic_name}. ¿Quiere agendar una consulta? Responda este mensaje y le ayudamos.')
+        : (savedTemplate ?? '¡Gracias por su visita a {clinic_name}, {patient_name}! 🙏 Si le pareció bien la atención, nos ayudaría mucho una reseña en Google: {review_url} ¡Muchas gracias!')
   );
 
   const [saving, setSaving] = useState(false);
