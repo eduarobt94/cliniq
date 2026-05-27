@@ -242,7 +242,7 @@ export function Login() {
                 <Divider className="flex-1" />
               </div>
 
-              <form onSubmit={onSubmit} className="mt-6 space-y-5" noValidate>
+              <form onSubmit={onSubmit} className="mt-6 space-y-5" noValidate aria-label="Formulario de inicio de sesión">
                 <fieldset disabled={submitting || googleLoading} className="contents">
                   <Field
                     id="login-email"
@@ -257,8 +257,9 @@ export function Login() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-                      placeholder="maria@clinica.uy"
+                      placeholder="tu@email.com"
                       autoComplete="email"
+                      autoFocus
                       className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)]"
                     />
                   </Field>
@@ -275,6 +276,7 @@ export function Login() {
                         onClick={() => setShowPwd((v) => !v)}
                         className="text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)]"
                         aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        aria-pressed={showPwd}
                       >
                         <Icons.Eye size={15} open={!showPwd} />
                       </button>
@@ -286,7 +288,7 @@ export function Login() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-                      placeholder="••••••••"
+                      placeholder="Mínimo 6 caracteres"
                       autoComplete="current-password"
                       className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)]"
                     />

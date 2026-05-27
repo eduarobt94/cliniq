@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Icons, MonoLabel } from '../../components/ui';
@@ -10,29 +10,65 @@ export function Onboarding() {
   const navigate      = useNavigate();
   const { createClinic, logout, user, clinic, networkError } = useAuth();
 
-  const [clinicName, setClinicName] = useState('');
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState('');
+  const [clinicName,      setClinicName]      = useState('');
+  const [saving,          setSaving]          = useState(false);
+  const [clinicNameError, setClinicNameError] = useState('');
+  const [formError,       setFormError]       = useState('');
+  const [successMsg,      setSuccessMsg]      = useState('');
 
   // Guard: si ya tiene clínica, no mostrar esta pantalla
   useEffect(() => {
     if (clinic) navigate('/dashboard', { replace: true });
   }, [clinic, navigate]);
 
+  const validateClinicName = (value) => {
+    const trimmed = value.trim();
+    if (!trimmed) return 'El nombre de la clínica es obligatorio.';
+    if (trimmed.length < 2) return 'El nombre debe tener al menos 2 caracteres.';
+    if (trimmed.length > 100) return 'El nombre no puede superar los 100 caracteres.';
+    return '';
+  };
+
+  const onClinicNameBlur = () => {
+    setClinicNameError(validateClinicName(clinicName));
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
-    if (clinicName.trim().length < 2) return;
-    setLoading(true);
-    setError('');
+    const trimmedName = clinicName.trim();
+    const nameErr = validateClinicName(trimmedName);
+    if (nameErr) {
+      setClinicNameError(nameErr);
+      return;
+    }
+    setClinicNameError('');
+    setFormError('');
+    setSaving(true);
     try {
-      await createClinic(clinicName);
-      navigate('/dashboard');
+      await createClinic(trimmedName);
+      setSuccessMsg('¡Listo! Configurando tu clínica…');
+      // navigate is triggered by the clinic guard via useEffect once createClinic resolves
+      // but also navigate explicitly after a brief moment to ensure UX feedback
+      setTimeout(() => navigate('/dashboard'), 1200);
     } catch (err) {
-      setError('No se pudo crear la clínica. Intentá de nuevo.');
+      setFormError('No se pudo crear la clínica. Intentá de nuevo.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
+
+  if (successMsg) {
+    return (
+      <main className="min-h-screen bg-[var(--cq-bg)] text-[var(--cq-fg)] flex items-center justify-center p-6">
+        <div className="w-full max-w-[440px] text-center">
+          <div className="size-14 rounded-full bg-[color-mix(in_oklch,var(--cq-success)_15%,transparent)] flex items-center justify-center mx-auto mb-6">
+            <Icons.Check size={22} className="text-[var(--cq-success)]" />
+          </div>
+          <p className="text-[17px] font-medium">{successMsg}</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[var(--cq-bg)] text-[var(--cq-fg)] flex items-center justify-center p-6">
@@ -57,34 +93,53 @@ export function Onboarding() {
           Tu cuenta fue creada. Solo falta esto para entrar al dashboard.
         </p>
 
-        <form onSubmit={onSubmit} className="mt-8 space-y-4">
-          <fieldset disabled={loading} className="contents">
-            <div className="flex items-center gap-2 h-12 px-4 rounded-[10px] border border-[var(--cq-border)] bg-[var(--cq-surface)] focus-within:border-[var(--cq-fg)] transition-colors">
-              <Icons.Home size={16} className="text-[var(--cq-fg-muted)] shrink-0" />
-              <input
-                type="text"
-                value={clinicName}
-                onChange={(e) => setClinicName(e.target.value)}
-                placeholder="Clínica Bonomi"
-                className="flex-1 bg-transparent outline-none text-[15px] placeholder:text-[var(--cq-fg-muted)]"
-              />
+        <form onSubmit={onSubmit} className="mt-8 space-y-4" noValidate aria-label="Configuración inicial de la clínica">
+          <fieldset disabled={saving} className="contents">
+            <div>
+              <label htmlFor="onboarding-clinic-name" className="block font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--cq-fg-muted)] mb-1.5">
+                Nombre de la clínica
+              </label>
+              <div className={`flex items-center gap-2 h-12 px-4 rounded-[10px] border bg-[var(--cq-surface)] focus-within:border-[var(--cq-fg)] transition-colors ${clinicNameError ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'}`}>
+                <Icons.Home size={16} className="text-[var(--cq-fg-muted)] shrink-0" />
+                <input
+                  id="onboarding-clinic-name"
+                  type="text"
+                  value={clinicName}
+                  onChange={(e) => { setClinicName(e.target.value); if (clinicNameError) setClinicNameError(validateClinicName(e.target.value)); }}
+                  onBlur={onClinicNameBlur}
+                  placeholder="Nombre de tu clínica"
+                  autoFocus
+                  maxLength={100}
+                  aria-invalid={clinicNameError ? 'true' : undefined}
+                  aria-describedby={clinicNameError ? 'onboarding-clinic-name-error' : undefined}
+                  className="flex-1 bg-transparent outline-none text-[15px] placeholder:text-[var(--cq-fg-muted)]"
+                />
+              </div>
+              {clinicNameError && (
+                <p id="onboarding-clinic-name-error" role="alert" className="text-[12.5px] text-[var(--cq-danger)] mt-1">
+                  {clinicNameError}
+                </p>
+              )}
+              {!clinicNameError && (
+                <p className="text-[12px] text-[var(--cq-fg-muted)] mt-0.5">Podés cambiarlo después.</p>
+              )}
             </div>
 
-            {error && (
+            {formError && (
               <div role="alert" className="px-3 py-2 rounded-lg bg-[color-mix(in_oklch,var(--cq-danger)_12%,transparent)] text-[var(--cq-danger)] text-[13px] border border-[color-mix(in_oklch,var(--cq-danger)_30%,transparent)]">
-                {error}
+                {formError}
               </div>
             )}
 
             <button
               type="submit"
-              disabled={clinicName.trim().length < 2 || loading}
+              disabled={clinicName.trim().length < 2 || saving}
               className="w-full h-12 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] font-medium hover:bg-[var(--cq-accent)] disabled:opacity-50 transition-all inline-flex items-center justify-center gap-2"
             >
-              {loading ? (
+              {saving ? (
                 <>
                   <span className="size-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
-                  Creando…
+                  Guardando…
                 </>
               ) : (
                 <>Entrar al dashboard <Icons.Arrow size={13} /></>

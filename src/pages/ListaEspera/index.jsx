@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth }         from '../../context/AuthContext';
 import { useWaitingList }  from '../../hooks/useWaitingList';
 import { supabase }        from '../../lib/supabase';
@@ -22,16 +22,21 @@ function Skeleton({ className = '' }) {
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
-function EmptyState() {
+function EmptyState({ filter }) {
+  const isFiltered = filter && filter !== 'all';
   return (
     <div className="flex flex-col items-center gap-3 py-16 text-center">
       <div className="size-10 rounded-full bg-[var(--cq-surface-2)] flex items-center justify-center text-[var(--cq-fg-muted)]">
         <Icons.Bell size={18} />
       </div>
-      <p className="text-[14px] font-medium text-[var(--cq-fg)]">Sin pacientes en lista de espera</p>
-      <p className="text-[12.5px] text-[var(--cq-fg-muted)] max-w-[300px]">
-        Cuando un paciente pida anotarse, aparecerá aquí. También se agrega automáticamente vía WhatsApp.
+      <p className="text-[14px] font-medium text-[var(--cq-fg)]">
+        {isFiltered ? 'No se encontraron pacientes con ese criterio.' : 'No hay pacientes en lista de espera.'}
       </p>
+      {!isFiltered && (
+        <p className="text-[12.5px] text-[var(--cq-fg-muted)] max-w-[300px]">
+          Cuando un paciente pida anotarse, aparecerá aquí. También se agrega automáticamente vía WhatsApp.
+        </p>
+      )}
     </div>
   );
 }
@@ -144,36 +149,49 @@ function AddToWaitlistForm({ clinicId, onSuccess, onCancel }) {
   const [notes,     setNotes]    = useState('');
   const [saving,    setSaving]   = useState(false);
   const [err,       setErr]      = useState('');
+  const debounceRef = useRef(null);
 
-  const handleSearch = async (q) => {
-    setSearch(q);
-    setPatient(null);
-    if (q.trim().length < 2) { setResults([]); return; }
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const runSearch = useCallback(async (raw) => {
+    const safeSearch = raw.replace(/[(),"]/g, '').replace(/\s+/g, ' ').trim();
+    if (safeSearch.length < 2) { setResults([]); return; }
     const { data } = await supabase
       .from('patients')
       .select('id, full_name, phone_number')
       .eq('clinic_id', clinicId)
-      .or(`full_name.ilike.%${q}%,phone_number.ilike.%${q}%`)
+      .or(`full_name.ilike.%${safeSearch}%,phone_number.ilike.%${safeSearch}%`)
       .limit(8);
     setResults(data ?? []);
+  }, [clinicId]);
+
+  const handleSearch = (q) => {
+    setSearch(q);
+    setPatient(null);
+    if (q.trim().length < 2) { setResults([]); return; }
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => runSearch(q), 300);
   };
 
   const handleSubmit = async () => {
-    if (!patient) { setErr('Seleccioná un paciente.'); return; }
+    if (!patient) {
+      setErr('Seleccioná un paciente de la lista.');
+      return;
+    }
     if (dateFrom && dateTo && dateFrom > dateTo) {
-      setErr('La fecha de inicio debe ser anterior a la de fin.');
+      setErr("La fecha 'desde' debe ser anterior o igual a la fecha 'hasta'.");
       return;
     }
     setErr('');
     setSaving(true);
     const { error: insertErr } = await supabase.from('waiting_list').insert({
-      clinic_id:          clinicId,
-      patient_id:         patient.id,
-      service:            service.trim() || null,
+      clinic_id:           clinicId,
+      patient_id:          patient.id,
+      service:             service.trim() || null,
       preferred_date_from: dateFrom || null,
       preferred_date_to:   dateTo   || null,
-      notes:              notes.trim() || null,
-      status:             'waiting',
+      notes:               notes.trim() || null,
+      status:              'waiting',
     });
     setSaving(false);
     if (insertErr) {
@@ -190,60 +208,88 @@ function AddToWaitlistForm({ clinicId, onSuccess, onCancel }) {
       <p className="text-[13px] font-medium text-[var(--cq-fg)]">Agregar a lista de espera</p>
 
       {/* Patient search */}
-      <div className="relative">
-        <input
-          className={inputCls}
-          placeholder="Buscar paciente por nombre o teléfono…"
-          value={patient ? patient.full_name : search}
-          onChange={e => { setPatient(null); handleSearch(e.target.value); }}
-        />
-        {results.length > 0 && !patient && (
-          <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[8px] shadow-lg overflow-hidden">
-            {results.map(p => (
-              <button
-                key={p.id}
-                onClick={() => { setPatient(p); setSearch(''); setResults([]); }}
-                className="w-full text-left px-3 py-2 text-[13px] hover:bg-[var(--cq-surface-2)] transition-colors"
-              >
-                <span className="font-medium text-[var(--cq-fg)]">{p.full_name}</span>
-                {p.phone_number && (
-                  <span className="ml-2 text-[11.5px] font-mono text-[var(--cq-fg-muted)]">{p.phone_number}</span>
-                )}
-              </button>
-            ))}
-          </div>
+      <div>
+        <div className="relative">
+          <input
+            className={inputCls}
+            placeholder="Buscar paciente por nombre o teléfono…"
+            aria-label="Buscar paciente por nombre o teléfono"
+            value={patient ? patient.full_name : search}
+            onChange={e => { setPatient(null); handleSearch(e.target.value); }}
+          />
+          {results.length > 0 && !patient && (
+            <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[8px] shadow-lg overflow-hidden">
+              {results.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => { setPatient(p); setSearch(''); setResults([]); setErr(''); }}
+                  className="w-full text-left px-3 py-2 text-[13px] hover:bg-[var(--cq-surface-2)] transition-colors"
+                >
+                  <span className="font-medium text-[var(--cq-fg)]">{p.full_name}</span>
+                  {p.phone_number && (
+                    <span className="ml-2 text-[11.5px] font-mono text-[var(--cq-fg-muted)]">{p.phone_number}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {err && err.includes('paciente') && (
+          <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{err}</p>
         )}
       </div>
 
       {/* Service */}
       <input
         className={inputCls}
-        placeholder="Servicio (opcional)"
+        placeholder="Ej: Consulta general (opcional)"
         value={service}
         onChange={e => setService(e.target.value)}
+        maxLength={100}
       />
 
       {/* Date range */}
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-[11px] text-[var(--cq-fg-muted)] mb-0.5 block">Desde</label>
-          <input type="date" className={inputCls} value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+      <div className="flex flex-col gap-1">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] text-[var(--cq-fg-muted)] mb-0.5 block">Desde</label>
+            <input
+              type="date"
+              className={inputCls}
+              value={dateFrom}
+              min={todayStr}
+              onChange={e => { setDateFrom(e.target.value); setErr(''); }}
+            />
+          </div>
+          <div>
+            <label className="text-[11px] text-[var(--cq-fg-muted)] mb-0.5 block">Hasta</label>
+            <input
+              type="date"
+              className={inputCls}
+              value={dateTo}
+              min={dateFrom || todayStr}
+              onChange={e => { setDateTo(e.target.value); setErr(''); }}
+            />
+          </div>
         </div>
-        <div>
-          <label className="text-[11px] text-[var(--cq-fg-muted)] mb-0.5 block">Hasta</label>
-          <input type="date" className={inputCls} value={dateTo} onChange={e => setDateTo(e.target.value)} />
-        </div>
+        {err && err.includes('fecha') && (
+          <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{err}</p>
+        )}
       </div>
 
       {/* Notes */}
       <textarea
         className={`${inputCls} h-16 resize-none pt-1.5`}
-        placeholder="Notas internas (opcional)"
+        placeholder="Notas adicionales (opcional)"
         value={notes}
         onChange={e => setNotes(e.target.value)}
+        maxLength={500}
       />
 
-      {err && <p className="text-[12px] text-[var(--cq-danger)]">{err}</p>}
+      {/* Generic error (not patient or date) */}
+      {err && !err.includes('paciente') && !err.includes('fecha') && (
+        <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{err}</p>
+      )}
 
       <div className="flex items-center gap-2 justify-end">
         <button
@@ -255,7 +301,7 @@ function AddToWaitlistForm({ clinicId, onSuccess, onCancel }) {
         </button>
         <button
           onClick={handleSubmit}
-          disabled={saving || !patient}
+          disabled={saving}
           className="h-7 px-3 rounded-[6px] text-[12.5px] font-medium bg-[var(--cq-fg)] text-[var(--cq-bg)] hover:opacity-80 disabled:opacity-50 transition-opacity"
         >
           {saving ? 'Guardando…' : 'Agregar'}
@@ -359,10 +405,16 @@ export function ListaEspera() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex items-center gap-1 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[9px] p-1 w-fit">
+      <div
+        role="tablist"
+        aria-label="Filtrar lista de espera"
+        className="flex items-center gap-1 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[9px] p-1 w-fit"
+      >
         {FILTERS.map(({ id, label }) => (
           <button
             key={id}
+            role="tab"
+            aria-selected={filter === id}
             onClick={() => setFilter(id)}
             className={`px-3 h-7 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
               filter === id
@@ -382,7 +434,7 @@ export function ListaEspera() {
             {['sk-1','sk-2','sk-3','sk-4'].map(k => <Skeleton key={k} className="h-12 w-full" />)}
           </div>
         ) : entries.length === 0 ? (
-          <EmptyState />
+          <EmptyState filter={filter} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">

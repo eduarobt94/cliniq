@@ -65,8 +65,9 @@ function EditModal({ automation, onSave, onClose }) {
         : (savedTemplate ?? '¡Gracias por su visita a {clinic_name}, {patient_name}! 🙏 Si le pareció bien la atención, nos ayudaría mucho una reseña en Google: {review_url} ¡Muchas gracias!')
   );
 
-  const [saving, setSaving] = useState(false);
-  const [err,    setErr]    = useState('');
+  const [saving,     setSaving]     = useState(false);
+  const [err,        setErr]        = useState('');
+  const [blurErrors, setBlurErrors] = useState({});
 
   const preview = useMemo(() => renderPreview(message, PREVIEW_VARS), [message]);
 
@@ -152,11 +153,20 @@ function EditModal({ automation, onSave, onClose }) {
                       id="hours-before"
                       type="number" min={1} max={168}
                       value={hoursBefore}
-                      onChange={(e) => setHoursBefore(e.target.value)}
+                      onChange={(e) => { setHoursBefore(e.target.value); setBlurErrors(b => ({ ...b, hoursBefore: '' })); }}
+                      onBlur={() => {
+                        const v = parseInt(hoursBefore, 10);
+                        if (isNaN(v) || v < 1) setBlurErrors(b => ({ ...b, hoursBefore: 'El valor mínimo es 1 hora.' }));
+                        else if (v > 168)      setBlurErrors(b => ({ ...b, hoursBefore: 'El valor máximo es 168 horas (7 días).' }));
+                        else                   setBlurErrors(b => ({ ...b, hoursBefore: '' }));
+                      }}
                       className="h-9 w-24 px-3 rounded-[8px] bg-[var(--cq-surface-2)] border border-[var(--cq-border)] text-[14px] text-[var(--cq-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--cq-accent)]"
                     />
                     <span className="text-[13px] text-[var(--cq-fg-muted)]">horas (1 – 168)</span>
                   </div>
+                  {blurErrors.hoursBefore && (
+                    <p className="text-[12px] text-[var(--cq-danger)]">{blurErrors.hoursBefore}</p>
+                  )}
                   <p className="text-[11.5px] text-[var(--cq-fg-muted)]">
                     {isConversational
                       ? 'Con este margen de tiempo el asistente puede gestionar la respuesta del paciente en tiempo real.'
@@ -199,11 +209,20 @@ function EditModal({ automation, onSave, onClose }) {
                     id="months-inactive"
                     type="number" min={1} max={24}
                     value={monthsInactive}
-                    onChange={(e) => setMonthsInactive(e.target.value)}
+                    onChange={(e) => { setMonthsInactive(e.target.value); setBlurErrors(b => ({ ...b, monthsInactive: '' })); }}
+                    onBlur={() => {
+                      const v = parseInt(monthsInactive, 10);
+                      if (isNaN(v) || v < 1) setBlurErrors(b => ({ ...b, monthsInactive: 'El valor mínimo es 1 mes.' }));
+                      else if (v > 24)       setBlurErrors(b => ({ ...b, monthsInactive: 'El valor máximo es 24 meses.' }));
+                      else                   setBlurErrors(b => ({ ...b, monthsInactive: '' }));
+                    }}
                     className="h-9 w-24 px-3 rounded-[8px] bg-[var(--cq-surface-2)] border border-[var(--cq-border)] text-[14px] text-[var(--cq-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--cq-accent)]"
                   />
                   <span className="text-[13px] text-[var(--cq-fg-muted)]">meses (1 – 24)</span>
                 </div>
+                {blurErrors.monthsInactive && (
+                  <p className="text-[12px] text-[var(--cq-danger)]">{blurErrors.monthsInactive}</p>
+                )}
                 <p className="text-[11.5px] text-[var(--cq-fg-muted)]">
                   Se contactará a pacientes que no tuvieron ningún turno en los últimos {monthsInactive || '?'} meses.
                 </p>
@@ -229,11 +248,20 @@ function EditModal({ automation, onSave, onClose }) {
                     id="hours-after"
                     type="number" min={1} max={72}
                     value={hoursAfter}
-                    onChange={(e) => setHoursAfter(e.target.value)}
+                    onChange={(e) => { setHoursAfter(e.target.value); setBlurErrors(b => ({ ...b, hoursAfter: '' })); }}
+                    onBlur={() => {
+                      const v = parseInt(hoursAfter, 10);
+                      if (isNaN(v) || v < 1) setBlurErrors(b => ({ ...b, hoursAfter: 'El valor mínimo es 1 hora.' }));
+                      else if (v > 72)       setBlurErrors(b => ({ ...b, hoursAfter: 'El valor máximo es 72 horas (3 días).' }));
+                      else                   setBlurErrors(b => ({ ...b, hoursAfter: '' }));
+                    }}
                     className="h-9 w-24 px-3 rounded-[8px] bg-[var(--cq-surface-2)] border border-[var(--cq-border)] text-[14px] text-[var(--cq-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--cq-accent)]"
                   />
                   <span className="text-[13px] text-[var(--cq-fg-muted)]">horas (1 – 72)</span>
                 </div>
+                {blurErrors.hoursAfter && (
+                  <p className="text-[12px] text-[var(--cq-danger)]">{blurErrors.hoursAfter}</p>
+                )}
               </div>
               <MessageEditor
                 value={message}
@@ -359,8 +387,10 @@ function AutomationCard({ automation, stats, onToggle, onEdit }) {
         </div>
         <button
           onClick={() => onToggle(automation.id, !automation.enabled)}
+          role="switch"
+          aria-checked={isActive}
+          aria-label={isActive ? `Desactivar ${meta.name}` : `Activar ${meta.name}`}
           className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--cq-border)] text-[12px] transition-colors hover:bg-[var(--cq-surface-2)]"
-          aria-label={isActive ? 'Desactivar' : 'Activar'}
         >
           <span
             className="size-2 rounded-full transition-colors"

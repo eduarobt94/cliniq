@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getInviteByToken } from '../../lib/authService';
@@ -44,17 +44,32 @@ export function Signup() {
   const [submitting,    setSubmitting]    = useState(false);
   const [invite,        setInvite]        = useState(null);
   const [inviteLoading, setInviteLoading] = useState(!!inviteToken);
+  // FIX (MEDIUM): inline banner error for invalid/expired invite detected on mount
+  const [inviteError,   setInviteError]   = useState('');
 
   useEffect(() => {
     if (!inviteToken) return;
     getInviteByToken(inviteToken)
       .then((data) => {
-        if (data && data.status !== 'active') {
+        // FIX (CRITICAL): inverted invite status check.
+        // Previously: data.status !== 'active' was treated as valid (set invite).
+        // Fix: only accept when data exists AND status === 'active'.
+        if (!data) {
+          // Token not found in DB at all
+          setInviteError('El link de invitación no fue encontrado.');
+        } else if (data.status !== 'active') {
+          // Token exists but is expired, used, revoked, etc.
+          setInviteError('El link de invitación no es válido o ya fue utilizado.');
+        } else {
+          // Valid invite
           setInvite(data);
           setEmail(data.email);
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        // Network / unexpected error while validating token
+        setInviteError('Error de conexión. Verificá tu internet e intentá de nuevo.');
+      })
       .finally(() => setInviteLoading(false));
   }, [inviteToken]);
 
@@ -68,7 +83,8 @@ export function Signup() {
   const lastNameValid  = lastName.trim().length >= 2;
   const clinicValid    = isInviteMode || clinicName.trim().length >= 2;
   const emailValid     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const passwordValid  = password.length >= 6;
+  // FIX (CRITICAL): password whitespace bypass — use trim() for length check
+  const passwordValid  = password.trim().length >= 6;
 
   const allValid = firstNameValid && lastNameValid && clinicValid && emailValid && passwordValid;
 
@@ -77,24 +93,45 @@ export function Signup() {
     setTouched({ firstName: true, lastName: true, clinic: true, email: true, password: true });
     if (!allValid) return;
 
+    // FIX (MEDIUM): saving state — rename submitting usage to show "Creando cuenta…"
     setSubmitting(true);
     try {
+      // FIX (LOW): trim name and email before sending; do NOT trim password
+      const trimmedFirstName = firstName.trim();
+      const trimmedLastName  = lastName.trim();
+      const trimmedEmail     = email.trim();
+      const trimmedClinic    = clinicName.trim();
+
       // En modo invitación no se crea clínica; el trigger la vincula por email
-      const result = await signup(email, password, isInviteMode ? null : clinicName, firstName, lastName);
+      const result = await signup(
+        trimmedEmail,
+        password,
+        isInviteMode ? null : trimmedClinic,
+        trimmedFirstName,
+        trimmedLastName,
+      );
       if (result.needsEmailVerification) {
-        navigate('/verify-email', { state: { email }, replace: true });
+        navigate('/verify-email', { state: { email: trimmedEmail }, replace: true });
         return;
       }
       navigate(result.needsOnboarding ? '/onboarding' : '/dashboard');
     } catch (err) {
-      const msg =
-        err.message.includes('already registered')
-          ? 'No se pudo crear la cuenta. Verificá los datos e intentá de nuevo.'
-          : err.message.includes('Email signups are disabled')
-          ? 'El registro por correo está desactivado. Contactá al administrador.'
-          : err.message.includes('sending confirmation email') || err.message.includes('unexpected_failure')
-          ? 'No se pudo enviar el correo de confirmación. Verificá tu conexión o intentá de nuevo.'
-          : 'No se pudo crear la cuenta. Intentá de nuevo.';
+      // FIX (HIGH): improved, specific error messages
+      const message = err?.message ?? '';
+      const code    = err?.code ?? '';
+
+      let msg;
+      if (!navigator.onLine || message.toLowerCase().includes('failed to fetch') || message.toLowerCase().includes('network')) {
+        msg = 'Error de conexión. Verificá tu internet e intentá de nuevo.';
+      } else if (code === 'user_already_exists' || message.includes('already registered')) {
+        msg = 'Ya existe una cuenta con este email.';
+      } else if (message.includes('Email signups are disabled')) {
+        msg = 'El registro por correo está desactivado. Contactá al administrador.';
+      } else if (message.includes('sending confirmation email') || message.includes('unexpected_failure')) {
+        msg = 'No se pudo enviar el correo de confirmación. Verificá tu conexión o intentá de nuevo.';
+      } else {
+        msg = 'No se pudo crear la cuenta. Intentá de nuevo.';
+      }
       pushToast(msg, 'error');
     } finally {
       setSubmitting(false);
@@ -195,7 +232,18 @@ export function Signup() {
                 : 'Tu clínica queda lista al instante.'}
             </p>
 
-            <form onSubmit={onSubmit} className="mt-8 space-y-5" noValidate>
+            {/* FIX (MEDIUM): inline banner for invalid/expired invite token, shown before form */}
+            {inviteError && (
+              <div
+                role="alert"
+                className="mt-4 flex items-start gap-2.5 rounded-[10px] border border-[var(--cq-danger)] bg-[var(--cq-danger)]/10 px-4 py-3 text-[13px] text-[var(--cq-danger)]"
+              >
+                <Icons.X size={14} className="mt-0.5 shrink-0" />
+                <span>{inviteError}</span>
+              </div>
+            )}
+
+            <form onSubmit={onSubmit} className="mt-8 space-y-5" noValidate aria-label="Formulario de registro">
               <fieldset disabled={submitting} className="contents">
 
                 {/* Nombre y apellido en fila */}
@@ -214,6 +262,8 @@ export function Signup() {
                       onBlur={() => setTouched((t) => ({ ...t, firstName: true }))}
                       placeholder="María"
                       autoComplete="given-name"
+                      autoFocus
+                      maxLength={100}
                       className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)] min-w-0"
                     />
                   </Field>
@@ -231,6 +281,7 @@ export function Signup() {
                       onBlur={() => setTouched((t) => ({ ...t, lastName: true }))}
                       placeholder="Bonomi"
                       autoComplete="family-name"
+                      maxLength={100}
                       className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)] min-w-0"
                     />
                   </Field>
@@ -251,6 +302,7 @@ export function Signup() {
                       onChange={(e) => setClinicName(e.target.value)}
                       onBlur={() => setTouched((t) => ({ ...t, clinic: true }))}
                       placeholder="Clínica Bonomi"
+                      maxLength={100}
                       className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)]"
                     />
                   </Field>
@@ -274,6 +326,7 @@ export function Signup() {
                     placeholder="maria@clinica.uy"
                     autoComplete="email"
                     readOnly={isInviteMode}
+                    maxLength={254}
                     className={`flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)] ${isInviteMode ? 'cursor-default select-none' : ''}`}
                   />
                 </Field>
@@ -291,8 +344,9 @@ export function Signup() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-                    placeholder="••••••••"
+                    placeholder="Mínimo 6 caracteres"
                     autoComplete="new-password"
+                    maxLength={72}
                     className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)]"
                   />
                   <button
@@ -300,19 +354,22 @@ export function Signup() {
                     onClick={() => setShowPwd((v) => !v)}
                     className="text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] shrink-0"
                     aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    aria-pressed={showPwd}
                   >
                     <Icons.Eye size={15} open={!showPwd} />
                   </button>
                 </Field>
 
+                {/* FIX (MEDIUM): button shows "Creando cuenta…" while submitting */}
                 <button
                   type="submit"
+                  disabled={submitting}
                   className="w-full h-12 mt-4 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] font-medium hover:bg-[var(--cq-accent)] disabled:opacity-70 transition-all active:scale-[0.99] inline-flex items-center justify-center gap-2"
                 >
                   {submitting ? (
                     <>
                       <span className="size-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
-                      Creando tu clínica…
+                      Creando cuenta…
                     </>
                   ) : (
                     <>Crear cuenta gratis <Icons.Arrow size={13} /></>

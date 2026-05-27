@@ -109,11 +109,12 @@ function ApptChart({ monthSeries, quarterSeries, range }) {
   return (
     <div>
       {/* Granularity toggle */}
-      <div className="flex items-center gap-1 mb-5">
+      <div role="group" aria-label="Agrupación del gráfico" className="flex items-center gap-1 mb-5">
         {[{ id: 'mes', label: 'Por mes' }, { id: 'trimestre', label: 'Por trimestre' }].map(({ id, label }) => (
           <button
             key={id}
             onClick={() => setGranularity(id)}
+            aria-pressed={granularity === id}
             className={`px-3 h-7 rounded-[6px] text-[12px] font-medium transition-colors duration-150 ${
               granularity === id
                 ? 'bg-[var(--cq-fg)] text-[var(--cq-bg)]'
@@ -230,11 +231,16 @@ export function Reportes() {
           <h1 className="text-[22px] font-semibold text-[var(--cq-fg)]">Reportes</h1>
           <p className="text-[13.5px] text-[var(--cq-fg-muted)] mt-0.5 capitalize">{rangeLabel}</p>
         </div>
-        <div className="flex items-center gap-1 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[9px] p-1">
+        <div
+          role="group"
+          aria-label="Filtrar por período"
+          className="flex items-center gap-1 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[9px] p-1"
+        >
           {RANGES.map(({ id, label }) => (
             <button
               key={id}
               onClick={() => setRange(id)}
+              aria-pressed={range === id}
               className={`px-3 h-8 rounded-[6px] text-[13px] font-mono uppercase tracking-wider transition-colors duration-150 ${
                 range === id
                   ? 'bg-[var(--cq-fg)] text-[var(--cq-bg)]'

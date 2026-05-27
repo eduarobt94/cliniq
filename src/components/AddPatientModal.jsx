@@ -1,19 +1,42 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Icons, MonoLabel } from './ui';
 import { createPatient } from '../lib/appointmentService';
-import { isValidPhone, filterPhoneInput } from '../lib/phoneUtils';
+import { filterPhoneInput } from '../lib/phoneUtils';
+
+const NAME_RE  = /^[a-zA-ZÀ-ÿ\s'\-]+$/;
+const PHONE_RE = /^\+?[0-9]{7,15}$/;
+
+function validateName(value) {
+  const v = value.trim();
+  if (v.length === 0)   return 'El nombre es obligatorio.';
+  if (v.length < 2)     return 'El nombre debe tener al menos 2 caracteres.';
+  if (v.length > 100)   return 'El nombre no puede superar los 100 caracteres.';
+  if (!NAME_RE.test(v)) return 'El nombre solo puede contener letras.';
+  return null;
+}
+
+function validatePhone(value) {
+  const v = value.trim();
+  if (v.length === 0) return null; // optional — presence handled by caller
+  if (!PHONE_RE.test(v)) return 'Ingresá un teléfono válido (7-15 dígitos, puede empezar con +).';
+  return null;
+}
 
 const EMPTY_PATIENTS = [];
 export function AddPatientModal({ open, onClose, onSuccess, clinicId, push, existingPatients = EMPTY_PATIENTS }) {
-  const [name,       setName]       = useState('');
-  const [phone,      setPhone]      = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error,      setError]      = useState(null);
+  const [name,    setName]    = useState('');
+  const [phone,   setPhone]   = useState('');
+  const [saving,  setSaving]  = useState(false);
+  const [nameErr, setNameErr] = useState(null);
+  const [phoneErr,setPhoneErr]= useState(null);
+  const [formErr, setFormErr] = useState(null);
   const nameRef = useRef(null);
 
   useEffect(() => {
     if (open) {
-      setName(''); setPhone(''); setSubmitting(false); setError(null);
+      setName(''); setPhone('');
+      setSaving(false);
+      setNameErr(null); setPhoneErr(null); setFormErr(null);
       const t = setTimeout(() => nameRef.current?.focus(), 60);
       return () => clearTimeout(t);
     }
@@ -27,35 +50,34 @@ export function AddPatientModal({ open, onClose, onSuccess, clinicId, push, exis
   }, [open, onClose]);
 
   const handleSubmit = async () => {
-    if (!name.trim() || !phone.trim()) {
-      setError('El nombre y el teléfono son obligatorios.');
-      return;
-    }
-    if (!isValidPhone(phone)) {
-      setError('El teléfono debe estar en formato internacional: +598XXXXXXXX');
-      return;
-    }
+    const nErr = validateName(name);
+    const pErr = phone.trim() ? validatePhone(phone) : 'El teléfono es obligatorio.';
+    setNameErr(nErr);
+    setPhoneErr(pErr);
+    if (nErr || pErr) return;
+
     const nameLower = name.trim().toLowerCase();
     const dupName = existingPatients.some(p => p.full_name.trim().toLowerCase() === nameLower);
     if (dupName) {
-      setError('Ya existe un paciente con ese nombre en esta clínica.');
+      setFormErr('Ya existe un paciente con ese nombre en esta clínica.');
       return;
     }
-    setError(null);
-    setSubmitting(true);
+
+    setFormErr(null);
+    setSaving(true);
     try {
-      await createPatient(clinicId, name, phone);
+      await createPatient(clinicId, name.trim(), phone.trim());
       onSuccess?.();
       push?.('Paciente agregado correctamente.', 'success');
       onClose();
     } catch (err) {
       const msg = err?.message ?? '';
       if (msg.includes('23505') || msg.includes('unique') || msg.includes('phone')) {
-        setError('Ya existe un paciente con ese número de teléfono.');
+        setFormErr('Ya existe un paciente con ese número de teléfono.');
       } else {
-        setError('No se pudo crear el paciente. Intentá de nuevo.');
+        setFormErr('No se pudo crear el paciente. Intentá de nuevo.');
       }
-      setSubmitting(false);
+      setSaving(false);
     }
   };
 
@@ -82,63 +104,90 @@ export function AddPatientModal({ open, onClose, onSuccess, clinicId, push, exis
           <button
             onClick={onClose}
             className="size-11 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
-            aria-label="Cerrar"
+            aria-label="Cerrar modal"
           >
             <Icons.Close size={16} />
           </button>
         </div>
 
         <div className="space-y-3">
-          <label className="block">
-            <MonoLabel>Nombre completo *</MonoLabel>
-            <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] transition-colors">
+          {/* Name */}
+          <div>
+            <label htmlFor="add-patient-name">
+              <MonoLabel>Nombre completo *</MonoLabel>
+            </label>
+            <div className={`mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] transition-colors ${nameErr ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'}`}>
               <input
+                id="add-patient-name"
                 ref={nameRef}
                 type="text"
                 value={name}
-                onChange={e => setName(e.target.value)}
+                onChange={e => { setName(e.target.value); setNameErr(null); setFormErr(null); }}
+                onBlur={e => { const err = validateName(e.target.value); if (err) setNameErr(err); }}
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
-                placeholder="Nombre Apellido"
-                className="flex-1 bg-transparent outline-none text-[13.5px]"
+                placeholder="Nombre completo del paciente"
+                maxLength={100}
                 autoComplete="name"
+                autoFocus
+                aria-invalid={nameErr ? 'true' : 'false'}
+                aria-describedby={nameErr ? 'add-patient-name-err' : undefined}
+                className="flex-1 bg-transparent outline-none text-[13.5px]"
               />
             </div>
-          </label>
+            {nameErr && (
+              <p id="add-patient-name-err" role="alert" className="text-[12.5px] text-[var(--cq-danger)] mt-1">
+                {nameErr}
+              </p>
+            )}
+          </div>
 
-          <label className="block">
-            <MonoLabel>Teléfono *</MonoLabel>
-            <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] transition-colors">
+          {/* Phone */}
+          <div>
+            <label htmlFor="add-patient-phone">
+              <MonoLabel>Teléfono *</MonoLabel>
+            </label>
+            <div className={`mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] transition-colors ${phoneErr ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'}`}>
               <input
+                id="add-patient-phone"
                 type="tel"
                 value={phone}
-                onChange={e => setPhone(filterPhoneInput(e.target.value))}
+                onChange={e => { setPhone(filterPhoneInput(e.target.value)); setPhoneErr(null); setFormErr(null); }}
+                onBlur={e => { const v = e.target.value.trim(); if (v) { const err = validatePhone(v); if (err) setPhoneErr(err); } }}
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
-                placeholder="+59899123456"
-                className="flex-1 bg-transparent outline-none text-[13.5px]"
+                placeholder="+598 99 123 456"
+                maxLength={16}
                 autoComplete="tel"
+                aria-invalid={phoneErr ? 'true' : 'false'}
+                aria-describedby={phoneErr ? 'add-patient-phone-err' : undefined}
+                className="flex-1 bg-transparent outline-none text-[13.5px]"
               />
             </div>
-          </label>
+            {phoneErr && (
+              <p id="add-patient-phone-err" role="alert" className="text-[12.5px] text-[var(--cq-danger)] mt-1">
+                {phoneErr}
+              </p>
+            )}
+          </div>
 
-          {error && (
-            <p role="alert" className="text-[13px] text-[var(--cq-danger)]">{error}</p>
+          {formErr && (
+            <p role="alert" className="text-[12.5px] text-[var(--cq-danger)] mt-1">{formErr}</p>
           )}
         </div>
 
         <div className="mt-6 flex items-center gap-2 justify-end">
           <button
             onClick={onClose}
-            disabled={submitting}
+            disabled={saving}
             className="h-9 px-4 rounded-[8px] text-[13.5px] font-medium text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] transition-colors disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
-            disabled={submitting || !name.trim() || !phone.trim()}
+            disabled={saving}
             className="h-9 px-4 rounded-[8px] bg-[var(--cq-fg)] text-[var(--cq-bg)] text-[13.5px] font-medium hover:opacity-90 transition-opacity disabled:opacity-40 inline-flex items-center gap-2"
           >
-            {submitting ? 'Guardando…' : 'Guardar paciente'}
+            {saving ? 'Guardando…' : 'Guardar paciente'}
           </button>
         </div>
       </div>

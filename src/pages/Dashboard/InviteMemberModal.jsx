@@ -2,6 +2,7 @@
 import { Icons, MonoLabel } from '../../components/ui';
 import { inviteMember, sendInviteEmail } from '../../lib/authService';
 import { useClinic } from '../../hooks/useClinic';
+import { supabase } from '../../lib/supabase';
 
 const ROLES = [
   { value: 'staff',  label: 'Staff',      desc: 'Puede ver y gestionar turnos y pacientes' },
@@ -14,16 +15,30 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
   const [role,        setRole]        = useState('staff');
   const [submitting,  setSubmitting]  = useState(false);
   const [error,       setError]       = useState('');
+  const [emailBlurError, setEmailBlurError] = useState('');
   const [inviteLink,  setInviteLink]  = useState('');
   const [copied,      setCopied]      = useState(false);
   const [emailSent,   setEmailSent]   = useState(false);
 
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const trimmedEmail = email.trim();
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
+
+  function handleEmailBlur() {
+    const t = email.trim();
+    if (!t) {
+      setEmailBlurError('Ingresá un email para enviar la invitación.');
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) {
+      setEmailBlurError('Ingresá un email válido.');
+    } else {
+      setEmailBlurError('');
+    }
+  }
 
   const reset = () => {
     setEmail('');
     setRole('staff');
     setError('');
+    setEmailBlurError('');
     setInviteLink('');
     setCopied(false);
     setEmailSent(false);
@@ -33,27 +48,59 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!emailValid || !clinicId) return;
+
+    // Email validation
+    if (!trimmedEmail) {
+      setError('Ingresá un email válido para enviar la invitación.');
+      return;
+    }
+    if (!emailValid) {
+      setError('Ingresá un email válido para enviar la invitación.');
+      return;
+    }
+
+    // Role validation
+    if (!role) {
+      setError('Seleccioná un rol para el miembro.');
+      return;
+    }
+
+    if (!clinicId) return;
+
+    // Self-invite prevention
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.email && user.email.toLowerCase() === trimmedEmail.toLowerCase()) {
+        setError('No podés invitarte a vos mismo.');
+        return;
+      }
+    } catch {
+      // ignore auth check failure
+    }
+
     setError('');
     setSubmitting(true);
     try {
-      const token    = await inviteMember(clinicId, email, role);
+      const token    = await inviteMember(clinicId, trimmedEmail, role);
       const link     = `${window.location.origin}/accept-invite?token=${token}`;
       setInviteLink(link);
 
       // Enviar correo automáticamente
       try {
-        await sendInviteEmail(clinicId, email, clinic?.name ?? 'la clínica', role, link);
+        await sendInviteEmail(clinicId, trimmedEmail, clinic?.name ?? 'la clínica', role, link);
         setEmailSent(true);
       } catch {
         // Si el correo falla, igual mostramos el link para compartir manualmente
         setEmailSent(false);
       }
     } catch (err) {
-      const msg = err.message?.includes('permission_denied')
+      const rawMsg = err.message ?? '';
+      const msg = rawMsg.includes('permission_denied')
         ? 'Solo los dueños pueden invitar miembros.'
-        : err.message?.includes('invalid_role')
+        : rawMsg.includes('invalid_role')
         ? 'Rol inválido.'
+        : rawMsg.includes('duplicate') || rawMsg.includes('already') || rawMsg.includes('unique')
+        ? `Ya existe una invitación pendiente para este email.`
         : 'No se pudo crear la invitación. Intentá de nuevo.';
       setError(msg);
     } finally {
@@ -74,7 +121,7 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Invitar miembro al equipo"
+      aria-labelledby="invite-modal-title"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
     >
       {/* Backdrop */}
@@ -94,12 +141,12 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
         <div className="flex items-start justify-between mb-5">
           <div>
             <MonoLabel>[ Equipo ]</MonoLabel>
-            <h2 className="mt-1.5 text-[20px] font-semibold tracking-tight">Invitar miembro</h2>
+            <h2 id="invite-modal-title" className="mt-1.5 text-[20px] font-semibold tracking-tight">Invitar miembro</h2>
           </div>
           <button
             onClick={handleClose}
             className="text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] transition-colors -mt-0.5"
-            aria-label="Cerrar"
+            aria-label="Cerrar modal"
           >
             <Icons.Close size={18} />
           </button>
@@ -112,8 +159,8 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
               <Icons.Check size={15} />
               <p className="text-[13px] text-[var(--cq-fg)]">
                 {emailSent
-                  ? <>Correo enviado a <strong>{email}</strong>.</>
-                  : <>Invitación creada para <strong>{email}</strong>. Compartí el link manualmente.</>
+                  ? <>Invitación enviada a <strong>{trimmedEmail}</strong>.</>
+                  : <>Invitación creada para <strong>{trimmedEmail}</strong>. Compartí el link manualmente.</>
                 }
               </p>
             </div>
@@ -140,7 +187,7 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
                 </button>
               </div>
               <p className="mt-2 text-[11.5px] text-[var(--cq-fg-muted)]">
-                Compartí este link con {email}. Es válido hasta que lo use.
+                Compartí este link con {trimmedEmail}. Es válido hasta que lo use.
               </p>
             </div>
 
@@ -167,28 +214,34 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
                 Correo electrónico
               </label>
               <div className={`flex items-center gap-2 h-11 px-3.5 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-success)] focus-within:ring-1 focus-within:ring-[var(--cq-success)] ${
-                email && !emailValid ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'
+                (email && !emailValid) || emailBlurError ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'
               }`}>
                 <span className="text-[var(--cq-fg-muted)] shrink-0"><Icons.Mail size={14} /></span>
                 <input
                   id="invite-email"
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="staff@clinica.uy"
-                  autoComplete="off"
+                  onChange={(e) => { setEmail(e.target.value); if (emailBlurError) setEmailBlurError(''); }}
+                  onBlur={handleEmailBlur}
+                  placeholder="correo@ejemplo.com"
+                  autoComplete="email"
+                  autoFocus
                   className="flex-1 bg-transparent outline-none text-[14px] placeholder:text-[var(--cq-fg-muted)]"
                   required
+                  maxLength={254}
                 />
               </div>
+              {emailBlurError && (
+                <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{emailBlurError}</p>
+              )}
             </div>
 
             {/* Rol */}
             <div className="flex flex-col gap-1.5">
-              <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--cq-fg-muted)]">
+              <span id="invite-role-label" className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--cq-fg-muted)]">
                 Rol
               </span>
-              <div className="grid grid-cols-2 gap-2">
+              <div role="group" aria-labelledby="invite-role-label" className="grid grid-cols-2 gap-2">
                 {ROLES.map((r) => (
                   <button
                     key={r.value}
@@ -230,7 +283,7 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
                 className="flex-1 h-11 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] hover:bg-[var(--cq-accent)] disabled:opacity-60 transition-all active:scale-[0.99] inline-flex items-center justify-center gap-2 text-[13.5px] font-medium"
               >
                 {submitting ? (
-                  <span className="size-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
+                  <><span className="size-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" /> Enviando invitación…</>
                 ) : (
                   <><Icons.UserPlus size={14} /> Crear invitación</>
                 )}

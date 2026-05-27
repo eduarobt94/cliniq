@@ -352,7 +352,7 @@ function DayView({ appointments, loading, activeFilter, onFilterChange, onStatus
 
   return (
     <Card padded={false}>
-      <div className="flex items-center gap-1 p-3 border-b border-[var(--cq-border)]">
+      <div className="flex items-center gap-1 p-3 border-b border-[var(--cq-border)]" role="group" aria-label="Filtrar por estado">
         {FILTERS.map(f => (
           <button
             key={f.key}

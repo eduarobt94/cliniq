@@ -5,8 +5,27 @@ import { Badge, Card, Avatar, Icons, MonoLabel } from '../../components/ui';
 import { usePatients } from '../../hooks/usePatients';
 import { useClinic } from '../../hooks/useClinic';
 import { deletePatient, updatePatient } from '../../lib/appointmentService';
-import { isValidPhone, filterPhoneInput } from '../../lib/phoneUtils';
+import { filterPhoneInput } from '../../lib/phoneUtils';
 import { AddPatientModal } from '../../components/AddPatientModal';
+
+const NAME_RE  = /^[a-zA-ZÀ-ÿ\s'\-]+$/;
+const PHONE_RE = /^\+?[0-9]{7,15}$/;
+
+function validateName(value) {
+  const v = value.trim();
+  if (v.length === 0)   return 'El nombre es obligatorio.';
+  if (v.length < 2)     return 'El nombre debe tener al menos 2 caracteres.';
+  if (v.length > 100)   return 'El nombre no puede superar los 100 caracteres.';
+  if (!NAME_RE.test(v)) return 'El nombre solo puede contener letras.';
+  return null;
+}
+
+function validatePhone(value) {
+  const v = value.trim();
+  if (v.length === 0) return null;
+  if (!PHONE_RE.test(v)) return 'Ingresá un teléfono válido (7-15 dígitos, puede empezar con +).';
+  return null;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(iso) {
@@ -64,10 +83,12 @@ const FILTERS = [
 // ─── Edit patient modal ───────────────────────────────────────────────────────
 const EMPTY_PATIENTS = [];
 function EditPatientModal({ patient, onClose, onSuccess, existingPatients = EMPTY_PATIENTS }) {
-  const [name,       setName]       = useState(patient.full_name);
-  const [phone,      setPhone]      = useState(patient.phone_number);
-  const [submitting, setSubmitting] = useState(false);
-  const [error,      setError]      = useState(null);
+  const [name,    setName]    = useState(patient.full_name);
+  const [phone,   setPhone]   = useState(patient.phone_number);
+  const [saving,  setSaving]  = useState(false);
+  const [nameErr, setNameErr] = useState(null);
+  const [phoneErr,setPhoneErr]= useState(null);
+  const [formErr, setFormErr] = useState(null);
   const nameRef = useRef(null);
 
   useEffect(() => {
@@ -82,35 +103,33 @@ function EditPatientModal({ patient, onClose, onSuccess, existingPatients = EMPT
   }, [onClose]);
 
   const handleSubmit = async () => {
-    if (!name.trim() || !phone.trim()) {
-      setError('El nombre y el teléfono son obligatorios.');
-      return;
-    }
-    if (!isValidPhone(phone)) {
-      setError('El teléfono debe estar en formato internacional: +598XXXXXXXX');
-      return;
-    }
+    const nErr = validateName(name);
+    const pErr = phone.trim() ? validatePhone(phone) : 'El teléfono es obligatorio.';
+    setNameErr(nErr);
+    setPhoneErr(pErr);
+    if (nErr || pErr) return;
+
     const nameLower = name.trim().toLowerCase();
     const dupName = existingPatients.some(
       p => p.id !== patient.id && p.full_name.trim().toLowerCase() === nameLower
     );
     if (dupName) {
-      setError('Ya existe un paciente con ese nombre en esta clínica.');
+      setFormErr('Ya existe un paciente con ese nombre en esta clínica.');
       return;
     }
-    setError(null);
-    setSubmitting(true);
+    setFormErr(null);
+    setSaving(true);
     try {
-      await updatePatient(patient.id, { fullName: name, phoneNumber: phone });
+      await updatePatient(patient.id, { fullName: name.trim(), phoneNumber: phone.trim() });
       onSuccess();
     } catch (err) {
       const msg = err?.message ?? '';
       if (msg.includes('23505') || msg.includes('unique') || msg.includes('phone')) {
-        setError('Ya existe un paciente con ese número de teléfono.');
+        setFormErr('Ya existe un paciente con ese número de teléfono.');
       } else {
-        setError('No se pudo actualizar. Intentá más tarde.');
+        setFormErr('No se pudo actualizar. Intentá más tarde.');
       }
-      setSubmitting(false);
+      setSaving(false);
     }
   };
 
@@ -135,63 +154,89 @@ function EditPatientModal({ patient, onClose, onSuccess, existingPatients = EMPT
           <button
             onClick={onClose}
             className="size-11 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
-            aria-label="Cerrar"
+            aria-label="Cerrar modal"
           >
             <Icons.Close size={16} />
           </button>
         </div>
 
         <div className="space-y-3">
-          <label className="block">
-            <MonoLabel>Nombre completo *</MonoLabel>
-            <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] transition-colors">
+          {/* Name */}
+          <div>
+            <label htmlFor="edit-patient-name">
+              <MonoLabel>Nombre completo *</MonoLabel>
+            </label>
+            <div className={`mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] transition-colors ${nameErr ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'}`}>
               <input
+                id="edit-patient-name"
                 ref={nameRef}
                 type="text"
                 value={name}
-                onChange={e => setName(e.target.value)}
+                onChange={e => { setName(e.target.value); setNameErr(null); setFormErr(null); }}
+                onBlur={e => { const err = validateName(e.target.value); if (err) setNameErr(err); }}
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
-                placeholder="Nombre Apellido"
-                className="flex-1 bg-transparent outline-none text-[13.5px]"
+                placeholder="Nombre completo del paciente"
+                maxLength={100}
                 autoComplete="name"
+                aria-invalid={nameErr ? 'true' : 'false'}
+                aria-describedby={nameErr ? 'edit-patient-name-err' : undefined}
+                className="flex-1 bg-transparent outline-none text-[13.5px]"
               />
             </div>
-          </label>
+            {nameErr && (
+              <p id="edit-patient-name-err" role="alert" className="text-[12.5px] text-[var(--cq-danger)] mt-1">
+                {nameErr}
+              </p>
+            )}
+          </div>
 
-          <label className="block">
-            <MonoLabel>Teléfono *</MonoLabel>
-            <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] transition-colors">
+          {/* Phone */}
+          <div>
+            <label htmlFor="edit-patient-phone">
+              <MonoLabel>Teléfono *</MonoLabel>
+            </label>
+            <div className={`mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] transition-colors ${phoneErr ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'}`}>
               <input
+                id="edit-patient-phone"
                 type="tel"
                 value={phone}
-                onChange={e => setPhone(filterPhoneInput(e.target.value))}
+                onChange={e => { setPhone(filterPhoneInput(e.target.value)); setPhoneErr(null); setFormErr(null); }}
+                onBlur={e => { const v = e.target.value.trim(); if (v) { const err = validatePhone(v); if (err) setPhoneErr(err); } }}
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
-                placeholder="+59899123456"
-                className="flex-1 bg-transparent outline-none text-[13.5px]"
+                placeholder="+598 99 123 456"
+                maxLength={16}
                 autoComplete="tel"
+                aria-invalid={phoneErr ? 'true' : 'false'}
+                aria-describedby={phoneErr ? 'edit-patient-phone-err' : undefined}
+                className="flex-1 bg-transparent outline-none text-[13.5px]"
               />
             </div>
-          </label>
+            {phoneErr && (
+              <p id="edit-patient-phone-err" role="alert" className="text-[12.5px] text-[var(--cq-danger)] mt-1">
+                {phoneErr}
+              </p>
+            )}
+          </div>
 
-          {error && (
-            <p role="alert" className="text-[13px] text-[var(--cq-danger)]">{error}</p>
+          {formErr && (
+            <p role="alert" className="text-[12.5px] text-[var(--cq-danger)] mt-1">{formErr}</p>
           )}
         </div>
 
         <div className="mt-6 flex items-center gap-2 justify-end">
           <button
             onClick={onClose}
-            disabled={submitting}
+            disabled={saving}
             className="h-9 px-4 rounded-[8px] text-[13.5px] font-medium text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] transition-colors disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             onClick={handleSubmit}
-            disabled={submitting || !name.trim() || !phone.trim()}
+            disabled={saving}
             className="h-9 px-4 rounded-[8px] bg-[var(--cq-fg)] text-[var(--cq-bg)] text-[13.5px] font-medium hover:opacity-90 transition-opacity disabled:opacity-40 inline-flex items-center gap-2"
           >
-            {submitting ? 'Guardando…' : 'Guardar cambios'}
+            {saving ? 'Guardando…' : 'Guardar cambios'}
           </button>
         </div>
       </div>
@@ -203,6 +248,7 @@ function EditPatientModal({ patient, onClose, onSuccess, existingPatients = EMPT
 function PatientActionsMenu({ patient, onEdit, onDelete }) {
   const [open,          setOpen]          = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting,      setDeleting]      = useState(false);
   const [pos,           setPos]           = useState({ top: 0, right: 0 });
   const btnRef  = useRef(null);
   const menuRef = useRef(null);
@@ -233,29 +279,41 @@ function PatientActionsMenu({ patient, onEdit, onDelete }) {
     if (open) setConfirmDelete(false);
   };
 
-  const close = () => { setOpen(false); setConfirmDelete(false); };
+  const close = () => { setOpen(false); setConfirmDelete(false); setDeleting(false); };
+
+  const handleDelete = async (e) => {
+    e.stopPropagation();
+    setDeleting(true);
+    await onDelete(patient.id);
+    close();
+  };
 
   const menu = open && createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[200] w-44 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[10px] shadow-xl overflow-hidden py-1"
+      className="fixed z-[200] w-52 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[10px] shadow-xl overflow-hidden py-1"
       style={{ top: pos.top, right: pos.right }}
     >
       {confirmDelete ? (
         <div className="px-3 py-2.5">
-          <p className="text-[12.5px] text-[var(--cq-fg-muted)] mb-2 leading-snug">
-            ¿Eliminar este paciente?
+          <p className="text-[12.5px] font-medium text-[var(--cq-fg)] mb-1 leading-snug">
+            ¿Eliminar a {patient.full_name}?
+          </p>
+          <p className="text-[11.5px] text-[var(--cq-fg-muted)] mb-3 leading-snug">
+            Esta acción eliminará al paciente y todos sus datos. No se puede deshacer.
           </p>
           <div className="flex items-center gap-1.5">
             <button
-              onClick={(e) => { e.stopPropagation(); onDelete(patient.id); close(); }}
-              className="flex-1 h-7 rounded-[6px] bg-[var(--cq-danger)] text-white text-[12px] font-medium hover:opacity-90 transition-opacity"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex-1 h-7 rounded-[6px] bg-[var(--cq-danger)] text-white text-[12px] font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              Sí, eliminar
+              {deleting ? 'Eliminando…' : 'Eliminar'}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
-              className="flex-1 h-7 rounded-[6px] text-[12px] font-medium text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] transition-colors"
+              disabled={deleting}
+              className="flex-1 h-7 rounded-[6px] text-[12px] font-medium text-[var(--cq-fg-muted)] border border-[var(--cq-border)] hover:bg-[var(--cq-surface-2)] transition-colors disabled:opacity-50"
             >
               Cancelar
             </button>
@@ -369,11 +427,18 @@ export function Pacientes() {
   const { clinic } = useClinic();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('q') ?? '');
 
   // Clear the URL param once applied so back-nav doesn't re-filter
   useEffect(() => {
     if (searchParams.get('q')) setSearchParams({}, { replace: true });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 300 ms debounce for search filtering
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
   const [statusFilter,   setStatusFilter]   = useState('all');
   const [addOpen,        setAddOpen]        = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);
@@ -382,15 +447,15 @@ export function Pacientes() {
 
   const filtered = useMemo(() => {
     let list = statusFilter !== 'all' ? patients.filter(p => p.status === statusFilter) : patients;
-    if (search.trim()) {
-      const q = search.toLowerCase();
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase();
       list = list.filter(p =>
         p.full_name.toLowerCase().includes(q) ||
         (p.phone_number ?? '').toLowerCase().includes(q),
       );
     }
     return list;
-  }, [patients, statusFilter, search]);
+  }, [patients, statusFilter, debouncedSearch]);
 
   const handleDelete = useCallback(async (patientId) => {
     try {
@@ -445,7 +510,7 @@ export function Pacientes() {
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por nombre o teléfono…"
+              placeholder="Buscar paciente por nombre o teléfono…"
               className="w-full h-9 pl-9 pr-3 rounded-[7px] border border-[var(--cq-border)] bg-[var(--cq-surface)] text-[13px] placeholder:text-[var(--cq-fg-muted)] focus:outline-none focus:border-[var(--cq-fg)] transition-colors"
             />
           </div>
@@ -493,8 +558,8 @@ export function Pacientes() {
                         <div className="text-center">
                           <p className="text-[14px] font-medium">
                             {patients.length === 0
-                              ? 'Todavía no hay pacientes registrados'
-                              : 'Sin resultados para esta búsqueda'}
+                              ? 'Aún no hay pacientes registrados. Agregá el primero.'
+                              : 'No se encontraron pacientes con ese criterio.'}
                           </p>
                           {patients.length === 0 && (
                             <button

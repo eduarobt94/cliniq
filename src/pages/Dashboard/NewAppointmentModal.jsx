@@ -117,7 +117,8 @@ function WarnBanner({ children }) {
 }
 
 export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSuccess, express = false }) {
-  const containerRef = useRef(null);
+  const containerRef  = useRef(null);
+  const submittingRef = useRef(false);
 
   const [query,          setQuery]          = useState('');
   const [results,        setResults]        = useState([]);
@@ -137,6 +138,7 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
   const [submitting,     setSubmitting]     = useState(false);
   const [success,        setSuccess]        = useState(false);
   const [error,          setError]          = useState(null);
+  const [fieldErrors,    setFieldErrors]    = useState({});
   const [today,          setToday]          = useState('');
 
   useEffect(() => {
@@ -167,7 +169,7 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
     return () => { cancelled = true; };
   }, [clinicId, debouncedDate, debouncedTime]);
 
-  const debouncedQuery = useDebounce(query, 280);
+  const debouncedQuery = useDebounce(query, 300);
 
   useEffect(() => {
     if (!open) return;
@@ -186,7 +188,9 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
     setSubmitting(false);
     setSuccess(false);
     setError(null);
+    setFieldErrors({});
     setSlotConflicts(0);
+    submittingRef.current = false;
   }, [open, defaultDate, express]);
 
   useEffect(() => {
@@ -255,29 +259,56 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
 
   const handleSubmit = async () => {
     if (!clinicId) return;
+
+    // Double-submit guard (ref-based)
+    if (submittingRef.current) return;
+
     setError(null);
+    setFieldErrors({});
 
-    if (!query.trim()) {
-      setError('Ingresá el nombre del paciente.');
+    // Per-field validation
+    const errs = {};
+
+    if (!query.trim() && !selectedPatient && !creatingPatient) {
+      errs.patient = 'Seleccioná un paciente.';
+    }
+
+    if (!date) {
+      errs.date = 'La fecha es obligatoria.';
+    }
+
+    if (!time) {
+      errs.time = 'El horario es obligatorio.';
+    }
+
+    if (date && time && date === todayISO()) {
+      const now = new Date();
+      const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      if (time < nowStr) {
+        errs.time = 'La hora seleccionada ya pasó. Elegí un horario futuro.';
+      }
+    }
+
+    if (Object.keys(errs).length) {
+      setFieldErrors(errs);
       return;
     }
-    if (!date || !time) {
-      setError('Completá la fecha y hora del turno.');
-      return;
-    }
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       let patientId = selectedPatient?.id;
 
       if (creatingPatient) {
         if (!newPhone.trim()) {
-          setError('El teléfono es requerido para crear un paciente.');
+          setFieldErrors(prev => ({ ...prev, phone: 'El teléfono es requerido para crear un paciente.' }));
+          submittingRef.current = false;
           setSubmitting(false);
           return;
         }
         if (!isValidPhone(newPhone)) {
-          setError('El teléfono debe estar en formato internacional: +598XXXXXXXX');
+          setFieldErrors(prev => ({ ...prev, phone: 'El teléfono debe estar en formato internacional: +598XXXXXXXX' }));
+          submittingRef.current = false;
           setSubmitting(false);
           return;
         }
@@ -286,14 +317,19 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
       }
 
       if (!patientId) {
-        setError('Seleccioná un paciente de la lista o creá uno nuevo.');
+        setFieldErrors(prev => ({ ...prev, patient: 'Seleccioná un paciente de la lista o creá uno nuevo.' }));
+        submittingRef.current = false;
         setSubmitting(false);
         return;
       }
 
       const datetime = new Date(`${date}T${time}:00`).toISOString();
       await createAppointment(clinicId, {
-        patientId, datetime, type, professionalName: professional, notes,
+        patientId,
+        datetime,
+        type,
+        professionalName: professional,
+        notes: notes.trim(),
         status: express ? 'confirmed' : 'new',
       });
 
@@ -306,11 +342,15 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
         if (msg.includes('phone')) {
           setError('Ya existe un paciente con ese número de teléfono.');
         } else {
-          setError('Ya hay un turno en ese horario para este paciente.');
+          setError('Ya existe una cita en ese horario.');
         }
+      } else if (msg.includes('fetch') || msg.includes('network') || msg.includes('NetworkError') || msg.includes('Failed to fetch')) {
+        setError('Error de conexión. Verificá tu internet.');
       } else {
-        setError('No se pudo guardar el turno. Intentá de nuevo.');
+        setError('No se pudo guardar la cita. Intentá de nuevo.');
       }
+    } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -354,7 +394,7 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
           <button
             onClick={onClose}
             className="size-11 rounded-[8px] hover:bg-[var(--cq-surface-2)] flex items-center justify-center"
-            aria-label="Cerrar"
+            aria-label="Cerrar modal"
           >
             <Icons.Close size={16} />
           </button>
@@ -388,7 +428,7 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                           setQuery(e.target.value);
                           if (selectedPatient) setSelectedPatient(null);
                         }}
-                        placeholder="Buscar por nombre…"
+                        placeholder="Buscar paciente por nombre o teléfono…"
                         disabled={!!selectedPatient}
                         className="flex-1 bg-transparent outline-none text-[13.5px] disabled:opacity-60"
                       />
@@ -406,11 +446,14 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
 
                     {showDropdown && (
                       <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[10px] shadow-lg overflow-hidden">
+                        {results.length === 0 && !searching && (
+                          <p className="px-4 py-2.5 text-[13px] text-[var(--cq-fg-muted)]">No se encontraron pacientes.</p>
+                        )}
                         {results.map(p => (
                           <button
                             key={p.id}
                             type="button"
-                            onClick={() => handleSelectPatient(p)}
+                            onClick={() => { handleSelectPatient(p); setFieldErrors(prev => ({ ...prev, patient: undefined })); }}
                             className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--cq-surface-2)] transition-colors"
                           >
                             <span className="text-[13.5px] font-medium">{p.full_name}</span>
@@ -429,6 +472,9 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                     )}
                   </div>
                 </label>
+                {fieldErrors.patient && (
+                  <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{fieldErrors.patient}</p>
+                )}
               </div>
 
               {/* New patient phone */}
@@ -436,17 +482,20 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                 <div>
                   <label className="block">
                     <MonoLabel>Teléfono (nuevo paciente) *</MonoLabel>
-                    <div className="mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)]">
+                    <div className={`mt-1.5 flex items-center gap-2 h-11 px-3 rounded-[9px] border bg-[var(--cq-bg)] focus-within:border-[var(--cq-fg)] ${fieldErrors.phone ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'}`}>
                       <input
                         type="tel"
                         value={newPhone}
-                        onChange={(e) => setNewPhone(filterPhoneInput(e.target.value))}
+                        onChange={(e) => { setNewPhone(filterPhoneInput(e.target.value)); setFieldErrors(prev => ({ ...prev, phone: undefined })); }}
                         placeholder="+59899123456"
                         className="flex-1 bg-transparent outline-none text-[13.5px]"
                         autoComplete="tel"
                       />
                     </div>
                   </label>
+                  {fieldErrors.phone && (
+                    <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{fieldErrors.phone}</p>
+                  )}
                 </div>
               )}
 
@@ -456,15 +505,31 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                   <MonoLabel className="block mb-1.5">Fecha *</MonoLabel>
                   <DatePicker
                     value={date}
-                    onChange={setDate}
+                    onChange={(v) => { setDate(v); setFieldErrors(prev => ({ ...prev, date: undefined })); }}
+                    onBlur={() => {
+                      if (!date) setFieldErrors(prev => ({ ...prev, date: 'La fecha es obligatoria.' }));
+                      else if (date < todayISO()) setFieldErrors(prev => ({ ...prev, date: 'No podés agendar en una fecha pasada.' }));
+                    }}
                     min={today}
                     schedule={schedule}
                     closures={closures}
                   />
+                  {fieldErrors.date && (
+                    <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{fieldErrors.date}</p>
+                  )}
                 </div>
                 <div>
                   <MonoLabel className="block mb-1.5">Hora *</MonoLabel>
-                  <TimePicker value={time} onChange={setTime} />
+                  <TimePicker
+                    value={time}
+                    onChange={(v) => { setTime(v); setFieldErrors(prev => ({ ...prev, time: undefined })); }}
+                    onBlur={() => {
+                      if (!time) setFieldErrors(prev => ({ ...prev, time: 'El horario es obligatorio.' }));
+                    }}
+                  />
+                  {fieldErrors.time && (
+                    <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{fieldErrors.time}</p>
+                  )}
                 </div>
               </div>
 
@@ -517,8 +582,9 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                       <textarea
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Observaciones internas…"
-                        rows={2}
+                        placeholder="Notas adicionales sobre la cita (opcional)"
+                        rows={3}
+                        maxLength={500}
                         className="mt-1.5 w-full px-3 py-2.5 rounded-[9px] border border-[var(--cq-border)] bg-[var(--cq-bg)] focus:border-[var(--cq-fg)] outline-none text-[13.5px] resize-none"
                       />
                     </label>
@@ -552,6 +618,12 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
                 size="md"
                 onClick={handleSubmit}
                 disabled={!canSubmit}
+                title={
+                  !date ? 'Seleccioná una fecha' :
+                  !time ? 'Seleccioná un horario' :
+                  (!selectedPatient && !creatingPatient) ? 'Seleccioná un paciente' :
+                  ''
+                }
               >
                 {submitting ? <SpinnerIcon /> : express ? <Icons.Zap size={14} /> : <Icons.Calendar size={14} />}
                 {submitting ? 'Agendando…' : express ? 'Confirmar turno' : 'Agendar'}

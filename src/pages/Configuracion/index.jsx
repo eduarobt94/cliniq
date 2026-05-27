@@ -153,6 +153,8 @@ export function Configuracion() {
   });
   const [profileDirty,  setProfileDirty]  = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [profileErrors, setProfileErrors] = useState({});
+  const [profileTouched, setProfileTouched] = useState({});
 
   useEffect(() => {
     if (!clinic) return;
@@ -166,22 +168,63 @@ export function Configuracion() {
       reviewUrl:        clinic.review_url          ?? '',
     });
     setProfileDirty(false);
+    setProfileErrors({});
+    setProfileTouched({});
   }, [clinic?.id]);
 
   function handleProfileChange(field, value) {
     const normalized = field === 'phone' ? filterPhoneInput(value) : value;
     setProfileForm(prev => ({ ...prev, [field]: normalized }));
     setProfileDirty(true);
+    // Clear the error for the changed field on user input
+    if (profileErrors[field]) {
+      setProfileErrors(prev => { const next = { ...prev }; delete next[field]; return next; });
+    }
+  }
+
+  function handleProfileBlur(field) {
+    setProfileTouched(prev => ({ ...prev, [field]: true }));
+    const errs = validateProfileForm();
+    if (errs[field]) {
+      setProfileErrors(prev => ({ ...prev, [field]: errs[field] }));
+    } else {
+      setProfileErrors(prev => { const next = { ...prev }; delete next[field]; return next; });
+    }
+  }
+
+  function validateProfileForm() {
+    const errs = {};
+    const trimmedName = profileForm.name.trim();
+    if (!trimmedName) {
+      errs.name = 'El nombre de la clínica es obligatorio.';
+    } else if (trimmedName.length < 2) {
+      errs.name = 'El nombre debe tener al menos 2 caracteres.';
+    }
+    if (profileForm.phone && !/^\+?[0-9]{7,15}$/.test(profileForm.phone.trim())) {
+      errs.phone = 'Ingresá un teléfono válido.';
+    }
+    if (profileForm.emailContact && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profileForm.emailContact.trim())) {
+      errs.emailContact = 'Ingresá un email válido.';
+    }
+    return errs;
   }
 
   async function handleSaveProfile() {
-    if (profileForm.emailContact && !profileForm.emailContact.includes('@')) {
-      push?.('El email de contacto debe contener "@".', 'error');
+    const errs = validateProfileForm();
+    if (Object.keys(errs).length > 0) {
+      setProfileErrors(errs);
       return;
     }
+    setProfileErrors({});
     setSavingProfile(true);
     try {
-      await updateClinicProfile(clinic.id, profileForm);
+      await updateClinicProfile(clinic.id, {
+        ...profileForm,
+        name:         profileForm.name.trim(),
+        phone:        profileForm.phone.trim(),
+        address:      profileForm.address.trim(),
+        emailContact: profileForm.emailContact.trim(),
+      });
       await refreshMembership();
       setProfileDirty(false);
       push?.('Perfil actualizado.', 'success');
@@ -281,51 +324,79 @@ export function Configuracion() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FieldGroup label="Nombre de la clínica">
                 <input
+                  id="profile-name"
                   className={inputCls}
                   value={profileForm.name}
                   onChange={e => handleProfileChange('name', e.target.value)}
+                  onBlur={() => handleProfileBlur('name')}
                   disabled={!isOwner}
-                  placeholder="Mi Clínica"
+                  title={!isOwner ? 'Solo los propietarios pueden editar el perfil' : undefined}
+                  placeholder="Nombre de la clínica"
+                  autoComplete="organization"
+                  maxLength={100}
                 />
+                {profileErrors.name && (
+                  <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{profileErrors.name}</p>
+                )}
               </FieldGroup>
 
               <FieldGroup label="Teléfono">
                 <input
+                  id="profile-phone"
                   className={inputCls}
                   value={profileForm.phone}
                   onChange={e => handleProfileChange('phone', e.target.value)}
+                  onBlur={() => handleProfileBlur('phone')}
                   disabled={!isOwner}
-                  placeholder="+598 2 900 0000"
+                  title={!isOwner ? 'Solo los propietarios pueden editar el perfil' : undefined}
+                  placeholder="+598 99 123 456"
+                  autoComplete="tel"
                 />
+                {profileErrors.phone && (
+                  <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{profileErrors.phone}</p>
+                )}
               </FieldGroup>
 
               <FieldGroup label="Dirección" fullWidth>
                 <input
+                  id="profile-address"
                   className={inputCls}
                   value={profileForm.address}
                   onChange={e => handleProfileChange('address', e.target.value)}
                   disabled={!isOwner}
-                  placeholder="Av. 18 de Julio 1234, Montevideo"
+                  title={!isOwner ? 'Solo los propietarios pueden editar el perfil' : undefined}
+                  placeholder="Dirección de la clínica (opcional)"
+                  autoComplete="street-address"
                 />
               </FieldGroup>
 
               <FieldGroup label="Email de contacto">
                 <input
+                  id="profile-email"
                   type="email"
                   className={inputCls}
                   value={profileForm.emailContact}
                   onChange={e => handleProfileChange('emailContact', e.target.value)}
+                  onBlur={() => handleProfileBlur('emailContact')}
                   disabled={!isOwner}
+                  title={!isOwner ? 'Solo los propietarios pueden editar el perfil' : undefined}
                   placeholder="contacto@clinica.uy"
+                  autoComplete="email"
                 />
+                {profileErrors.emailContact && (
+                  <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{profileErrors.emailContact}</p>
+                )}
               </FieldGroup>
 
               <FieldGroup label="Zona horaria">
                 <select
+                  id="profile-timezone"
+                  aria-label="Zona horaria"
                   className={inputCls}
                   value={profileForm.timezone}
                   onChange={e => handleProfileChange('timezone', e.target.value)}
                   disabled={!isOwner}
+                  title={!isOwner ? 'Solo los propietarios pueden editar el perfil' : undefined}
                 >
                   {TIMEZONES.map(tz => (
                     <option key={tz.value} value={tz.value}>{tz.label}</option>
@@ -335,12 +406,15 @@ export function Configuracion() {
 
               <FieldGroup label="URL de reseña en Google">
                 <input
+                  id="profile-review-url"
                   type="url"
                   className={inputCls}
                   value={profileForm.reviewUrl}
                   onChange={e => handleProfileChange('reviewUrl', e.target.value)}
                   disabled={!isOwner}
-                  placeholder="https://g.page/r/XXXXX/review"
+                  title={!isOwner ? 'Solo los propietarios pueden editar el perfil' : undefined}
+                  placeholder="https://mipagina.com"
+                  autoComplete="url"
                 />
                 <p className="mt-1 text-[11.5px] text-[var(--cq-fg-muted)]">
                   Se usa en el placeholder <code className="font-mono">{'{review_url}'}</code> del mensaje post-consulta.
@@ -450,12 +524,14 @@ export function Configuracion() {
             />
 
             <div className="flex items-center justify-between h-12">
-              <span className="text-[13.5px] text-[var(--cq-fg)]">Duración predeterminada de turnos</span>
+              <label htmlFor="pref-duration" className="text-[13.5px] text-[var(--cq-fg)]">Duración predeterminada de turnos</label>
               <select
+                id="pref-duration"
                 className="h-8 pl-2 pr-7 rounded-[7px] border border-[var(--cq-border)] bg-[var(--cq-surface-2)] text-[13px] text-[var(--cq-fg)] focus:outline-none focus:ring-1 focus:ring-[var(--cq-accent)] disabled:opacity-60"
                 value={prefs.default_appointment_duration}
                 onChange={e => handlePrefChange('default_appointment_duration', Number(e.target.value))}
                 disabled={!isOwner}
+                title={!isOwner ? 'Solo los propietarios pueden modificar las preferencias' : undefined}
               >
                 {DURATIONS.map(d => <option key={d} value={d}>{d} min</option>)}
               </select>

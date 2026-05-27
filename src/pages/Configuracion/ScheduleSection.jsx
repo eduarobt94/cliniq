@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { Button, Badge, Icons, MonoLabel } from '../../components/ui';
 import { DatePicker, TimePicker } from '../../components/ui/DateTimePicker';
 import { useClinicSchedule } from '../../hooks/useClinicSchedule';
@@ -40,43 +40,87 @@ function ToggleRow({ label, on, onChange, disabled, sublabel }) {
 
 // ─── Weekly schedule grid ─────────────────────────────────────────────────────
 function WeeklySchedule({ rows, onChange, disabled }) {
+  // Track which day should auto-open its open_time picker
+  const [autoOpenDow, setAutoOpenDow] = useState(null);
+  // Track per-day time errors: { [dow]: string }
+  const [timeErrors, setTimeErrors] = useState({});
+
+  function handleToggle(dow, value) {
+    onChange(dow, 'is_open', value);
+    if (value) {
+      // When toggled ON, signal to auto-open the open_time picker
+      setAutoOpenDow(dow);
+      // Clear auto-open after the picker has had a chance to open
+      setTimeout(() => setAutoOpenDow(null), 100);
+    } else {
+      // Clear errors for this day when toggled off
+      setTimeErrors(prev => { const next = { ...prev }; delete next[dow]; return next; });
+    }
+  }
+
+  function handleTimeBlur(dow, field, row) {
+    if (!row.is_open) return;
+    const open  = field === 'open_time'  ? row.open_time  : row.open_time;
+    const close = field === 'close_time' ? row.close_time : row.close_time;
+    // Re-read the current row values at blur time
+    if (!row.open_time || !row.close_time) {
+      setTimeErrors(prev => ({ ...prev, [dow]: 'Ingresá un horario.' }));
+      return;
+    }
+    if (row.open_time >= row.close_time) {
+      setTimeErrors(prev => ({ ...prev, [dow]: 'La hora de apertura debe ser anterior a la de cierre.' }));
+      return;
+    }
+    setTimeErrors(prev => { const next = { ...prev }; delete next[dow]; return next; });
+  }
+
   return (
     <div className="divide-y divide-[var(--cq-border)]">
       {DISPLAY_ORDER.map(dow => {
         const row = rows.find(r => r.day_of_week === dow);
         if (!row) return null;
         return (
-          <div key={dow} className="flex items-center gap-3 py-3">
-            <div className="w-24 shrink-0">
-              <span className={`text-[13.5px] ${row.is_open ? 'text-[var(--cq-fg)] font-medium' : 'text-[var(--cq-fg-muted)]'}`}>
-                {DAY_NAMES[dow]}
-              </span>
-            </div>
-            <Toggle
-              on={row.is_open}
-              onChange={v => onChange(dow, 'is_open', v)}
-              disabled={disabled}
-            />
-            {row.is_open ? (
-              <div className="flex items-center gap-2 flex-1">
-                <div className="w-[130px]">
-                  <TimePicker
-                    value={row.open_time}
-                    onChange={v => onChange(dow, 'open_time', v)}
-                    disabled={disabled}
-                  />
-                </div>
-                <span className="text-[12px] text-[var(--cq-fg-muted)] shrink-0">a</span>
-                <div className="w-[130px]">
-                  <TimePicker
-                    value={row.close_time}
-                    onChange={v => onChange(dow, 'close_time', v)}
-                    disabled={disabled}
-                  />
-                </div>
+          <div key={dow} className="py-3">
+            <div className="flex items-center gap-3">
+              <div className="w-24 shrink-0">
+                <span className={`text-[13.5px] ${row.is_open ? 'text-[var(--cq-fg)] font-medium' : 'text-[var(--cq-fg-muted)]'}`}>
+                  {DAY_NAMES[dow]}
+                </span>
               </div>
-            ) : (
-              <span className="text-[12.5px] text-[var(--cq-fg-muted)] italic">Cerrado</span>
+              <Toggle
+                on={row.is_open}
+                onChange={v => handleToggle(dow, v)}
+                disabled={disabled}
+              />
+              {row.is_open ? (
+                <div className="flex items-center gap-2 flex-1">
+                  <div className="w-[130px]">
+                    <TimePicker
+                      value={row.open_time}
+                      onChange={v => { onChange(dow, 'open_time', v); setTimeErrors(prev => { const n = { ...prev }; delete n[dow]; return n; }); }}
+                      onBlur={() => handleTimeBlur(dow, 'open_time', row)}
+                      disabled={disabled}
+                      aria-label={`Hora de apertura del ${DAY_NAMES[dow]}`}
+                      autoOpen={autoOpenDow === dow}
+                    />
+                  </div>
+                  <span className="text-[12px] text-[var(--cq-fg-muted)] shrink-0">a</span>
+                  <div className="w-[130px]">
+                    <TimePicker
+                      value={row.close_time}
+                      onChange={v => { onChange(dow, 'close_time', v); setTimeErrors(prev => { const n = { ...prev }; delete n[dow]; return n; }); }}
+                      onBlur={() => handleTimeBlur(dow, 'close_time', row)}
+                      disabled={disabled}
+                      aria-label={`Hora de cierre del ${DAY_NAMES[dow]}`}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <span className="text-[12.5px] text-[var(--cq-fg-muted)] italic">Cerrado</span>
+              )}
+            </div>
+            {timeErrors[dow] && (
+              <p className="text-[12.5px] text-[var(--cq-danger)] mt-1 ml-[7.5rem]">{timeErrors[dow]}</p>
             )}
           </div>
         );
@@ -190,11 +234,13 @@ function AddClosureForm({ onAdd, onCancel }) {
             value={form.date}
             onChange={v => set('date', v)}
             min={today}
+            aria-label="Fecha del día no disponible"
           />
         </div>
         <div>
-          <MonoLabel className="block mb-1">Motivo</MonoLabel>
+          <MonoLabel className="block mb-1" id="closure-reason-label">Motivo</MonoLabel>
           <select
+            aria-labelledby="closure-reason-label"
             value={form.reason}
             onChange={e => set('reason', e.target.value)}
             className={inputCls}

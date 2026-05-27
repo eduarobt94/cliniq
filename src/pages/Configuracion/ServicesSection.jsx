@@ -1,6 +1,7 @@
 ﻿import { useState } from 'react';
 import { Button, Badge, Icons, MonoLabel } from '../../components/ui';
 import { useClinicServices } from '../../hooks/useClinicServices';
+import { supabase } from '../../lib/supabase';
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 
@@ -77,17 +78,63 @@ const EMPTY = {
 function ServiceForm({ initial = EMPTY, onSave, onCancel, saving }) {
   const [form, setForm] = useState(initial);
   const [error, setError] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
+  function handleBlurName() {
+    const trimmed = form.name.trim();
+    if (!trimmed) {
+      setFieldErrors(prev => ({ ...prev, name: 'El nombre del servicio es obligatorio.' }));
+    } else if (trimmed.length < 2) {
+      setFieldErrors(prev => ({ ...prev, name: 'El nombre debe tener al menos 2 caracteres.' }));
+    } else if (trimmed.length > 100) {
+      setFieldErrors(prev => ({ ...prev, name: 'El nombre no puede superar los 100 caracteres.' }));
+    } else {
+      setFieldErrors(prev => { const next = { ...prev }; delete next.name; return next; });
+    }
+  }
+
+  function handleBlurDuration() {
+    if (form.duration_minutes !== '' && form.duration_minutes !== null) {
+      const dur = Number(form.duration_minutes);
+      if (isNaN(dur) || dur <= 0) {
+        setFieldErrors(prev => ({ ...prev, duration_minutes: 'La duración debe ser un número positivo.' }));
+        return;
+      }
+    }
+    setFieldErrors(prev => { const next = { ...prev }; delete next.duration_minutes; return next; });
+  }
+
+  function handleBlurPrice() {
+    if (form.price !== '' && form.price !== null) {
+      const pr = Number(form.price);
+      if (isNaN(pr) || pr < 0) {
+        setFieldErrors(prev => ({ ...prev, price: 'El precio debe ser un número no negativo.' }));
+        return;
+      }
+    }
+    setFieldErrors(prev => { const next = { ...prev }; delete next.price; return next; });
+  }
+
   async function handleSubmit() {
-    if (!form.name.trim()) { setError('El nombre es obligatorio.'); return; }
+    const trimmedName = form.name.trim();
+    if (!trimmedName) { setError('El nombre del servicio es obligatorio.'); return; }
+    if (trimmedName.length > 100) { setError('El nombre no puede superar los 100 caracteres.'); return; }
+    if (form.duration_minutes !== '' && form.duration_minutes !== null) {
+      const dur = Number(form.duration_minutes);
+      if (isNaN(dur) || dur <= 0) { setError('La duración debe ser un número positivo.'); return; }
+    }
+    if (form.price !== '' && form.price !== null) {
+      const pr = Number(form.price);
+      if (isNaN(pr) || pr < 0) { setError('El precio debe ser un número positivo.'); return; }
+    }
     if (form.discount_value && !form.discount_type) {
       setError('Seleccioná el tipo de descuento.'); return;
     }
     setError(null);
     try {
-      await onSave(form);
+      await onSave({ ...form, name: trimmedName });
     } catch (err) {
       setError(err?.message ?? 'No se pudo guardar.');
     }
@@ -105,10 +152,13 @@ function ServiceForm({ initial = EMPTY, onSave, onCancel, saving }) {
         <input
           className={inputCls}
           value={form.name}
-          onChange={e => set('name', e.target.value)}
-          placeholder="Ej: Consulta general, Radiografía…"
+          onChange={e => { set('name', e.target.value); if (fieldErrors.name) setFieldErrors(prev => { const n = { ...prev }; delete n.name; return n; }); }}
+          onBlur={handleBlurName}
+          placeholder="Ej: Consulta general"
           disabled={saving}
+          maxLength={100}
         />
+        {fieldErrors.name && <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{fieldErrors.name}</p>}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -123,10 +173,12 @@ function ServiceForm({ initial = EMPTY, onSave, onCancel, saving }) {
             autoComplete="off"
             className={inputCls}
             value={form.duration_minutes}
-            onChange={e => set('duration_minutes', e.target.value)}
+            onChange={e => { set('duration_minutes', e.target.value); if (fieldErrors.duration_minutes) setFieldErrors(prev => { const n = { ...prev }; delete n.duration_minutes; return n; }); }}
+            onBlur={handleBlurDuration}
             placeholder="Ej: 30"
             disabled={saving}
           />
+          {fieldErrors.duration_minutes && <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{fieldErrors.duration_minutes}</p>}
         </div>
 
         {/* Precio base */}
@@ -139,10 +191,12 @@ function ServiceForm({ initial = EMPTY, onSave, onCancel, saving }) {
             autoComplete="off"
             className={inputCls}
             value={form.price}
-            onChange={e => set('price', e.target.value)}
-            placeholder="Ej: 1500"
+            onChange={e => { set('price', e.target.value); if (fieldErrors.price) setFieldErrors(prev => { const n = { ...prev }; delete n.price; return n; }); }}
+            onBlur={handleBlurPrice}
+            placeholder="Ej: 1200"
             disabled={saving}
           />
+          {fieldErrors.price && <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">{fieldErrors.price}</p>}
         </div>
       </div>
 
@@ -152,6 +206,8 @@ function ServiceForm({ initial = EMPTY, onSave, onCancel, saving }) {
 
         {/* Tipo de descuento */}
         <select
+          id="svc-discount-type"
+          aria-label="Tipo de descuento"
           className={inputCls}
           value={form.discount_type}
           onChange={e => {
@@ -279,6 +335,50 @@ function ServiceRow({ service, onEdit, onToggle, onDelete, isOwner, toggling, de
 
 // ─── Main section ─────────────────────────────────────────────────────────────
 
+// ─── Delete confirmation dialog ───────────────────────────────────────────────
+
+function DeleteConfirmDialog({ hasAppointments, onConfirm, onCancel, deleting }) {
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="delete-dialog-title"
+      aria-describedby="delete-dialog-desc"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div
+        className="absolute inset-0 bg-[var(--cq-fg)]/40 backdrop-blur-sm"
+        onClick={onCancel}
+      />
+      <div className="relative w-full max-w-[380px] bg-[var(--cq-bg)] border border-[var(--cq-border)] rounded-[14px] p-5 shadow-2xl">
+        <h3 id="delete-dialog-title" className="text-[16px] font-semibold text-[var(--cq-fg)] mb-2">
+          {hasAppointments ? 'Servicio con citas programadas' : '¿Eliminar este servicio?'}
+        </h3>
+        <p id="delete-dialog-desc" className="text-[13.5px] text-[var(--cq-fg-muted)] mb-5">
+          {hasAppointments
+            ? 'Este servicio tiene citas programadas. Eliminarlo puede afectar la agenda. ¿Deseas continuar?'
+            : 'Esta acción no se puede deshacer.'}
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="ghost" size="sm" onClick={onCancel} disabled={deleting} aria-label="Cancelar eliminación">
+            Cancelar
+          </Button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="h-8 px-3 text-[13px] font-medium rounded-[8px] bg-[var(--cq-danger)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity inline-flex items-center gap-1.5"
+          >
+            {deleting
+              ? <span className="size-3.5 border border-white border-t-transparent rounded-full animate-spin" />
+              : null}
+            {hasAppointments ? 'Eliminar de todas formas' : 'Eliminar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ServicesSection({ clinicId, isOwner, push }) {
   const { services, loading, error, createService, updateService, toggleActive, deleteService } =
     useClinicServices(clinicId);
@@ -288,6 +388,9 @@ export function ServicesSection({ clinicId, isOwner, push }) {
   const [saving,    setSaving]    = useState(false);
   const [toggling,  setToggling]  = useState(null);
   const [deleting,  setDeleting]  = useState(null);
+
+  // ── Delete confirmation state ────────────────────────────────────────────────
+  const [deleteDialog, setDeleteDialog] = useState(null); // { id, hasAppointments } | null
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -324,7 +427,25 @@ export function ServicesSection({ clinicId, isOwner, push }) {
     }
   }
 
-  async function handleDelete(id) {
+  async function handleDeleteRequest(id) {
+    // Check for future appointments linked to this service
+    try {
+      const now = new Date().toISOString();
+      const { count } = await supabase
+        .from('appointments')
+        .select('id', { count: 'exact', head: true })
+        .eq('service_id', id)
+        .gte('datetime', now);
+      setDeleteDialog({ id, hasAppointments: (count ?? 0) > 0 });
+    } catch {
+      // If the query fails (e.g. no service_id column), fall back to simple confirm
+      setDeleteDialog({ id, hasAppointments: false });
+    }
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteDialog) return;
+    const { id } = deleteDialog;
     setDeleting(id);
     try {
       await deleteService(id);
@@ -333,6 +454,7 @@ export function ServicesSection({ clinicId, isOwner, push }) {
       push?.('No se pudo eliminar el servicio.', 'error');
     } finally {
       setDeleting(null);
+      setDeleteDialog(null);
     }
   }
 
@@ -393,7 +515,7 @@ export function ServicesSection({ clinicId, isOwner, push }) {
                     service={s}
                     onEdit={setEditItem}
                     onToggle={handleToggle}
-                    onDelete={handleDelete}
+                    onDelete={handleDeleteRequest}
                     isOwner={isOwner}
                     toggling={toggling}
                     deleting={deleting}
@@ -403,7 +525,7 @@ export function ServicesSection({ clinicId, isOwner, push }) {
             </div>
           ) : !showForm ? (
             <p className="text-[13px] text-[var(--cq-fg-muted)] italic py-2">
-              Todavía no hay servicios configurados.
+              Aún no hay servicios configurados. Agregá el primero.
             </p>
           ) : null}
 
@@ -416,6 +538,16 @@ export function ServicesSection({ clinicId, isOwner, push }) {
             />
           )}
         </>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteDialog && (
+        <DeleteConfirmDialog
+          hasAppointments={deleteDialog.hasAppointments}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteDialog(null)}
+          deleting={deleting === deleteDialog.id}
+        />
       )}
     </div>
   );

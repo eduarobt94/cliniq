@@ -165,7 +165,7 @@ function Calendar({ value, onChange, min, schedule, closures }) {
 
 // ─── DatePicker ───────────────────────────────────────────────────────────────
 
-export function DatePicker({ value, onChange, disabled, min, schedule, closures }) {
+export function DatePicker({ value, onChange, disabled, min, schedule, closures, onBlur, 'aria-label': ariaLabel }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -186,6 +186,8 @@ export function DatePicker({ value, onChange, disabled, min, schedule, closures 
         type="button"
         disabled={disabled}
         onClick={() => setOpen(v => !v)}
+        onBlur={onBlur}
+        aria-label={ariaLabel}
         className={`flex items-center gap-2 h-11 px-3 rounded-[9px] border w-full text-left transition-colors
           disabled:opacity-50 disabled:cursor-default
           ${open
@@ -294,11 +296,16 @@ function ScrollColumn({ items, selected, onSelect, colRef }) {
   );
 }
 
-export function TimePicker({ value, onChange, disabled }) {
+export function TimePicker({ value, onChange, disabled, onBlur, 'aria-label': ariaLabel, autoOpen }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const hRef    = useRef(null);
   const mRef    = useRef(null);
+
+  // Auto-open the picker when autoOpen prop becomes true
+  useEffect(() => {
+    if (autoOpen) setOpen(true);
+  }, [autoOpen]);
 
   const [hStr, mStr] = (value ?? '09:00').split(':');
 
@@ -336,6 +343,8 @@ export function TimePicker({ value, onChange, disabled }) {
         type="button"
         disabled={disabled}
         onClick={() => setOpen(v => !v)}
+        onBlur={onBlur}
+        aria-label={ariaLabel}
         className={`flex items-center gap-2 h-11 px-3 rounded-[9px] border w-full text-left transition-colors
           disabled:opacity-50 disabled:cursor-default
           ${open

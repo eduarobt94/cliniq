@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Icons, MonoLabel } from '../../components/ui';
@@ -10,9 +10,13 @@ export function ResetPassword() {
   const [password,  setPassword]  = useState('');
   const [password2, setPassword2] = useState('');
   const [showPwd,   setShowPwd]   = useState(false);
-  const [loading,   setLoading]   = useState(false);
+  const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState('');
   const [success,   setSuccess]   = useState(false);
+
+  // Inline field-level errors
+  const [pwdError,  setPwdError]  = useState('');
+  const [pwd2Error, setPwd2Error] = useState('');
 
   // Si no hay sesión de recovery Y no acabamos de guardar, redirigir al login
   useEffect(() => {
@@ -21,28 +25,93 @@ export function ResetPassword() {
     }
   }, [passwordRecoveryMode, success, navigate]);
 
-  const passwordValid = password.length >= 6;
+  // Redirect after success
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => navigate('/login', { replace: true }), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [success, navigate]);
+
+  // Validation helpers (uses trimmed length for whitespace check)
+  const validatePassword = (val) => {
+    if (val.length === 0) return 'La contraseña es obligatoria.';
+    if (val.trim().length === 0) return 'La contraseña no puede ser solo espacios en blanco.';
+    if (val.trim().length < 6) return 'La contraseña debe tener al menos 6 caracteres.';
+    return '';
+  };
+
+  const passwordValid = password.trim().length >= 6;
   const passwordMatch = password === password2 && password2.length > 0;
+
+  // Blur handlers
+  const onPwdBlur = () => {
+    setPwdError(validatePassword(password));
+  };
+
+  const onPwd2Blur = () => {
+    if (password2.length > 0 && password !== password2) {
+      setPwd2Error('Las contraseñas no coinciden.');
+    } else {
+      setPwd2Error('');
+    }
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    if (!passwordValid || !passwordMatch) return;
-    setLoading(true);
+
+    // Run all validations on submit
+    const pwdErr = validatePassword(password);
+    let pwd2Err = '';
+    if (password2.length === 0) {
+      pwd2Err = 'La contraseña es obligatoria.';
+    } else if (password !== password2) {
+      pwd2Err = 'Las contraseñas no coinciden.';
+    }
+
+    setPwdError(pwdErr);
+    setPwd2Error(pwd2Err);
+
+    if (pwdErr || pwd2Err) return;
+
+    setSaving(true);
     setError('');
     try {
       setSuccess(true); // Previene redirect a /login cuando passwordRecoveryMode se limpia
-      await updatePassword(password);
-      navigate('/dashboard', { replace: true });
+      await updatePassword(password); // send untrimmed — user may intentionally have spaces
     } catch (err) {
-      setError(
-        err.message.includes('expired') || err.message.includes('invalid')
-          ? 'El link expiró. Pedí uno nuevo desde el login.'
-          : 'No se pudo actualizar la contraseña. Intentá de nuevo.'
-      );
+      setSuccess(false);
+      const msg = err?.message ?? '';
+      if (msg.includes('expired') || msg.includes('invalid') || msg.includes('token')) {
+        setError('El link de recuperación expiró. Solicitá uno nuevo.');
+      } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('NetworkError')) {
+        setError('Error de conexión. Verificá tu internet.');
+      } else {
+        setError('No se pudo actualizar la contraseña. Intentá de nuevo.');
+      }
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
+
+  if (success) {
+    return (
+      <main className="min-h-screen bg-[var(--cq-bg)] text-[var(--cq-fg)] flex items-center justify-center p-6">
+        <div className="w-full max-w-[420px] text-center space-y-4">
+          <div className="flex items-center justify-center gap-2.5 mb-8">
+            <Icons.Logo size={22} />
+            <span className="text-[17px] font-semibold tracking-tight">Cliniq</span>
+          </div>
+          <div
+            role="status"
+            className="px-4 py-5 rounded-[10px] bg-[color-mix(in_oklch,var(--cq-success)_12%,transparent)] border border-[color-mix(in_oklch,var(--cq-success)_30%,transparent)] text-[var(--cq-success)] text-[14px]"
+          >
+            ¡Contraseña actualizada! Redirigiendo al inicio de sesión…
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[var(--cq-bg)] text-[var(--cq-fg)] flex items-center justify-center p-6">
@@ -60,28 +129,40 @@ export function ResetPassword() {
           Elegí una contraseña segura para tu cuenta.
         </p>
 
-        <form onSubmit={onSubmit} className="mt-8 space-y-4" noValidate>
-          <fieldset disabled={loading} className="contents">
+        <form onSubmit={onSubmit} className="mt-8 space-y-4" noValidate aria-label="Formulario de nueva contraseña">
+          <fieldset disabled={saving} className="contents">
             {/* Nueva contraseña */}
             <div className="flex flex-col gap-1">
-              <label className="flex items-center justify-between">
+              <label
+                htmlFor="new-password"
+                className="flex items-center justify-between"
+              >
                 <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--cq-fg-muted)]">
                   Nueva contraseña
                 </span>
-                {password.length > 0 && !passwordValid && (
+                {password.length > 0 && !passwordValid && !pwdError && (
                   <span className="text-[11px] text-[var(--cq-danger)]">Mínimo 6 caracteres</span>
                 )}
               </label>
               <div className={`flex items-center gap-2 h-12 px-4 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-success)] focus-within:ring-1 focus-within:ring-[var(--cq-success)] ${
-                password.length > 0 && !passwordValid ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'
+                pwdError ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'
               }`}>
                 <Icons.Lock size={15} className="text-[var(--cq-fg-muted)] shrink-0" />
                 <input
+                  id="new-password"
                   type={showPwd ? 'text' : 'password'}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  maxLength={72}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (pwdError) setPwdError('');
+                  }}
+                  onBlur={onPwdBlur}
+                  placeholder="Mínimo 6 caracteres"
                   autoComplete="new-password"
+                  autoFocus
+                  aria-invalid={pwdError ? 'true' : undefined}
+                  aria-describedby={pwdError ? 'new-password-error' : undefined}
                   className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)]"
                 />
                 <button
@@ -89,38 +170,60 @@ export function ResetPassword() {
                   onClick={() => setShowPwd((v) => !v)}
                   className="text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)]"
                   aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  aria-pressed={showPwd}
                 >
                   <Icons.Eye size={15} open={!showPwd} />
                 </button>
               </div>
+              {pwdError && (
+                <p id="new-password-error" className="text-[12.5px] text-[var(--cq-danger)] mt-1">
+                  {pwdError}
+                </p>
+              )}
             </div>
 
             {/* Confirmar contraseña */}
             <div className="flex flex-col gap-1">
-              <label className="flex items-center justify-between">
+              <label
+                htmlFor="confirm-password"
+                className="flex items-center justify-between"
+              >
                 <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--cq-fg-muted)]">
                   Repetir contraseña
                 </span>
-                {password2.length > 0 && !passwordMatch && (
+                {password2.length > 0 && !passwordMatch && !pwd2Error && (
                   <span className="text-[11px] text-[var(--cq-danger)]">No coinciden</span>
                 )}
               </label>
               <div className={`flex items-center gap-2 h-12 px-4 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-success)] focus-within:ring-1 focus-within:ring-[var(--cq-success)] ${
-                password2.length > 0 && !passwordMatch ? 'border-[var(--cq-danger)]' : passwordMatch ? 'border-[var(--cq-fg)]' : 'border-[var(--cq-border)]'
+                pwd2Error ? 'border-[var(--cq-danger)]' : passwordMatch ? 'border-[var(--cq-fg)]' : 'border-[var(--cq-border)]'
               }`}>
                 <Icons.Lock size={15} className="text-[var(--cq-fg-muted)] shrink-0" />
                 <input
+                  id="confirm-password"
                   type={showPwd ? 'text' : 'password'}
                   value={password2}
-                  onChange={(e) => setPassword2(e.target.value)}
+                  maxLength={72}
+                  onChange={(e) => {
+                    setPassword2(e.target.value);
+                    if (pwd2Error) setPwd2Error('');
+                  }}
+                  onBlur={onPwd2Blur}
                   placeholder="••••••••"
                   autoComplete="new-password"
+                  aria-invalid={pwd2Error ? 'true' : undefined}
+                  aria-describedby={pwd2Error ? 'confirm-password-error' : undefined}
                   className="flex-1 bg-transparent outline-none text-[14.5px] placeholder:text-[var(--cq-fg-muted)]"
                 />
                 {passwordMatch && (
                   <Icons.Check size={14} className="text-[var(--cq-success)] shrink-0" />
                 )}
               </div>
+              {pwd2Error && (
+                <p id="confirm-password-error" className="text-[12.5px] text-[var(--cq-danger)] mt-1">
+                  {pwd2Error}
+                </p>
+              )}
             </div>
 
             {error && (
@@ -137,10 +240,10 @@ export function ResetPassword() {
             <div className="pt-4">
             <button
               type="submit"
-              disabled={!passwordValid || !passwordMatch || loading}
+              disabled={saving}
               className="w-full h-12 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] font-medium hover:bg-[var(--cq-accent)] disabled:opacity-50 transition-all active:scale-[0.99] inline-flex items-center justify-center gap-2"
             >
-              {loading ? (
+              {saving ? (
                 <>
                   <span className="size-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" />
                   Guardando…

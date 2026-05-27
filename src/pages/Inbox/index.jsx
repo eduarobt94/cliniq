@@ -392,7 +392,15 @@ function NewConversationModal({ clinicId, onClose, onCreated }) {
   }, [patients, search]);
 
   async function handleCreate() {
-    if (!selected || creating) return;
+    if (creating) return;
+    if (!selected) {
+      setError('Seleccioná un paciente para iniciar la conversación.');
+      return;
+    }
+    if (!selected.phone_number) {
+      setError('Este paciente no tiene número de teléfono registrado. Agregá uno en su perfil antes de contactarlo por WhatsApp.');
+      return;
+    }
     setCreating(true);
     setError('');
 
@@ -468,9 +476,14 @@ function NewConversationModal({ clinicId, onClose, onCreated }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar paciente…"
+            aria-label="Buscar paciente"
             className="w-full bg-[var(--cq-surface-2)] border border-[var(--cq-border)] rounded-[8px] pl-8 pr-3 py-2 text-[13px] text-[var(--cq-fg)] placeholder:text-[var(--cq-fg-muted)] outline-none focus:border-[var(--cq-accent)] transition-colors"
           />
         </div>
+
+        {error && (
+          <p className="text-[12.5px] text-[var(--cq-danger)] mt-1 mb-2 leading-snug">{error}</p>
+        )}
 
         <div className="max-h-[280px] overflow-y-auto -mx-4">
           {loading ? (
@@ -480,21 +493,31 @@ function NewConversationModal({ clinicId, onClose, onCreated }) {
               {search ? 'Sin resultados.' : 'No hay pacientes.'}
             </p>
           ) : (
-            filtered.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setSelected(p)}
-                className="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-[var(--cq-surface-2)] transition-colors"
-              >
-                <Avatar name={p.full_name} size={32} />
-                <div className="min-w-0">
-                  <p className="text-[13px] font-medium text-[var(--cq-fg)] truncate">{p.full_name}</p>
-                  <p className="text-[11.5px] text-[var(--cq-fg-muted)] font-mono">
-                    {p.phone_number ?? 'Sin teléfono'}
-                  </p>
-                </div>
-              </button>
-            ))
+            filtered.map((p) => {
+              const hasPhone = !!p.phone_number;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    if (!hasPhone) {
+                      setError('Este paciente no tiene número de teléfono registrado. Agregá uno en su perfil antes de contactarlo por WhatsApp.');
+                      return;
+                    }
+                    setError('');
+                    setSelected(p);
+                  }}
+                  className={`w-full text-left px-4 py-2.5 flex items-center gap-3 transition-colors ${hasPhone ? 'hover:bg-[var(--cq-surface-2)]' : 'opacity-60 cursor-not-allowed'}`}
+                >
+                  <Avatar name={p.full_name} size={32} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-medium text-[var(--cq-fg)] truncate">{p.full_name}</p>
+                    <p className={`text-[11.5px] font-mono ${hasPhone ? 'text-[var(--cq-fg-muted)]' : 'text-[var(--cq-danger)]'}`}>
+                      {p.phone_number ?? 'Sin teléfono'}
+                    </p>
+                  </div>
+                </button>
+              );
+            })
           )}
         </div>
       </ModalShell>
@@ -695,7 +718,7 @@ function MessageBubble({ msg }) {
           className={`text-[11px] mt-1 opacity-60 flex items-center gap-1 ${isOut ? 'justify-end' : ''}`}
           style={{ color: isBot ? 'var(--cq-accent)' : undefined }}
         >
-          {formatFullTime(created_at)}
+          <time dateTime={created_at}>{formatFullTime(created_at)}</time>
           {isFailed && <span>· fallido</span>}
           {isBot && <span>· IA</span>}
           {isAudio && !isFailed && <span>· transcripto</span>}
@@ -718,6 +741,7 @@ function ConversationView({ conv, onDelete }) {
   const [inputValue,     setInputValue]     = useState('');
   const [sending,        setSending]         = useState(false);
   const [sendError,      setSendError]       = useState('');
+  const [emptyMsgError,  setEmptyMsgError]   = useState(false);
   const [showMenu,       setShowMenu]        = useState(false);
   const [confirmDelete,  setConfirmDelete]   = useState(false);
 
@@ -739,6 +763,7 @@ function ConversationView({ conv, onDelete }) {
     setAgentMode(conv.agent_mode ?? 'bot');
     setInputValue('');
     setSendError('');
+    setEmptyMsgError(false);
     inputRef.current?.focus();
   }, [conv.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -789,8 +814,12 @@ function ConversationView({ conv, onDelete }) {
   // ── Send message ────────────────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
     const text = inputValue.trim();
-    if (!text || sending) return;
-
+    if (sending) return;
+    if (!text) {
+      setEmptyMsgError(true);
+      return;
+    }
+    setEmptyMsgError(false);
     setSending(true);
     setSendError('');
     setInputValue('');
@@ -804,8 +833,10 @@ function ConversationView({ conv, onDelete }) {
         const errPayload = fnError?.context ? await fnError.context.json().catch(() => ({})) : {};
         if (errPayload?.error === 'window_expired') {
           setSendError('La ventana de 24 hs expiró. Solo podés enviar plantillas.');
+        } else if (fnError.message?.toLowerCase().includes('network') || fnError.message?.toLowerCase().includes('fetch')) {
+          setSendError('Error de conexión. No se pudo enviar el mensaje.');
         } else {
-          setSendError(errPayload?.message ?? errPayload?.error ?? fnError.message ?? 'Error al enviar.');
+          setSendError(errPayload?.message ?? errPayload?.error ?? fnError.message ?? 'No se pudo enviar el mensaje. Intentá de nuevo.');
         }
         setInputValue(text);
         // No marcar agent_mode=human si el envío falló
@@ -827,7 +858,7 @@ function ConversationView({ conv, onDelete }) {
         // On success: Realtime fires the INSERT and shows the message
       }
     } catch {
-      setSendError('Error de red. Intentá de nuevo.');
+      setSendError('Error de conexión. No se pudo enviar el mensaje.');
       setInputValue(text);
     } finally {
       setSending(false);
@@ -974,28 +1005,37 @@ function ConversationView({ conv, onDelete }) {
         )}
 
         {/* Input */}
-        <div className="flex items-center gap-2 px-3 py-3 border-t shrink-0" style={{ borderColor: 'var(--cq-border)' }}>
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={windowOpen ? 'Escribí un mensaje…' : 'Ventana de 24h cerrada'}
-            disabled={!windowOpen || sending}
-            className="flex-1 bg-[var(--cq-surface-2)] border border-[var(--cq-border)] rounded-[8px] px-3 py-2 text-[13px] text-[var(--cq-fg)] placeholder:text-[var(--cq-fg-muted)] outline-none focus:border-[var(--cq-accent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-          <button
-            onClick={handleSend}
-            disabled={!windowOpen || !inputValue.trim() || sending}
-            className="size-9 rounded-[8px] flex items-center justify-center text-white transition-opacity hover:opacity-80 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ backgroundColor: 'var(--cq-accent)' }}
-          >
-            {sending
-              ? <div className="size-4 rounded-full border-2 animate-spin" style={{ borderColor: 'white', borderTopColor: 'transparent' }} />
-              : <Icons.Arrow size={15} />
-            }
-          </button>
+        <div className="flex flex-col gap-0.5 px-3 py-3 border-t shrink-0" style={{ borderColor: 'var(--cq-border)' }}>
+          <div className="flex items-center gap-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={(e) => { setInputValue(e.target.value); if (emptyMsgError) setEmptyMsgError(false); }}
+              onKeyDown={handleKeyDown}
+              placeholder={windowOpen ? 'Escribí un mensaje…' : 'Ventana de 24h cerrada'}
+              aria-label="Mensaje"
+              disabled={!windowOpen || sending}
+              maxLength={1000}
+              className={`flex-1 bg-[var(--cq-surface-2)] border rounded-[8px] px-3 py-2 text-[13px] text-[var(--cq-fg)] placeholder:text-[var(--cq-fg-muted)] outline-none focus:border-[var(--cq-accent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${emptyMsgError ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'}`}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!windowOpen || sending}
+              title={sending ? 'Enviando…' : 'Enviar mensaje'}
+              aria-label={sending ? 'Enviando…' : 'Enviar mensaje'}
+              className="size-9 rounded-[8px] flex items-center justify-center text-white transition-opacity hover:opacity-80 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ backgroundColor: 'var(--cq-accent)' }}
+            >
+              {sending
+                ? <div className="size-4 rounded-full border-2 animate-spin" style={{ borderColor: 'white', borderTopColor: 'transparent' }} />
+                : <Icons.Arrow size={15} />
+              }
+            </button>
+          </div>
+          {emptyMsgError && (
+            <p className="text-[12.5px] text-[var(--cq-danger)] mt-1">Escribí un mensaje antes de enviar.</p>
+          )}
         </div>
       </div>
 
@@ -1082,7 +1122,8 @@ export function Inbox() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar…"
+              placeholder="Buscar conversación…"
+              aria-label="Buscar conversación"
               className="w-full bg-[var(--cq-surface-2)] border border-[var(--cq-border)] rounded-[8px] pl-8 pr-3 py-2 text-[12.5px] text-[var(--cq-fg)] placeholder:text-[var(--cq-fg-muted)] outline-none focus:border-[var(--cq-accent)] transition-colors"
             />
           </div>
@@ -1105,7 +1146,7 @@ export function Inbox() {
           ) : filteredConversations.length === 0 ? (
             <div className="px-4 py-6 text-center">
               <p className="text-[12.5px] text-[var(--cq-fg-muted)]">
-                {search ? 'Sin resultados.' : 'Sin conversaciones todavía.'}
+                {search ? 'Sin resultados para esa búsqueda.' : 'No hay conversaciones activas.'}
               </p>
             </div>
           ) : (
