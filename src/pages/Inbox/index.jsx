@@ -6,8 +6,6 @@ import { useRealtimeMessages }         from '../../hooks/useRealtimeMessages';
 import { useAIReactivation }           from '../../hooks/useAIReactivation';
 import { supabase }                    from '../../lib/supabase';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Normaliza acentos y mayúsculas para búsquedas tolerantes. "José" ≡ "jose" */
@@ -399,22 +397,16 @@ function NewConversationModal({ clinicId, onClose, onCreated }) {
     setError('');
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token ?? '';
-
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/initiate-conversation`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ patient_id: selected.id }),
+      const { data: json, error: fnError } = await supabase.functions.invoke('initiate-conversation', {
+        body: { patient_id: selected.id },
       });
 
-      const json = await res.json();
-
-      if (!res.ok) {
-        if (json?.error === 'no_phone') {
+      if (fnError) {
+        const errPayload = fnError?.context ? await fnError.context.json().catch(() => ({})) : {};
+        if (errPayload?.error === 'no_phone') {
           setError('Este paciente no tiene número de teléfono registrado.');
         } else {
-          setError(json?.message ?? json?.error ?? 'Error al crear la conversación.');
+          setError(errPayload?.message ?? errPayload?.error ?? fnError.message ?? 'Error al crear la conversación.');
         }
         setCreating(false);
         return;
@@ -804,21 +796,16 @@ function ConversationView({ conv, onDelete }) {
     setInputValue('');
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token ?? '';
-
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-whatsapp-message`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ conversation_id: conv.id, content: text }),
+      const { data: json, error: fnError } = await supabase.functions.invoke('send-whatsapp-message', {
+        body: { conversation_id: conv.id, content: text },
       });
 
-      const json = await res.json();
-      if (!res.ok) {
-        if (json?.error === 'window_expired') {
+      if (fnError) {
+        const errPayload = fnError?.context ? await fnError.context.json().catch(() => ({})) : {};
+        if (errPayload?.error === 'window_expired') {
           setSendError('La ventana de 24 hs expiró. Solo podés enviar plantillas.');
         } else {
-          setSendError(json?.message ?? json?.error ?? 'Error al enviar.');
+          setSendError(errPayload?.message ?? errPayload?.error ?? fnError.message ?? 'Error al enviar.');
         }
         setInputValue(text);
         // No marcar agent_mode=human si el envío falló

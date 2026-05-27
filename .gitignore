@@ -7,3 +7,17 @@ supabase/.temp
 # Documentos Word — no subir al repo (contienen info comercial/costos)
 docs/*.docx
 *.docx
+
+# CN-005: Additional secret file protection
+.env.production
+.env.staging
+.env.*.local
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account.json
+supabase/secrets.toml
+.secrets/
+package-lock.json

@@ -1,5 +1,6 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.104.0';
+import { verifyCronSecret } from '../_shared/security.ts';
 
 // ─── Env ──────────────────────────────────────────────────────────────────────
 const SUPABASE_URL              = Deno.env.get('SUPABASE_URL')              ?? '';
@@ -168,6 +169,11 @@ async function sendWaFreeText(
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { status: 200 });
+  }
+
+  // CN-002: Validate cron caller identity
+  if (!verifyCronSecret(req)) {
+    return new Response('Unauthorized', { status: 401 });
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);

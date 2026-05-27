@@ -1,9 +1,10 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.104.0';
 
 // ─── Env ──────────────────────────────────────────────────────────────────────
 const SUPABASE_URL              = Deno.env.get('SUPABASE_URL')               ?? '';
 const SUPABASE_KEY              = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')  ?? '';
+const CRON_SECRET               = Deno.env.get('CRON_SECRET')                ?? '';
 const VERIFY_TOKEN              = Deno.env.get('WHATSAPP_VERIFY_TOKEN')      ?? '';
 const WA_ACCESS_TOKEN           = Deno.env.get('WHATSAPP_ACCESS_TOKEN')      ?? '';
 const WA_PHONE_NUMBER_ID_GLOBAL = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')   ?? '';
@@ -336,6 +337,15 @@ serve(async (req: Request) => {
       });
     }
 
+    // CN-007: Validate phone number format to prevent PostgREST filter injection
+    const PHONE_RE = /^\+?[0-9]{7,15}$/;
+    if (!PHONE_RE.test(fromPhoneRaw)) {
+      console.warn('[webhook] Invalid phone format — possible injection attempt:', fromPhoneRaw.slice(0, 20));
+      return new Response(JSON.stringify({ ok: false, reason: 'invalid_phone' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // ── Find patient (search with and without +) — include ai_enabled ──────
     const { data: patient } = await supabase
       .from('patients')
@@ -466,7 +476,7 @@ serve(async (req: Request) => {
                 // Notify waitlist
                 fetch(`${SUPABASE_URL}/functions/v1/notify-waitlist`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}` },
+                  headers: { 'Content-Type': 'application/json', 'X-Cron-Secret': CRON_SECRET },
                   body: JSON.stringify({ clinic_id: clinicForGuest.id }),
                 }).catch(err => console.error('[webhook] Error triggering notify-waitlist (doctor reject):', err));
               }
@@ -507,7 +517,7 @@ serve(async (req: Request) => {
             try {
               await fetch(`${SUPABASE_URL}/functions/v1/ai-agent-reply`, {
                 method:  'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}` },
+                headers: { 'Content-Type': 'application/json', 'X-Cron-Secret': CRON_SECRET },
                 body:    JSON.stringify({ conversationId: guestConv.id, clinicId: clinicForGuest.id }),
               });
             } catch (err) {
@@ -687,7 +697,7 @@ serve(async (req: Request) => {
           method:  'POST',
           headers: {
             'Content-Type':  'application/json',
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'X-Cron-Secret': CRON_SECRET,
           },
           body: JSON.stringify({ clinic_id: patient.clinic_id }),
         }).catch(err => console.error('[webhook] Error triggering notify-waitlist:', err));
@@ -724,7 +734,7 @@ serve(async (req: Request) => {
           method:  'POST',
           headers: {
             'Content-Type':  'application/json',
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'X-Cron-Secret': CRON_SECRET,
           },
           body: JSON.stringify({ conversationId, clinicId: patient.clinic_id }),
         });

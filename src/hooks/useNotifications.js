@@ -6,8 +6,9 @@ const MAX_NOTIFS    = 10;
 const DAILY_KEY     = 'cq_daily_v1';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+// CN-020: Use crypto.randomUUID() instead of Math.random() for collision-resistant IDs
 function makeId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  return crypto.randomUUID();
 }
 
 function todayStr() {

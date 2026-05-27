@@ -88,10 +88,13 @@ export function Login() {
       }
       navigate('/dashboard');
     } catch (err) {
+      const isInvalidCreds = err.message === 'Invalid login credentials';
+      const isUnverified   = err.message?.toLowerCase().includes('email not confirmed')
+                          || err.code === 'email_not_confirmed';
       pushToast(
-        err.message === 'Invalid login credentials'
-          ? 'Email o contraseña incorrectos. ¿Accedés con Google? Probá el botón de arriba.'
-          : 'No se pudo iniciar sesión. Intentá de nuevo.',
+        isUnverified   ? 'Debés confirmar tu email antes de iniciar sesión. Revisá tu casilla de correo.'
+        : isInvalidCreds ? 'Email o contraseña incorrectos. ¿Accedés con Google? Probá el botón de arriba.'
+        : 'No se pudo iniciar sesión. Intentá de nuevo.',
         'error'
       );
     } finally {

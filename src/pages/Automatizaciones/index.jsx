@@ -334,7 +334,9 @@ function AutomationCard({ automation, stats, onToggle, onEdit }) {
 
   const sent     = stats?.total_sent   ?? 0;
   const ok       = stats?.ok           ?? 0;
-  const rate     = stats?.success_rate ?? (sent > 0 ? Math.round(ok / sent * 100) : null);
+  const rate     = stats?.success_rate != null
+    ? Math.min(100, Math.round(stats.success_rate))
+    : (sent > 0 ? Math.min(100, Math.round(ok / sent * 100)) : null);
   const lastSent = stats?.last_sent_at
     ? new Date(stats.last_sent_at).toLocaleString('es-UY', {
         day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',

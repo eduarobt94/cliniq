@@ -1,5 +1,6 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.104.0';
+import { verifyCronSecret } from '../_shared/security.ts';
 
 // ─── Env ──────────────────────────────────────────────────────────────────────
 const SUPABASE_URL        = Deno.env.get('SUPABASE_URL')              ?? '';
@@ -50,16 +51,16 @@ serve(async (req: Request) => {
     return new Response('ok', { status: 200 });
   }
 
+  // CN-002: Validate cron caller identity
+  if (!verifyCronSecret(req)) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   const results  = { notified: 0, skipped: 0, failed: 0 };
 
-  // Opcional: si el body trae clinic_id, limitamos la búsqueda a esa clínica
-  // (usado cuando el webhook lo llama directamente tras una cancelación)
-  let filterClinicId: string | null = null;
-  try {
-    const body = await req.json() as Record<string, string>;
-    filterClinicId = body?.clinic_id ?? null;
-  } catch { /* body vacío — ok, el cron no envía body */ }
+  // CN-010: Always scan all clinics — never trust clinic_id from request body.
+  const filterClinicId: string | null = null;
 
   try {
     // ── 1. Buscar citas canceladas sin notificar ────────────────────────────

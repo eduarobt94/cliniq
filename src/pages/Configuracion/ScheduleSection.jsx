@@ -272,6 +272,14 @@ export function ScheduleSection({ clinicId, isOwner, push }) {
   }
 
   async function handleSave() {
+    // Validate that open_time < close_time for all enabled days
+    const invalid = (localSchedule ?? []).find(
+      r => r.is_open && r.open_time >= r.close_time
+    );
+    if (invalid) {
+      push?.('El horario de apertura debe ser anterior al de cierre.', 'error');
+      return;
+    }
     setSavingSched(true);
     try {
       await saveSchedule(localSchedule);

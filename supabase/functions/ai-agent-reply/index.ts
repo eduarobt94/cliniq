@@ -1,5 +1,6 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.104.0';
+import { verifyCronSecret } from '../_shared/security.ts';
 
 // ─── Env ──────────────────────────────────────────────────────────────────────
 const SUPABASE_URL              = Deno.env.get('SUPABASE_URL')              ?? '';
@@ -179,6 +180,12 @@ serve(async (req: Request) => {
       return new Response('ok', { status: 200 });
     }
 
+    // CN-002: Validate cron caller identity
+    if (!verifyCronSecret(req)) {
+      console.error('[ai-agent-reply] Unauthorized: invalid or missing X-Cron-Secret');
+      return new Response('Unauthorized', { status: 401 });
+    }
+
     // ── A. Parse & validate input ───────────────────────────────────────────
     let body: { conversationId?: string; clinicId?: string; force?: boolean };
     try {
@@ -214,6 +221,20 @@ serve(async (req: Request) => {
 
     if (!conv) {
       console.error('[ai-agent-reply] Conversation not found:', conversationId);
+      return new Response('ok', { status: 200 });
+    }
+
+    // CN-009: Deduplication — skip if AI already replied in last 60 seconds
+    const { data: recentAiMsg } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .eq('sender', 'ai')
+      .gte('created_at', new Date(Date.now() - 60_000).toISOString())
+      .limit(1);
+
+    if (recentAiMsg && recentAiMsg.length > 0) {
+      console.log('[ai-agent-reply] Deduplicated — AI already replied recently for conversation', conversationId);
       return new Response('ok', { status: 200 });
     }
 
