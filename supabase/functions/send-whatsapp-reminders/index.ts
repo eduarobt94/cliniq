@@ -39,6 +39,10 @@ const LANG_CANDIDATES = [
   'es_AR', 'es', 'es_ES', 'es_MX', 'es_US', 'es_UY', 'es_LA',
 ];
 
+// In-memory cache: phone number → language code that succeeded last.
+// Scoped to this function invocation — avoids redundant language retries within one cron run.
+const langCache = new Map<string, string>();
+
 /**
  * Try sending a WhatsApp template with a specific language code.
  * Returns { waId, errorCode } — errorCode 132001 = wrong lang (keep trying).
@@ -110,12 +114,21 @@ async function sendWaTemplate(
   time: string,
   clinicName: string,
 ): Promise<string | null> {
+  // If we already know the correct language for this number, try it first.
+  const cached = langCache.get(to);
+  const langsToTry = cached
+    ? [cached, ...LANG_CANDIDATES.filter(l => l !== cached)]
+    : LANG_CANDIDATES;
+
   const seen = new Set<string>();
-  for (const lang of LANG_CANDIDATES) {
+  for (const lang of langsToTry) {
     if (seen.has(lang)) continue;
     seen.add(lang);
     const { waId, errorCode } = await trySendWithLang(to, phoneNumberId, patientName, time, clinicName, lang);
-    if (waId) return waId;
+    if (waId) {
+      langCache.set(to, lang); // cache successful language for this invocation
+      return waId;
+    }
     if (errorCode !== 132001) return null;
     console.log(`Lang ${lang} not found for template ${WA_TEMPLATE_NAME}, trying next...`);
   }
@@ -180,6 +193,26 @@ serve(async (req: Request) => {
   const results  = { sent: 0, failed: 0, skipped: 0 };
 
   try {
+    // ── 0. Prevent concurrent / too-recent executions ───────────────────────
+    const { data: lastRunRow } = await supabase
+      .from('ai_config')
+      .select('value')
+      .eq('key', 'reminders_last_run')
+      .maybeSingle();
+
+    const lastRunTime = lastRunRow?.value ? new Date(lastRunRow.value) : null;
+    const now = new Date();
+    if (lastRunTime && (now.getTime() - lastRunTime.getTime()) < 4 * 60 * 1000) {
+      console.log('[reminders] Too recent, skipping');
+      return new Response(JSON.stringify({ ok: true, message: 'Too recent' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    await supabase
+      .from('ai_config')
+      .upsert({ key: 'reminders_last_run', value: now.toISOString() });
+
     // ── 1. Load enabled automations ─────────────────────────────────────────
     const { data: automations, error: autoError } = await supabase
       .from('clinic_automations')
@@ -232,7 +265,11 @@ serve(async (req: Request) => {
         return r;
       }
 
-      await Promise.all((appointments ?? []).map(async (appt) => {
+      // ── Process appointments in batches to avoid WA rate limits ───────────
+      const SEND_BATCH_SIZE = 10;
+      const SEND_DELAY_MS   = 150;
+
+      async function sendReminder(appt: Record<string, unknown>): Promise<void> {
         const patient = appt.patients as Record<string, string>;
         const clinic  = appt.clinics  as Record<string, string>;
 
@@ -356,15 +393,40 @@ serve(async (req: Request) => {
           console.log(`❌ Reminder failed for ${patient.phone_number}`);
           r.failed++;
         }
-      }));
+      }
+
+      const apptList = appointments ?? [];
+      for (let i = 0; i < apptList.length; i += SEND_BATCH_SIZE) {
+        const batch = apptList.slice(i, i + SEND_BATCH_SIZE);
+        await Promise.all(batch.map(sendReminder));
+        if (i + SEND_BATCH_SIZE < apptList.length) {
+          await new Promise(resolve => setTimeout(resolve, SEND_DELAY_MS));
+        }
+      }
       return r;
     }
 
-    const perClinic = await Promise.all(automations.map(processAutomation));
-    for (const r of perClinic) {
-      results.sent    += r.sent;
-      results.failed  += r.failed;
-      results.skipped += r.skipped;
+    // ── Process automations in batches of 10 ──────────────────────────────────
+    const BATCH_SIZE    = 10;
+    const BATCH_DELAY_MS = 200;
+
+    for (let i = 0; i < automations.length; i += BATCH_SIZE) {
+      const batch = automations.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(batch.map(processAutomation));
+      for (const r of batchResults) {
+        results.sent    += r.sent;
+        results.failed  += r.failed;
+        results.skipped += r.skipped;
+      }
+      if (i + BATCH_SIZE < automations.length) {
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+      }
+    }
+
+    // ── Healthcheck ping ─────────────────────────────────────────────────────
+    const HEALTHCHECK_URL = Deno.env.get('HEALTHCHECK_REMINDERS_URL');
+    if (HEALTHCHECK_URL) {
+      fetch(HEALTHCHECK_URL).catch(() => {}); // fire-and-forget
     }
 
     return new Response(JSON.stringify({ ok: true, ...results }), {

@@ -92,114 +92,211 @@ export function useReportes(clinicId, range = '1a') {
       const since = getRangeStart(range);
 
       try {
-        const [
-          { data: appts, error: apptErr },
-          { count: msgCount },
-          { data: autoStats },
-        ] = await Promise.all([
-          supabase
-            .from('appointments')
-            .select('id, status, appointment_datetime, patient_id')
-            .eq('clinic_id', clinicId)
-            .gte('appointment_datetime', since),
-
-          supabase
-            .from('messages')
-            .select('id', { count: 'exact', head: true })
-            .eq('clinic_id', clinicId)
-            .in('direction', ['outbound', 'outbound_ai', 'system_template'])
-            .gte('created_at', since),
-
-          supabase
-            .from('v_automation_stats')
-            .select('total_sent, ok, success_rate, last_sent_at')
-            .eq('clinic_id', clinicId)
-            .maybeSingle(),
-        ]);
+        // ── Intentar usar RPC get_report_summary (server-side, evita descargar todos los appointments) ──
+        let rpcData = null;
+        try {
+          const { data: rpcResult, error: rpcErr } = await supabase.rpc('get_report_summary', {
+            p_clinic_id: clinicId,
+            p_since:     since,
+          });
+          if (rpcErr) throw rpcErr;
+          rpcData = rpcResult;
+        } catch (rpcErr) {
+          console.warn('[useReportes] RPC get_report_summary not available, falling back to direct queries:', rpcErr.message);
+        }
 
         if (cancelled) return;
-        if (apptErr) throw apptErr;
 
-        const allAppts  = appts ?? [];
-        const total     = allAppts.length;
-        const confirmed = allAppts.filter(a => a.status === 'confirmed').length;
-        const cancelled_count = allAppts.filter(a => a.status === 'cancelled').length;
-        const confirmRate = total > 0 ? Math.round(confirmed / total * 100) : 0;
+        if (rpcData) {
+          // ── Ruta RPC: mapear resultado del servidor al formato esperado por los componentes ──
+          const {
+            total        = 0,
+            confirmed    = 0,
+            cancelled: cancelled_count = 0,
+            no_shows: noShows = 0,
+            confirm_rate: confirmRate = 0,
+            no_show_rate: noShowRate  = 0,
+            by_month     = [],
+            top_patients = [],
+          } = rpcData;
 
-        // ── No-shows: past appointments still in pending/new (never confirmed/cancelled) ──
-        const noShowCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-        const noShows      = allAppts.filter(
-          a => NO_SHOW_STATUSES.has(a.status) && a.appointment_datetime < noShowCutoff,
-        ).length;
-        const noShowRate   = total > 0 ? Math.round(noShows / total * 100) : 0;
-
-        // ── Series ────────────────────────────────────────────────────────────
-        const monthSeries   = buildMonthSeries(allAppts);
-        const quarterSeries = buildQuarterSeries(monthSeries);
-
-        // ── Top 5 patients ────────────────────────────────────────────────────
-        const patientCounts = {};
-        for (const appt of allAppts) {
-          if (appt.patient_id && !SKIP_COUNT_STATUSES.has(appt.status)) {
-            patientCounts[appt.patient_id] = (patientCounts[appt.patient_id] ?? 0) + 1;
-          }
-        }
-
-        const topIds = Object.entries(patientCounts)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([id]) => id);
-
-        let topPatients = [];
-        if (topIds.length > 0) {
-          const [{ data: patients }, { data: nextAppts }] = await Promise.all([
-            supabase.from('patients').select('id, full_name').in('id', topIds),
-            supabase
-              .from('appointments')
-              .select('patient_id, appointment_datetime')
-              .eq('clinic_id', clinicId)
-              .in('patient_id', topIds)
-              .in('status', ['new', 'pending', 'confirmed'])
-              .gte('appointment_datetime', new Date().toISOString())
-              .order('appointment_datetime', { ascending: true }),
-          ]);
-
-          const nextByPatient = {};
-          for (const a of (nextAppts ?? [])) {
-            if (!nextByPatient[a.patient_id]) nextByPatient[a.patient_id] = a.appointment_datetime;
-          }
-
-          topPatients = topIds.map(id => {
-            const p     = patients?.find(p => p.id === id);
-            const nextDt = nextByPatient[id];
+          // by_month del RPC: [{ year, month, confirmed, pending, new, rescheduled, cancelled, total }]
+          // Convertir al formato que usan buildMonthSeries / buildQuarterSeries
+          const monthSeries = by_month.map(m => {
+            const key = `${m.year}-${String(m.month).padStart(2, '0')}`;
+            const d         = new Date(`${key}-15T12:00:00`);
+            const allYears  = new Set(by_month.map(r => String(r.year)));
+            const multiYear = allYears.size > 1;
+            const monthShort = d.toLocaleDateString('es-UY', { month: 'short', timeZone: UY_TZ });
             return {
-              id,
-              name:   p?.full_name ?? 'Paciente',
-              visits: patientCounts[id],
-              next:   nextDt
-                ? new Date(nextDt).toLocaleDateString('es-UY', {
-                    day: 'numeric', month: 'short', timeZone: UY_TZ,
-                  })
-                : '—',
+              key,
+              label:     multiYear ? `${monthShort} '${String(m.year).slice(2)}` : monthShort,
+              fullLabel: d.toLocaleDateString('es-UY', { month: 'long', year: 'numeric', timeZone: UY_TZ }),
+              confirmed:   m.confirmed   ?? 0,
+              pending:     m.pending     ?? 0,
+              new:         m.new         ?? 0,
+              rescheduled: m.rescheduled ?? 0,
+              cancelled:   m.cancelled   ?? 0,
+              total:       m.total       ?? 0,
             };
           });
-        }
+          const quarterSeries = buildQuarterSeries(monthSeries);
 
-        if (!cancelled) {
-          setData({
-            confirmRate,
-            cancelled: cancelled_count,
-            total,
-            confirmed,
-            noShows,
-            noShowRate,
-            msgCount:     msgCount ?? 0,
-            monthSeries,
-            quarterSeries,
-            topPatients,
-            autoStats:    autoStats ?? null,
-          });
-          setLoading(false);
+          // top_patients del RPC: [{ id, name, visits, next_appointment_datetime }]
+          const topPatients = top_patients.map(p => ({
+            id:     p.id,
+            name:   p.name ?? 'Paciente',
+            visits: p.visits,
+            next:   p.next_appointment_datetime
+              ? new Date(p.next_appointment_datetime).toLocaleDateString('es-UY', {
+                  day: 'numeric', month: 'short', timeZone: UY_TZ,
+                })
+              : '—',
+          }));
+
+          // msgCount y autoStats siguen necesitando queries separadas
+          const [{ count: msgCount }, { data: autoStats }] = await Promise.all([
+            supabase
+              .from('messages')
+              .select('id', { count: 'exact', head: true })
+              .eq('clinic_id', clinicId)
+              .in('direction', ['outbound', 'outbound_ai', 'system_template'])
+              .gte('created_at', since),
+            supabase
+              .from('v_automation_stats')
+              .select('total_sent, ok, success_rate, last_sent_at')
+              .eq('clinic_id', clinicId)
+              .maybeSingle(),
+          ]);
+
+          if (!cancelled) {
+            setData({
+              confirmRate,
+              cancelled: cancelled_count,
+              total,
+              confirmed,
+              noShows,
+              noShowRate,
+              msgCount:     msgCount ?? 0,
+              monthSeries,
+              quarterSeries,
+              topPatients,
+              autoStats:    autoStats ?? null,
+            });
+            setLoading(false);
+          }
+
+        } else {
+          // ── Fallback: queries directas (mismo código original) ──
+          const [
+            { data: appts, error: apptErr },
+            { count: msgCount },
+            { data: autoStats },
+          ] = await Promise.all([
+            supabase
+              .from('appointments')
+              .select('id, status, appointment_datetime, patient_id')
+              .eq('clinic_id', clinicId)
+              .gte('appointment_datetime', since),
+
+            supabase
+              .from('messages')
+              .select('id', { count: 'exact', head: true })
+              .eq('clinic_id', clinicId)
+              .in('direction', ['outbound', 'outbound_ai', 'system_template'])
+              .gte('created_at', since),
+
+            supabase
+              .from('v_automation_stats')
+              .select('total_sent, ok, success_rate, last_sent_at')
+              .eq('clinic_id', clinicId)
+              .maybeSingle(),
+          ]);
+
+          if (cancelled) return;
+          if (apptErr) throw apptErr;
+
+          const allAppts  = appts ?? [];
+          const total     = allAppts.length;
+          const confirmed = allAppts.filter(a => a.status === 'confirmed').length;
+          const cancelled_count = allAppts.filter(a => a.status === 'cancelled').length;
+          const confirmRate = total > 0 ? Math.round(confirmed / total * 100) : 0;
+
+          // ── No-shows: past appointments still in pending/new (never confirmed/cancelled) ──
+          const noShowCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+          const noShows      = allAppts.filter(
+            a => NO_SHOW_STATUSES.has(a.status) && a.appointment_datetime < noShowCutoff,
+          ).length;
+          const noShowRate   = total > 0 ? Math.round(noShows / total * 100) : 0;
+
+          // ── Series ────────────────────────────────────────────────────────────
+          const monthSeries   = buildMonthSeries(allAppts);
+          const quarterSeries = buildQuarterSeries(monthSeries);
+
+          // ── Top 5 patients ────────────────────────────────────────────────────
+          const patientCounts = {};
+          for (const appt of allAppts) {
+            if (appt.patient_id && !SKIP_COUNT_STATUSES.has(appt.status)) {
+              patientCounts[appt.patient_id] = (patientCounts[appt.patient_id] ?? 0) + 1;
+            }
+          }
+
+          const topIds = Object.entries(patientCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([id]) => id);
+
+          let topPatients = [];
+          if (topIds.length > 0) {
+            const [{ data: patients }, { data: nextAppts }] = await Promise.all([
+              supabase.from('patients').select('id, full_name').in('id', topIds),
+              supabase
+                .from('appointments')
+                .select('patient_id, appointment_datetime')
+                .eq('clinic_id', clinicId)
+                .in('patient_id', topIds)
+                .in('status', ['new', 'pending', 'confirmed'])
+                .gte('appointment_datetime', new Date().toISOString())
+                .order('appointment_datetime', { ascending: true }),
+            ]);
+
+            const nextByPatient = {};
+            for (const a of (nextAppts ?? [])) {
+              if (!nextByPatient[a.patient_id]) nextByPatient[a.patient_id] = a.appointment_datetime;
+            }
+
+            topPatients = topIds.map(id => {
+              const p     = patients?.find(p => p.id === id);
+              const nextDt = nextByPatient[id];
+              return {
+                id,
+                name:   p?.full_name ?? 'Paciente',
+                visits: patientCounts[id],
+                next:   nextDt
+                  ? new Date(nextDt).toLocaleDateString('es-UY', {
+                      day: 'numeric', month: 'short', timeZone: UY_TZ,
+                    })
+                  : '—',
+              };
+            });
+          }
+
+          if (!cancelled) {
+            setData({
+              confirmRate,
+              cancelled: cancelled_count,
+              total,
+              confirmed,
+              noShows,
+              noShowRate,
+              msgCount:     msgCount ?? 0,
+              monthSeries,
+              quarterSeries,
+              topPatients,
+              autoStats:    autoStats ?? null,
+            });
+            setLoading(false);
+          }
         }
 
       } catch (err) {

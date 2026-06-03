@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.104.0';
+import { createLogger } from '../_shared/logger.ts';
 
 // ─── Env ──────────────────────────────────────────────────────────────────────
 const SUPABASE_URL              = Deno.env.get('SUPABASE_URL')               ?? '';
@@ -222,9 +223,40 @@ serve(async (req: Request) => {
 
   // ── POST: Incoming message ──────────────────────────────────────────────────
   if (req.method === 'POST') {
+    // ── 1d: Trace ID + structured logger ──────────────────────────────────────
+    const traceId = crypto.randomUUID().slice(0, 8);
+    const log = createLogger(traceId);
+
+    // ── 1c: HMAC validation (backward compatible) ─────────────────────────────
+    const signature  = req.headers.get('X-Hub-Signature-256');
+    const APP_SECRET = Deno.env.get('WHATSAPP_APP_SECRET') ?? '';
+
     let body: Record<string, unknown>;
-    try { body = await req.json(); }
-    catch { return new Response('Bad Request', { status: 400 }); }
+    if (APP_SECRET && signature) {
+      let bodyBytes: ArrayBuffer;
+      try { bodyBytes = await req.arrayBuffer(); }
+      catch { return new Response('Bad Request', { status: 400 }); }
+
+      const key = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode(APP_SECRET),
+        { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+      );
+      const mac      = await crypto.subtle.sign('HMAC', key, bodyBytes);
+      const computed = 'sha256=' + Array.from(new Uint8Array(mac))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+
+      if (computed !== signature) {
+        log.warn('Invalid HMAC signature');
+        return new Response('Forbidden', { status: 403 });
+      }
+      try { body = JSON.parse(new TextDecoder().decode(bodyBytes)); }
+      catch { return new Response('Bad Request', { status: 400 }); }
+    } else {
+      try { body = await req.json(); }
+      catch { return new Response('Bad Request', { status: 400 }); }
+    }
+
+    log.info('POST received');
 
     const entry    = (body?.entry  as unknown[])?.[0] as Record<string, unknown>;
     const changes  = (entry?.changes as unknown[])?.[0] as Record<string, unknown>;
@@ -244,6 +276,23 @@ serve(async (req: Request) => {
     const fromPhoneRaw       = message.from as string;
     const fromPhone          = normalizePhone(fromPhoneRaw);  // always +prefix
     const msgType            = message.type as string;
+
+    // ── 1b: Dedup check BEFORE any content processing (audio transcription, etc.) ──
+    {
+      const supabaseDedup = createClient(SUPABASE_URL, SUPABASE_KEY);
+      const { data: existingLog } = await supabaseDedup
+        .from('whatsapp_message_log')
+        .select('id')
+        .eq('wa_message_id', waMessageId)
+        .maybeSingle();
+
+      if (existingLog) {
+        log.info('Duplicate message — skipping', { waMessageId });
+        return new Response(JSON.stringify({ ok: true, dup: true }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
 
     // ── Extract intent ────────────────────────────────────────────────────
     let intent = '';
@@ -323,19 +372,6 @@ serve(async (req: Request) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-    // ── Dedup ─────────────────────────────────────────────────────────────
-    const { data: existingLog } = await supabase
-      .from('whatsapp_message_log')
-      .select('id')
-      .eq('wa_message_id', waMessageId)
-      .maybeSingle();
-
-    if (existingLog) {
-      return new Response(JSON.stringify({ ok: true, dup: true }), {
-        status: 200, headers: { 'Content-Type': 'application/json' },
-      });
-    }
 
     // CN-007: Validate phone number format to prevent PostgREST filter injection
     const PHONE_RE = /^\+?[0-9]{7,15}$/;
@@ -514,15 +550,12 @@ serve(async (req: Request) => {
           });
           // El agente da la bienvenida y registra al nuevo paciente
           if (shouldAgentReply(guestConv, null)) {
-            try {
-              await fetch(`${SUPABASE_URL}/functions/v1/ai-agent-reply`, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Cron-Secret': CRON_SECRET },
-                body:    JSON.stringify({ conversationId: guestConv.id, clinicId: clinicForGuest.id }),
-              });
-            } catch (err) {
-              console.error('[webhook] Error invoking ai-agent-reply for guest:', err);
-            }
+            log.info('Firing ai-agent-reply (guest)', { conversationId: guestConv.id });
+            fetch(`${SUPABASE_URL}/functions/v1/ai-agent-reply`, {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Cron-Secret': CRON_SECRET },
+              body:    JSON.stringify({ conversationId: guestConv.id, clinicId: clinicForGuest.id }),
+            }).catch(err => log.error('[webhook] ai-agent-reply fire-and-forget error (guest)', { err: String(err) }));
           }
         }
       }
@@ -724,23 +757,18 @@ serve(async (req: Request) => {
     }
 
     // ── AI Handoff: determinar si el agente de IA debe responder ───────────
-    // Solo se llega acá cuando NO hubo respuesta del bot de turnos (mensaje genérico).
-    // Llamamos ai-agent-reply de forma sincrónica pero sin bloquear: respondemos a Meta
-    // primero y el agente corre dentro del mismo ciclo de vida de esta invocación.
+    // Fire-and-forget: respondemos a Meta inmediatamente (< 20 s) y el agente
+    // corre de forma asíncrona — previene timeout de Meta.
     if (conversationId && shouldAgentReply(convData, patient)) {
-      console.log('[webhook] Invocando ai-agent-reply para conv:', conversationId);
-      try {
-        await fetch(`${SUPABASE_URL}/functions/v1/ai-agent-reply`, {
-          method:  'POST',
-          headers: {
-            'Content-Type':  'application/json',
-            'X-Cron-Secret': CRON_SECRET,
-          },
-          body: JSON.stringify({ conversationId, clinicId: patient.clinic_id }),
-        });
-      } catch (err) {
-        console.error('[webhook] Error invocando ai-agent-reply:', err);
-      }
+      log.info('Firing ai-agent-reply', { conversationId, clinicId: patient.clinic_id });
+      fetch(`${SUPABASE_URL}/functions/v1/ai-agent-reply`, {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'X-Cron-Secret': CRON_SECRET,
+        },
+        body: JSON.stringify({ conversationId, clinicId: patient.clinic_id }),
+      }).catch(err => log.error('ai-agent-reply fire-and-forget error', { err: String(err), conversationId }));
     }
 
     return new Response(JSON.stringify({ ok: true }), {

@@ -43,15 +43,15 @@ export function useAgendaRange(startDateStr, endDateStr) {
   }, [fetchAppointments]);
 
   useEffect(() => {
-    if (!user || !clinic?.id) return;
-    const channel = supabase.channel(`agenda-range-${clinic.id}-${startDateStr}-${endDateStr}`);
+    if (!clinic?.id) return;
+    const channel = supabase.channel(`agenda-${clinic.id}`);
     channel.on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'appointments', filter: `clinic_id=eq.${clinic.id}` },
-      fetchAppointments,
+      () => fetchAppointments(),
     ).subscribe();
     return () => supabase.removeChannel(channel);
-  }, [user, clinic?.id, startDateStr, endDateStr, fetchAppointments]);
+  }, [clinic?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { appointments, loading, error, refetch: fetchAppointments };
 }

@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
-const OUTBOUND = new Set(['outbound', 'outbound_ai', 'system_template']);
-
 /**
  * For a list of conversation IDs, returns a Map<conversationId, number>
  * where the number is how many consecutive inbound (patient) messages sit
  * at the end of the thread — i.e. messages the doctor hasn't replied to yet.
  *
- * Uses a single query (all conversations at once) and computes client-side.
+ * Uses the server-side RPC get_unread_counts to avoid downloading all messages.
+ * Falls back to an empty map if the RPC is not yet available (migration pending).
  * Re-runs whenever conversationIds changes.
  */
 const EMPTY_IDS = [];
@@ -21,32 +20,27 @@ export function useUnreadCounts(conversationIds = EMPTY_IDS) {
     let cancelled = false;
 
     async function load() {
-      const { data } = await supabase
-        .from('messages')
-        .select('conversation_id, direction, created_at')
-        .in('conversation_id', conversationIds)
-        .order('created_at', { ascending: true });
+      try {
+        const { data, error } = await supabase.rpc('get_unread_counts', {
+          p_conversation_ids: conversationIds,
+        });
 
-      if (cancelled || !data) return;
+        if (error) throw error;
+        if (cancelled || !data) return;
 
-      // Group by conversation
-      const byConv = {};
-      for (const msg of data) {
-        (byConv[msg.conversation_id] ??= []).push(msg);
-      }
-
-      const map = new Map();
-      for (const [convId, msgs] of Object.entries(byConv)) {
-        // Walk backwards from the end; count inbound until we hit an outbound
-        let n = 0;
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          if (OUTBOUND.has(msgs[i].direction)) break;
-          if (msgs[i].direction === 'inbound') n++;
+        // data: [{ conversation_id: '...', unread_count: 3 }, ...]
+        const map = new Map();
+        for (const row of data) {
+          map.set(row.conversation_id, row.unread_count);
         }
-        map.set(convId, n);
+        setCounts(map);
+      } catch (err) {
+        console.warn('[useUnreadCounts] RPC not available, falling back:', err.message);
+        if (!cancelled) {
+          // Fallback: mostrar 0 — no calcular en cliente para evitar descargar todos los mensajes
+          setCounts(new Map());
+        }
       }
-
-      setCounts(map);
     }
 
     load();

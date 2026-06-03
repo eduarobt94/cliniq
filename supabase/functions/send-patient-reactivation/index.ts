@@ -79,6 +79,8 @@ serve(async (req: Request) => {
       const reactivationCutoff = inactiveSince.toISOString();
 
       // 2+3. Fetch recent and all-time appointments in parallel
+      // anyAppts is limited to the last year to avoid loading unbounded history
+      const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
       const [{ data: recentAppts }, { data: anyAppts }] = await Promise.all([
         supabase
           .from('appointments')
@@ -91,6 +93,7 @@ serve(async (req: Request) => {
           .from('appointments')
           .select('patient_id')
           .eq('clinic_id', auto.clinic_id)
+          .gte('appointment_datetime', oneYearAgo)
           .not('patient_id', 'is', null),
       ]);
 
@@ -137,7 +140,11 @@ serve(async (req: Request) => {
         return r;
       }
 
-      await Promise.all(eligible.map(async (patient) => {
+      // Process eligible patients in batches to avoid WA rate limits
+      const SEND_BATCH_SIZE = 10;
+      const SEND_DELAY_MS   = 150;
+
+      async function sendReactivation(patient: typeof eligible[number]): Promise<void> {
         const p = patient as Record<string, string>;
 
         // 7. Render message
@@ -199,7 +206,15 @@ serve(async (req: Request) => {
           console.log(`❌ Reactivation failed for ${p.phone_number} (may be outside 24h window)`);
           r.failed++;
         }
-      }));
+      }
+
+      for (let i = 0; i < eligible.length; i += SEND_BATCH_SIZE) {
+        const batch = eligible.slice(i, i + SEND_BATCH_SIZE);
+        await Promise.all(batch.map(sendReactivation));
+        if (i + SEND_BATCH_SIZE < eligible.length) {
+          await new Promise(resolve => setTimeout(resolve, SEND_DELAY_MS));
+        }
+      }
       return r;
     }));
 
@@ -207,6 +222,12 @@ serve(async (req: Request) => {
       results.sent    += r.sent;
       results.failed  += r.failed;
       results.skipped += r.skipped;
+    }
+
+    // ── Healthcheck ping ─────────────────────────────────────────────────────
+    const HEALTHCHECK_URL = Deno.env.get('HEALTHCHECK_REACTIVATION_URL');
+    if (HEALTHCHECK_URL) {
+      fetch(HEALTHCHECK_URL).catch(() => {}); // fire-and-forget
     }
 
     return new Response(JSON.stringify({ ok: true, ...results }), {

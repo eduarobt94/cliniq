@@ -13,7 +13,11 @@ function render(template: string, vars: Record<string, string>): string {
 }
 
 // ─── Send free-text WhatsApp message ─────────────────────────────────────────
-async function sendWaText(to: string, text: string, phoneNumberId: string): Promise<string | null> {
+async function sendWaText(
+  to: string,
+  text: string,
+  phoneNumberId: string,
+): Promise<{ waId: string | null; errorCode: number | null }> {
   const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' },
@@ -27,12 +31,13 @@ async function sendWaText(to: string, text: string, phoneNumberId: string): Prom
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    console.error(`WA send error to ${to}:`, JSON.stringify(err));
-    return null;
+    const errBody = await res.json().catch(() => ({})) as Record<string, unknown>;
+    const code = (errBody?.error as Record<string, unknown>)?.code as number | null ?? null;
+    console.error(`WA send error to ${to}:`, JSON.stringify(errBody));
+    return { waId: null, errorCode: code };
   }
   const data = await res.json();
-  return data?.messages?.[0]?.id ?? null;
+  return { waId: data?.messages?.[0]?.id ?? null, errorCode: null };
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -93,7 +98,11 @@ serve(async (req: Request) => {
         return r;
       }
 
-      await Promise.all((appts ?? []).map(async (appt) => {
+      // Process appointments in batches to avoid WA rate limits
+      const SEND_BATCH_SIZE = 10;
+      const SEND_DELAY_MS   = 150;
+
+      async function sendReviewRequest(appt: Record<string, unknown>): Promise<void> {
         const patient = appt.patients as Record<string, string>;
         const clinic  = appt.clinics  as Record<string, string>;
 
@@ -128,7 +137,18 @@ serve(async (req: Request) => {
         }
 
         // 5. Send
-        const waId = await sendWaText(patient.phone_number, text, phoneNumberId);
+        const { waId, errorCode } = await sendWaText(patient.phone_number, text, phoneNumberId);
+
+        // 5a. Handle 131047: 24-h window expired — mark as sent to avoid retries, count as skipped
+        if (!waId && errorCode === 131047) {
+          console.log(`[review-requests] Window expired for appt ${appt.id}, skipping`);
+          await supabase
+            .from('appointments')
+            .update({ review_request_sent_at: new Date().toISOString() })
+            .eq('id', appt.id);
+          r.skipped++;
+          return;
+        }
 
         // 6+7+8. Record message, mark appointment, audit log — all independent, run in parallel
         await Promise.all([
@@ -164,7 +184,16 @@ serve(async (req: Request) => {
           console.log(`❌ Review request failed for ${patient.phone_number}`);
           r.failed++;
         }
-      }));
+      }
+
+      const apptList = appts ?? [];
+      for (let i = 0; i < apptList.length; i += SEND_BATCH_SIZE) {
+        const batch = apptList.slice(i, i + SEND_BATCH_SIZE);
+        await Promise.all(batch.map(sendReviewRequest));
+        if (i + SEND_BATCH_SIZE < apptList.length) {
+          await new Promise(resolve => setTimeout(resolve, SEND_DELAY_MS));
+        }
+      }
       return r;
     }));
 
@@ -172,6 +201,12 @@ serve(async (req: Request) => {
       results.sent    += r.sent;
       results.failed  += r.failed;
       results.skipped += r.skipped;
+    }
+
+    // ── Healthcheck ping ─────────────────────────────────────────────────────
+    const HEALTHCHECK_URL = Deno.env.get('HEALTHCHECK_REVIEWS_URL');
+    if (HEALTHCHECK_URL) {
+      fetch(HEALTHCHECK_URL).catch(() => {}); // fire-and-forget
     }
 
     return new Response(JSON.stringify({ ok: true, ...results }), {

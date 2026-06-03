@@ -16,9 +16,10 @@ export function useRealtimeMessages(conversationId) {
       .from('messages')
       .select('*')
       .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: false })  // DESC para obtener los más recientes
+      .limit(100);
     if (err) { setError(err.message); }
-    else { pendingIds.current.clear(); setMessages(data ?? []); }
+    else { pendingIds.current.clear(); setMessages([...(data ?? [])].reverse()); }  // revertir a orden cronológico (sin mutar array original)
     setLoading(false);
   }, [conversationId]);
 

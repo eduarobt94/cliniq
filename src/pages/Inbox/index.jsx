@@ -1,4 +1,5 @@
-﻿import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+﻿import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Avatar, Badge, Icons }        from '../../components/ui';
 import { useAuth }                     from '../../context/AuthContext';
 import { useConversations }            from '../../hooks/useConversations';
@@ -97,11 +98,11 @@ function AgentModeBadge({ conv }) {
 }
 
 // ─── Chat list item ───────────────────────────────────────────────────────────
-function ChatListItem({ conv, isActive, onClick }) {
+const ChatListItem = memo(function ChatListItem({ conv, isActive, onSelect }) {
   const name = conv.patients?.full_name ?? conv.phone_number;
   return (
     <button
-      onClick={onClick}
+      onClick={() => onSelect(conv.id)}
       className={`w-full text-left px-3 py-3 flex items-start gap-3 hover:bg-[var(--cq-surface-2)] transition-colors ${
         isActive ? 'bg-[var(--cq-surface-2)]' : ''
       }`}
@@ -123,7 +124,7 @@ function ChatListItem({ conv, isActive, onClick }) {
       </div>
     </button>
   );
-}
+});
 
 // ─── AI Toggle switch ─────────────────────────────────────────────────────────
 function AIToggle({ enabled, onChange, disabled }) {
@@ -359,37 +360,40 @@ function NewConversationModal({ clinicId, onClose, onCreated }) {
   const [patients, setPatients]     = useState([]);
   const [search, setSearch]         = useState('');
   const [selected, setSelected]     = useState(null);
-  const [loading, setLoading]       = useState(true);
+  const [loading, setLoading]       = useState(false);
   const [creating, setCreating]     = useState(false);
   const [error, setError]           = useState('');
   const [result, setResult]         = useState(null);
-  const searchRef = useRef(null);
+  const searchRef    = useRef(null);
+  const debounceRef  = useRef(null);
 
+  useEffect(() => { searchRef.current?.focus(); }, []);
+
+  // Búsqueda bajo demanda con debounce — solo cuando hay ≥2 chars
   useEffect(() => {
-    async function load() {
+    clearTimeout(debounceRef.current);
+    const q = search.trim();
+    if (q.length < 2) {
+      setPatients([]);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
       setLoading(true);
+      const safeSearch = q.replace(/[%_]/g, '\\$&');
       const { data } = await supabase
         .from('patients')
         .select('id, full_name, phone_number')
         .eq('clinic_id', clinicId)
-        .order('full_name', { ascending: true });
+        .or(`full_name.ilike.%${safeSearch}%,phone_number.ilike.%${safeSearch}%`)
+        .order('full_name', { ascending: true })
+        .limit(50);
       setPatients(data ?? []);
       setLoading(false);
-    }
-    load();
-  }, [clinicId]);
+    }, 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [search, clinicId]);
 
-  useEffect(() => { searchRef.current?.focus(); }, []);
-
-  const filtered = useMemo(() => {
-    const q = norm(search.trim());
-    if (!q) return patients;
-    return patients.filter(
-      (p) =>
-        norm(p.full_name).includes(q) ||
-        (p.phone_number ?? '').includes(q),
-    );
-  }, [patients, search]);
+  const filtered = patients;
 
   async function handleCreate() {
     if (creating) return;
@@ -490,7 +494,9 @@ function NewConversationModal({ clinicId, onClose, onCreated }) {
             <SkeletonList />
           ) : filtered.length === 0 ? (
             <p className="text-center text-[12.5px] text-[var(--cq-fg-muted)] py-6">
-              {search ? 'Sin resultados.' : 'No hay pacientes.'}
+              {search.trim().length < 2
+                ? 'Escribí al menos 2 caracteres para buscar.'
+                : 'Sin resultados.'}
             </p>
           ) : (
             filtered.map((p) => {
@@ -624,7 +630,7 @@ function ModalShell({ children, title, onClose }) {
 }
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
-function MessageBubble({ msg }) {
+const MessageBubble = memo(function MessageBubble({ msg }) {
   const { direction, sender_type, content, status, created_at, message_type } = msg;
 
   // Internal system notice — centered text, no bubble
@@ -646,7 +652,7 @@ function MessageBubble({ msg }) {
   const isFailed = status === 'failed';
   const isAudio  = message_type === 'audio';
   // True if the transcription placeholder means no text was recovered
-  const isTranscriptionFailed = isAudio && content.startsWith('[Nota de voz');
+  const isTranscriptionFailed = isAudio && (content ?? '').startsWith('[Nota de voz');
 
   return (
     <div className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
@@ -726,10 +732,10 @@ function MessageBubble({ msg }) {
       </div>
     </div>
   );
-}
+});
 
 // ─── Conversation view ────────────────────────────────────────────────────────
-function ConversationView({ conv, onDelete }) {
+const ConversationView = memo(function ConversationView({ conv, onDelete }) {
   const { messages, loading } = useRealtimeMessages(conv.id);
 
   // Local state for AI toggle — optimistic
@@ -745,9 +751,10 @@ function ConversationView({ conv, onDelete }) {
   const [showMenu,       setShowMenu]        = useState(false);
   const [confirmDelete,  setConfirmDelete]   = useState(false);
 
-  const bottomRef = useRef(null);
-  const inputRef  = useRef(null);
-  const menuRef   = useRef(null);
+  const bottomRef           = useRef(null);
+  const inputRef            = useRef(null);
+  const menuRef             = useRef(null);
+  const messagesContainerRef = useRef(null);
 
   const name       = conv.patients?.full_name ?? conv.phone_number;
   const windowOpen = isWindowOpen(messages);
@@ -777,7 +784,30 @@ function ConversationView({ conv, onDelete }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [showMenu]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  // Scroll al cambiar de conversación — inmediato
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+  }, [conv.id]);
+
+  // Scroll condicional al recibir mensajes nuevos
+  useEffect(() => {
+    if (!messages || messages.length === 0) return;
+
+    const container = messagesContainerRef.current;
+    if (!container) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < 200;
+    const lastMsg   = messages[messages.length - 1];
+    const isOutbound = lastMsg?.direction !== 'inbound';
+
+    if (isNearBottom || isOutbound) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   // ── AI Toggle handler ───────────────────────────────────────────────────────
   const handleAIToggle = useCallback(async (newVal) => {
@@ -865,9 +895,9 @@ function ConversationView({ conv, onDelete }) {
     }
   }, [inputValue, sending, conv.id, conv.patient_id, aiEnabled]);
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  };
+  }, [handleSend]);
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -970,7 +1000,7 @@ function ConversationView({ conv, onDelete }) {
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto flex flex-col gap-2 p-4">
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto flex flex-col gap-2 p-4">
           {loading ? (
             <div className="flex-1 flex items-center justify-center">
               <div
@@ -1050,12 +1080,21 @@ function ConversationView({ conv, onDelete }) {
       )}
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Only re-render when something relevant to the view actually changes
+  return (
+    prevProps.conv?.id              === nextProps.conv?.id              &&
+    prevProps.conv?.ai_enabled      === nextProps.conv?.ai_enabled      &&
+    prevProps.conv?.agent_mode      === nextProps.conv?.agent_mode      &&
+    prevProps.conv?.agent_context   === nextProps.conv?.agent_context   &&
+    prevProps.onDelete              === nextProps.onDelete
+  );
+});
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export function Inbox() {
   const { clinic }                                                     = useAuth();
-  const { conversations, loading, refetch, deleteConversation }        = useConversations(clinic?.id);
+  const { conversations, loading, refetch, deleteConversation, hasMore, totalCount } = useConversations(clinic?.id);
   const { showBanner, affectedCount, handleReactivate, handleDismiss, reactivating } =
     useAIReactivation(clinic?.id, conversations);
 
@@ -1074,9 +1113,16 @@ export function Inbox() {
     );
   }, [conversations, search]);
 
-  const firstId      = conversations[0]?.id ?? null;
-  const activeId     = selectedId ?? firstId;
-  const selectedConv = conversations.find((c) => c.id === activeId) ?? null;
+  const firstConvId  = useMemo(() => conversations[0]?.id ?? null, [conversations]);
+  const activeId     = selectedId ?? firstConvId;
+  const selectedConv = useMemo(
+    () => conversations.find((c) => c.id === activeId) ?? null,
+    [conversations, activeId],
+  );
+
+  const handleSelectConv = useCallback((id) => {
+    setSelectedId(id);
+  }, []); // setSelectedId es estable — sin dependencias
 
   const handleConversationCreated = useCallback((conv) => {
     refetch();
@@ -1087,6 +1133,15 @@ export function Inbox() {
     const err = await deleteConversation(convId);
     if (!err && selectedId === convId) setSelectedId(null);
   }, [deleteConversation, selectedId]);
+
+  // Virtualizer for the conversation list
+  const convListRef = useRef(null);
+  const convVirtualizer = useVirtualizer({
+    count: filteredConversations.length,
+    getScrollElement: () => convListRef.current,
+    estimateSize: () => 72,
+    overscan: 5,
+  });
 
   return (
     <div
@@ -1140,7 +1195,7 @@ export function Inbox() {
         )}
 
         {/* List */}
-        <div className="flex-1 overflow-y-auto">
+        <div ref={convListRef} className="flex-1 overflow-y-auto">
           {loading ? (
             <SkeletonList />
           ) : filteredConversations.length === 0 ? (
@@ -1150,14 +1205,31 @@ export function Inbox() {
               </p>
             </div>
           ) : (
-            filteredConversations.map((conv) => (
-              <ChatListItem
-                key={conv.id}
-                conv={conv}
-                isActive={activeId === conv.id}
-                onClick={() => setSelectedId(conv.id)}
-              />
-            ))
+            <div style={{ height: `${convVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+              {convVirtualizer.getVirtualItems().map((virtualRow) => (
+                <div
+                  key={virtualRow.key}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <ChatListItem
+                    conv={filteredConversations[virtualRow.index]}
+                    isActive={activeId === filteredConversations[virtualRow.index].id}
+                    onSelect={handleSelectConv}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          {!loading && hasMore && (
+            <p className="text-[11px] text-[var(--cq-fg-muted)] text-center px-3 py-2">
+              Mostrando las últimas 50 conversaciones
+            </p>
           )}
         </div>
       </div>

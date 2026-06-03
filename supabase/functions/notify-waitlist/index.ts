@@ -103,7 +103,7 @@ serve(async (req: Request) => {
       const r = { notified: 0, skipped: 0, failed: 0 };
       const clinic = appt.clinics as Record<string, string>;
 
-      // Buscar entradas de lista de espera para esta clínica
+      // Buscar la primera entrada de lista de espera para esta clínica (FIFO)
       const { data: waitlistEntries, error: wlErr } = await supabase
         .from('waiting_list')
         .select(`
@@ -115,7 +115,9 @@ serve(async (req: Request) => {
           patients!inner ( id, full_name, phone_number )
         `)
         .eq('clinic_id', appt.clinic_id)
-        .eq('status', 'waiting');
+        .eq('status', 'waiting')
+        .order('created_at', { ascending: true })
+        .limit(1);
 
       if (wlErr) {
         console.error(`Error loading waiting list for clinic ${appt.clinic_id}:`, wlErr);

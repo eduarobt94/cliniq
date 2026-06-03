@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { Sentry } from '../lib/sentry';
 
 /**
  * Loads and subscribes to the conversations list for a clinic.
@@ -13,13 +14,14 @@ export function useConversations(clinicId) {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState(null);
+  const [totalCount, setTotalCount]       = useState(0);
 
   const fetch = useCallback(async () => {
     if (!clinicId) return;
     setLoading(true);
     setError(null);
 
-    const { data, error: err } = await supabase
+    const { data, error: err, count } = await supabase
       .from('conversations')
       .select(`
         id,
@@ -34,14 +36,20 @@ export function useConversations(clinicId) {
         agent_last_human_reply_at,
         created_at,
         patients ( id, full_name, phone_number, ai_enabled, last_human_interaction )
-      `)
+      `, { count: 'exact' })
       .eq('clinic_id', clinicId)
-      .order('last_message_at', { ascending: false, nullsFirst: false });
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .range(0, 49);  // primeras 50 conversaciones — paginación inicial
 
     if (err) {
+      Sentry.captureException(err, {
+        tags: { hook: 'useConversations', clinicId },
+        extra: { errorMessage: err.message },
+      });
       setError(err.message);
     } else {
       setConversations(data ?? []);
+      setTotalCount(count ?? 0);
     }
     setLoading(false);
   }, [clinicId]);
@@ -79,7 +87,7 @@ export function useConversations(clinicId) {
                   }
                 : c,
             );
-            return updated.toSorted((a, b) => {
+            return [...updated].sort((a, b) => {
               if (!a.last_message_at) return 1;
               if (!b.last_message_at) return -1;
               return new Date(b.last_message_at) - new Date(a.last_message_at);
@@ -122,5 +130,5 @@ export function useConversations(clinicId) {
     return err;
   }, []);
 
-  return { conversations, loading, error, refetch: fetch, deleteConversation };
+  return { conversations, loading, error, refetch: fetch, deleteConversation, totalCount, hasMore: totalCount > 50 };
 }

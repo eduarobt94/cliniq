@@ -66,11 +66,15 @@ export function useWaitingList(clinicId, statusFilter = 'waiting') {
     return () => supabase.removeChannel(channel);
   }, [clinicId, fetchEntries]);
 
-  return { entries, loading, error, refetch: fetchEntries };
+  const waitingCount = entries.filter(e => e.status === 'waiting').length;
+  const count = waitingCount > 0 ? Math.min(waitingCount, 99) : null;
+
+  return { entries, loading, error, refetch: fetchEntries, count };
 }
 
 /**
  * Returns the count of 'waiting' entries for badge display.
+ * Uses its own channel (different name) to avoid collision with useWaitingList.
  */
 export function useWaitlistBadge(clinicId) {
   const [count, setCount] = useState(null);

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import * as authService from '../lib/authService';
 
@@ -161,24 +161,24 @@ export function AuthProvider({ children }) {
   }, [user?.id, user?.email_confirmed_at, passwordRecoveryMode, loadMembership]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── signUp ────────────────────────────────────────────────────────────────
-  async function signup(email, password, clinicName, firstName, lastName) {
+  const signup = useCallback(async (email, password, clinicName, firstName, lastName) => {
     const result = await authService.signUp(email, password, clinicName, firstName, lastName);
     if (result.needsOnboarding) setNeedsOnboarding(true);
     return result;
-  }
+  }, []);
 
   // ── login ─────────────────────────────────────────────────────────────────
-  async function login(email, password) {
+  const login = useCallback(async (email, password) => {
     return authService.signIn(email, password);
-  }
+  }, []);
 
   // ── loginWithGoogle ───────────────────────────────────────────────────────
-  async function loginWithGoogle() {
+  const loginWithGoogle = useCallback(async () => {
     return authService.signInWithGoogle();
-  }
+  }, []);
 
   // ── logout ────────────────────────────────────────────────────────────────
-  async function logout() {
+  const logout = useCallback(async () => {
     if (loadAbortRef.current) loadAbortRef.current.cancelled = true;
     setUser(null);
     setClinic(null);
@@ -188,10 +188,10 @@ export function AuthProvider({ children }) {
     setNetworkError(false);
     setPasswordRecoveryMode(false);
     await authService.signOut();
-  }
+  }, []);
 
   // ── createClinic ──────────────────────────────────────────────────────────
-  async function createClinic(clinicName) {
+  const createClinic = useCallback(async (clinicName) => {
     if (!user) throw new Error('No hay sesión activa.');
     const error = await authService.createClinic(
       clinicName,
@@ -200,52 +200,74 @@ export function AuthProvider({ children }) {
     );
     if (error) throw error;
     await loadMembership(user.id, user.user_metadata);
-  }
+  }, [user, profile, loadMembership]);
 
   // ── refreshMembership ─────────────────────────────────────────────────────
   // Fuerza recarga de membresía (útil después de aceptar una invitación).
-  async function refreshMembership() {
+  const refreshMembership = useCallback(async () => {
     if (user?.id) await loadMembership(user.id, user.user_metadata);
-  }
+  }, [user?.id, user?.user_metadata, loadMembership]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── resendConfirmation ────────────────────────────────────────────────────
-  async function resendConfirmation(email) {
+  const resendConfirmation = useCallback(async (email) => {
     return authService.resendConfirmationEmail(email);
-  }
+  }, []);
 
   // ── sendPasswordReset ─────────────────────────────────────────────────────
-  async function sendPasswordReset(email) {
+  const sendPasswordReset = useCallback(async (email) => {
     return authService.resetPasswordForEmail(email);
-  }
+  }, []);
 
   // ── updatePassword ────────────────────────────────────────────────────────
-  async function updatePassword(newPassword) {
+  const updatePassword = useCallback(async (newPassword) => {
     await authService.updatePassword(newPassword);
     setPasswordRecoveryMode(false);
     // onAuthStateChange disparará SIGNED_IN → loadMembership → /dashboard
-  }
+  }, []);
+
+  // ── context value (memoized) ──────────────────────────────────────────────
+  const contextValue = useMemo(() => ({
+    user,
+    clinic,
+    role,
+    profile,
+    needsOnboarding,
+    emailConfirmed,
+    passwordRecoveryMode,
+    networkError,
+    loading,
+    login,
+    loginWithGoogle,
+    signup,
+    logout,
+    createClinic,
+    refreshMembership,
+    resendConfirmation,
+    sendPasswordReset,
+    updatePassword,
+  }), [
+    user,
+    clinic,
+    role,
+    profile,
+    needsOnboarding,
+    emailConfirmed,
+    passwordRecoveryMode,
+    networkError,
+    loading,
+    login,
+    loginWithGoogle,
+    signup,
+    logout,
+    createClinic,
+    refreshMembership,
+    resendConfirmation,
+    sendPasswordReset,
+    updatePassword,
+  ]);
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      clinic,
-      role,
-      profile,
-      needsOnboarding,
-      emailConfirmed,
-      passwordRecoveryMode,
-      networkError,
-      loading,
-      login,
-      loginWithGoogle,
-      signup,
-      logout,
-      createClinic,
-      refreshMembership,
-      resendConfirmation,
-      sendPasswordReset,
-      updatePassword,
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {!loading && children}
     </AuthContext.Provider>
   );

@@ -224,19 +224,7 @@ serve(async (req: Request) => {
       return new Response('ok', { status: 200 });
     }
 
-    // CN-009: Deduplication — skip if AI already replied in last 60 seconds
-    const { data: recentAiMsg } = await supabase
-      .from('messages')
-      .select('id')
-      .eq('conversation_id', conversationId)
-      .eq('sender', 'ai')
-      .gte('created_at', new Date(Date.now() - 60_000).toISOString())
-      .limit(1);
-
-    if (recentAiMsg && recentAiMsg.length > 0) {
-      console.log('[ai-agent-reply] Deduplicated — AI already replied recently for conversation', conversationId);
-      return new Response('ok', { status: 200 });
-    }
+    // CN-009: Deduplication check moved to parallel load below (Fix 3)
 
     // 2. Si el humano respondió hace menos de 2 min Y no es forzado → saltar (humano activo)
     // force=true lo usa pg_cron cuando ya pasaron 3 min sin respuesta.
@@ -250,58 +238,84 @@ serve(async (req: Request) => {
       }
     }
 
+    // ── B2. Parallelized context load — 5 queries in parallel (~60ms vs ~300ms serial) ──
+    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+
+    const [
+      patientResult,
+      messagesResult,
+      appointmentsResult,
+      clinicResult,
+      recentAiMsgResult,
+    ] = await Promise.all([
+      // 3. Patient
+      conv.patient_id
+        ? supabase.from('patients').select('id, full_name, ai_enabled, last_human_interaction').eq('id', conv.patient_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+
+      // 4. Últimos 16 mensajes de las últimas 4 horas
+      supabase.from('messages')
+        .select('id, direction, content, sender_type, created_at')
+        .eq('conversation_id', conversationId)
+        .gte('created_at', fourHoursAgo)
+        .order('created_at', { ascending: false })
+        .limit(16),
+
+      // 5. Upcoming appointments
+      conv.patient_id
+        ? supabase.from('appointments')
+            .select('id, status, appointment_datetime, notes')
+            .eq('patient_id', conv.patient_id)
+            .not('status', 'eq', 'cancelled')
+            .not('status', 'eq', 'rescheduled')
+            .gte('appointment_datetime', new Date().toISOString())
+            .order('appointment_datetime', { ascending: true })
+            .limit(3)
+        : Promise.resolve({ data: [], error: null }),
+
+      // 6. Clinic
+      supabase.from('clinics')
+        .select('name, wa_phone_number_id, address, phone, email_contact, settings')
+        .eq('id', clinicId)
+        .maybeSingle(),
+
+      // CN-009: Deduplication — skip if AI already replied in last 60 seconds
+      // Fix 1: usar direction='outbound_ai' — la columna 'sender' no existe en messages
+      supabase.from('messages')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .eq('direction', 'outbound_ai')
+        .gte('created_at', new Date(Date.now() - 60_000).toISOString())
+        .limit(1),
+    ]);
+
     // 3. Patient — REGLA DE ORO 1: if ai_enabled=false → stop immediately
-    let patient: Record<string, unknown> | null = null;
-    if (conv.patient_id) {
-      const { data } = await supabase
-        .from('patients')
-        .select('id, full_name, ai_enabled, last_human_interaction')
-        .eq('id', conv.patient_id)
-        .maybeSingle();
-      patient = data;
-    }
+    const patient: Record<string, unknown> | null = patientResult.data ?? null;
 
     if (patient && patient.ai_enabled === false) {
       console.log('[ai-agent-reply] AI disabled for patient:', conv.patient_id);
       return new Response('ok', { status: 200 });
     }
 
-    // 4. Últimos 16 mensajes de las últimas 4 horas — evita que conversaciones
-    //    viejas de testing confundan el contexto de Claude.
-    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
-    const { data: messagesRaw, error: msgError } = await supabase
-      .from('messages')
-      .select('id, direction, content, sender_type, created_at')
-      .eq('conversation_id', conversationId)
-      .gte('created_at', fourHoursAgo)
-      .order('created_at', { ascending: false })  // newest first so limit keeps most recent
-      .limit(16);
+    // CN-009: Dedup check result
+    const recentAiMsg = recentAiMsgResult.data;
+    if (recentAiMsg && recentAiMsg.length > 0) {
+      console.log('[ai-agent-reply] Deduplicated — AI already replied recently for conversation', conversationId);
+      return new Response('ok', { status: 200 });
+    }
+
+    // 4. Messages
+    const { data: messagesRaw, error: msgError } = messagesResult;
     // Reverse to restore chronological order for Claude
     const messages = (messagesRaw ?? []).reverse();
     console.log('[ai-agent-reply] messages loaded:', messages.length, msgError ? 'ERR:'+msgError.message : 'ok',
       '| patient_id:', conv.patient_id ?? 'null(guest)', '| agent_mode:', conv.agent_mode);
 
-    // 5. Upcoming appointments
-    let appointments: Record<string, unknown>[] = [];
-    if (conv.patient_id) {
-      const { data } = await supabase
-        .from('appointments')
-        .select('id, status, appointment_datetime, notes')
-        .eq('patient_id', conv.patient_id)
-        .not('status', 'eq', 'cancelled')
-        .not('status', 'eq', 'rescheduled')
-        .gte('appointment_datetime', new Date().toISOString())
-        .order('appointment_datetime', { ascending: true })
-        .limit(3);
-      appointments = data ?? [];
-    }
+    // 5. Appointments
+    const appointments: Record<string, unknown>[] = (appointmentsResult.data as Record<string, unknown>[] | null) ?? [];
 
     // 6. Clinic
-    const { data: clinic, error: clinicError } = await supabase
-      .from('clinics')
-      .select('name, wa_phone_number_id, address, phone, email_contact, settings')
-      .eq('id', clinicId)
-      .maybeSingle();
+    const { data: clinic, error: clinicError } = clinicResult;
 
     // 7. Clinic schedule (weekly hours + upcoming closures)
     const _nowUTCForSchedule = new Date();
@@ -827,23 +841,36 @@ ${COMMON_BLOCK}`;
       msgs: Array<{ role: 'user' | 'assistant'; content: unknown }>,
       withTools = true,
     ): Promise<Record<string, unknown>> {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method:  'POST',
-        headers: {
-          'x-api-key':         ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'content-type':      'application/json',
-        },
-        body: JSON.stringify({
-          model:      'claude-haiku-4-5',
-          max_tokens: 400,
-          system:     systemPrompt,
-          ...(withTools ? { tools } : {}),
-          messages:   msgs,
-        }),
-      });
-      if (!res.ok) throw new Error(`Claude API error: ${await res.text()}`);
-      return await res.json();
+      // Fix 4: AbortController con timeout de 18s para no colgar indefinidamente
+      const controller = new AbortController();
+      const timeoutId  = setTimeout(() => controller.abort(), 18_000);
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method:  'POST',
+          headers: {
+            'x-api-key':         ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+            'content-type':      'application/json',
+          },
+          body: JSON.stringify({
+            model:      'claude-haiku-4-5',
+            max_tokens: 400,
+            system:     systemPrompt,
+            ...(withTools ? { tools } : {}),
+            messages:   msgs,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error(`Claude API error: ${await res.text()}`);
+        return await res.json();
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw new Error('Claude API timeout after 18s');
+        }
+        throw err;
+      }
     }
 
     // ─── E. Call Claude (con soporte para tool use) ─────────────────────────────
@@ -909,9 +936,13 @@ ${COMMON_BLOCK}`;
           console.log('[ai-agent-reply] Tool: cancel_appointments', JSON.stringify(input));
           const ids = input.appointment_ids ?? [];
           if (!ids.length) return { success: false, error: 'No se especificaron IDs de turnos a cancelar.' };
-          const { error: cancelErr } = await supabase
+          // Fix 2: añadir patient_id para prevenir IDOR — solo cancela turnos del paciente actual
+          const cancelQuery = supabase
             .from('appointments').update({ status: 'cancelled' })
             .in('id', ids).eq('clinic_id', clinicId);
+          const { error: cancelErr } = resolvedPatientId
+            ? await cancelQuery.eq('patient_id', resolvedPatientId)
+            : await cancelQuery;
           if (cancelErr) { console.error('[ai-agent-reply] cancel error:', cancelErr.message); return { success: false, error: cancelErr.message }; }
           console.log('[ai-agent-reply] Cancelled appointments:', ids);
           return { success: true, message: `${ids.length} turno(s) cancelado(s) correctamente.` };
@@ -937,9 +968,13 @@ ${COMMON_BLOCK}`;
           }
 
           // 1. Marcar viejos como reagendados
-          const { error: reschedErr } = await supabase
+          // Fix 2: añadir patient_id para prevenir IDOR — solo reagenda turnos del paciente actual
+          const reschedQuery = supabase
             .from('appointments').update({ status: 'rescheduled' })
             .in('id', oldIds).eq('clinic_id', clinicId);
+          const { error: reschedErr } = resolvedPatientId
+            ? await reschedQuery.eq('patient_id', resolvedPatientId)
+            : await reschedQuery;
           if (reschedErr) { console.error('[ai-agent-reply] reschedule error:', reschedErr.message); return { success: false, error: reschedErr.message }; }
 
           // 2. Crear nuevo turno
@@ -972,9 +1007,13 @@ ${COMMON_BLOCK}`;
           const input = toolBlock.input as { appointment_id?: string };
           console.log('[ai-agent-reply] Tool: confirm_appointment', JSON.stringify(input));
           if (!input.appointment_id) return { success: false, error: 'Necesito el ID del turno a confirmar.' };
-          const { error: confirmErr } = await supabase
+          // Fix 2: añadir patient_id para prevenir IDOR — solo confirma turnos del paciente actual
+          const confirmQuery = supabase
             .from('appointments').update({ status: 'confirmed' })
             .eq('id', input.appointment_id).eq('clinic_id', clinicId);
+          const { error: confirmErr } = resolvedPatientId
+            ? await confirmQuery.eq('patient_id', resolvedPatientId)
+            : await confirmQuery;
           if (confirmErr) { console.error('[ai-agent-reply] confirm error:', confirmErr.message); return { success: false, error: confirmErr.message }; }
           console.log('[ai-agent-reply] Confirmed appointment:', input.appointment_id);
           return { success: true, message: 'Turno confirmado correctamente.' };
@@ -1016,7 +1055,8 @@ ${COMMON_BLOCK}`;
         return { success: false, error: `Tool no reconocido: ${toolBlock.name}` };
       }
 
-      for (let round = 0; round < 4; round++) {
+      const MAX_ROUNDS = 2; // Fix 5: máximo 2 rondas — suficiente para register + schedule
+      for (let round = 0; round < MAX_ROUNDS; round++) {
         const roundData  = await callClaude(currentMessages); // siempre con tools
         const stopReason = roundData?.stop_reason as string;
         console.log(`[ai-agent-reply] round ${round} stop_reason: ${stopReason}`);
@@ -1069,11 +1109,43 @@ ${COMMON_BLOCK}`;
       console.log('[ai-agent-reply] Claude responded, chars:', claudeText.length, 'preview:', claudeText.slice(0, 80));
     } catch (err) {
       console.error('[ai-agent-reply] Claude fetch error:', err instanceof Error ? err.message : err);
+      // Fix 6: enviar mensaje de fallback al paciente en lugar de fallar silenciosamente
+      const fallbackMsg = 'Gracias por escribirnos. En este momento estamos teniendo dificultades técnicas. Un representante se comunicará con usted a la brevedad.';
+      const fbAccessToken   = WA_ACCESS_TOKEN_GLOBAL;
+      const fbPhoneNumberId = String((clinic as Record<string,unknown>)?.wa_phone_number_id || WA_PHONE_NUMBER_ID_GLOBAL);
+      if (fbAccessToken && fbPhoneNumberId && conv?.phone_number) {
+        await sendWaText(conv.phone_number, fallbackMsg, fbPhoneNumberId, fbAccessToken).catch(() => {});
+        await supabase.from('messages').insert({
+          conversation_id: conversationId,
+          clinic_id:       clinicId,
+          patient_id:      conv.patient_id ?? null,
+          direction:       'outbound_ai',
+          sender_type:     'bot',
+          content:         fallbackMsg,
+          status:          'sent',
+        }).catch(() => {});
+      }
       return new Response('ok', { status: 200 });
     }
 
     if (!claudeText) {
       console.error('[ai-agent-reply] Empty Claude response for conversation:', conversationId);
+      // Fix 6: enviar mensaje de fallback al paciente en lugar de fallar silenciosamente
+      const fallbackMsg = 'Gracias por escribirnos. En este momento estamos teniendo dificultades técnicas. Un representante se comunicará con usted a la brevedad.';
+      const fbAccessToken   = WA_ACCESS_TOKEN_GLOBAL;
+      const fbPhoneNumberId = String((clinic as Record<string,unknown>).wa_phone_number_id || WA_PHONE_NUMBER_ID_GLOBAL);
+      if (fbAccessToken && fbPhoneNumberId && conv?.phone_number) {
+        await sendWaText(conv.phone_number, fallbackMsg, fbPhoneNumberId, fbAccessToken).catch(() => {});
+        await supabase.from('messages').insert({
+          conversation_id: conversationId,
+          clinic_id:       clinicId,
+          patient_id:      conv.patient_id ?? null,
+          direction:       'outbound_ai',
+          sender_type:     'bot',
+          content:         fallbackMsg,
+          status:          'sent',
+        }).catch(() => {});
+      }
       return new Response('ok', { status: 200 });
     }
 

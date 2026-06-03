@@ -1,5 +1,21 @@
 ﻿import { Component } from 'react';
 
+// Optional dependency — resolved lazily on first error to avoid crashing the
+// boundary if sentry.js does not exist yet.
+let _sentryResolved = false;
+let Sentry = null;
+function getSentry() {
+  if (_sentryResolved) return Sentry;
+  _sentryResolved = true;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    Sentry = require('../lib/sentry.js')?.Sentry ?? null;
+  } catch {
+    // Sentry not set up yet; errors will only be logged to the console.
+  }
+  return Sentry;
+}
+
 /**
  * Dashboard-scoped error boundary.
  * Catches crashes inside any dashboard route without unmounting the full app
@@ -18,6 +34,13 @@ export class DashboardErrorBoundary extends Component {
   componentDidCatch(error, info) {
     if (import.meta.env.DEV) {
       console.error('[DashboardErrorBoundary]', error, info.componentStack);
+    }
+    try {
+      getSentry()?.captureException(error, {
+        extra: { componentStack: info?.componentStack },
+      });
+    } catch {
+      // Sentry capture must never throw and break error recovery.
     }
   }
 

@@ -55,6 +55,10 @@ export function DashboardLayout() {
     window.dispatchEvent(new CustomEvent('cq_appointment_created'));
   }, [push]);
 
+  const handlePatientCreated = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('cq_patient_created'));
+  }, []); // deps vacías — función estable
+
   return (
     <div className="min-h-screen bg-[var(--cq-surface-2)] text-[var(--cq-fg)] flex">
       <Sidebar
@@ -94,9 +98,7 @@ export function DashboardLayout() {
         onClose={closeNewPatient}
         clinicId={clinic?.id}
         push={push}
-        onSuccess={() => {
-          window.dispatchEvent(new CustomEvent('cq_patient_created'));
-        }}
+        onSuccess={handlePatientCreated}
       />
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </div>

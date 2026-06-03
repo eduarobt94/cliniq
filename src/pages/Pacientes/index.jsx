@@ -420,10 +420,96 @@ const PatientRow = memo(function PatientRow({ patient, onEdit, onDelete }) {
   );
 });
 
+// ─── Patient table with pagination ───────────────────────────────────────────
+const PAGE_SIZE = 50;
+
+function PatientTable({ loading, filtered, patients, onEdit, onDelete, onAddOpen }) {
+  const [page, setPage] = useState(0);
+
+  // Reset to first page whenever the filtered list changes (search / filter)
+  useEffect(() => {
+    setPage(0);
+  }, [filtered]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage   = Math.min(page, totalPages - 1);
+  const paginated  = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  return (
+    <div className="flex flex-col gap-0">
+      <div className="rounded-[12px] border border-[var(--cq-border)] overflow-hidden">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b border-[var(--cq-border)] bg-[var(--cq-surface-2)]">
+              <th className="px-5 py-3 text-left text-[11.5px] font-semibold text-[var(--cq-fg-muted)] uppercase tracking-wide">Nombre</th>
+              <th className="px-5 py-3 text-left text-[11.5px] font-semibold text-[var(--cq-fg-muted)] uppercase tracking-wide">Teléfono</th>
+              <th className="px-5 py-3 text-left text-[11.5px] font-semibold text-[var(--cq-fg-muted)] uppercase tracking-wide hidden md:table-cell">Última visita</th>
+              <th className="px-5 py-3 text-left text-[11.5px] font-semibold text-[var(--cq-fg-muted)] uppercase tracking-wide hidden lg:table-cell">Próximo turno</th>
+              <th className="px-5 py-3 text-left text-[11.5px] font-semibold text-[var(--cq-fg-muted)] uppercase tracking-wide hidden xl:table-cell">Turnos</th>
+              <th className="px-5 py-3 text-left text-[11.5px] font-semibold text-[var(--cq-fg-muted)] uppercase tracking-wide">Estado</th>
+              <th className="px-5 py-3 w-10" />
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 6 }, (_, i) => <SkeletonRow key={i} />)
+            ) : paginated.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-5 py-12 text-center text-[13px] text-[var(--cq-fg-muted)]">
+                  {patients.length === 0
+                    ? <>Todavía no hay pacientes. <button onClick={onAddOpen} className="underline hover:text-[var(--cq-fg)] transition-colors">Agregá el primero</button>.</>
+                    : 'Sin resultados para esa búsqueda.'}
+                </td>
+              </tr>
+            ) : (
+              paginated.map(patient => (
+                <PatientRow
+                  key={patient.id}
+                  patient={patient}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination controls */}
+      {!loading && filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between mt-3 px-1">
+          <span className="text-[12.5px] text-[var(--cq-fg-muted)]">
+            Mostrando {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={safePage === 0}
+              className="h-8 px-3 rounded-[7px] text-[13px] font-medium border border-[var(--cq-border)] text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] hover:text-[var(--cq-fg)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              ‹ Anterior
+            </button>
+            <span className="px-3 text-[12.5px] text-[var(--cq-fg-muted)]">
+              Página {safePage + 1} de {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={safePage >= totalPages - 1}
+              className="h-8 px-3 rounded-[7px] text-[13px] font-medium border border-[var(--cq-border)] text-[var(--cq-fg-muted)] hover:bg-[var(--cq-surface-2)] hover:text-[var(--cq-fg)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Siguiente ›
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function Pacientes() {
   const { push } = useOutletContext() ?? {};
-  const { patients: rawPatients, loading, refetch: refetchPatients } = usePatients();
+  const { patients: rawPatients, loading, refetch: refetchPatients, totalCount, hasMore } = usePatients();
   const { clinic } = useClinic();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
@@ -488,7 +574,7 @@ export function Pacientes() {
             <p className="text-[13px] text-[var(--cq-fg-muted)] mt-0.5">
               {loading
                 ? 'Cargando…'
-                : `${patients.length} paciente${patients.length !== 1 ? 's' : ''} en total`}
+                : `${totalCount} paciente${totalCount !== 1 ? 's' : ''} en total`}
             </p>
           </div>
           <button
@@ -533,69 +619,19 @@ export function Pacientes() {
         </div>
 
         {/* Table */}
-        <Card padded={false}>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b border-[var(--cq-border)]">
-                  <th scope="col" className="px-5 py-3 text-left"><MonoLabel>Paciente</MonoLabel></th>
-                  <th scope="col" className="px-5 py-3 text-left"><MonoLabel>Teléfono</MonoLabel></th>
-                  <th scope="col" className="px-5 py-3 text-left hidden md:table-cell"><MonoLabel>Última visita</MonoLabel></th>
-                  <th scope="col" className="px-5 py-3 text-left hidden lg:table-cell"><MonoLabel>Próximo turno</MonoLabel></th>
-                  <th scope="col" className="px-5 py-3 text-left hidden xl:table-cell"><MonoLabel>Turnos</MonoLabel></th>
-                  <th scope="col" className="px-5 py-3 text-left"><MonoLabel>Estado</MonoLabel></th>
-                  <th scope="col" className="px-5 py-3 w-10" />
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
-                ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={7}>
-                      <div className="flex flex-col items-center justify-center py-16 gap-3 text-[var(--cq-fg-muted)]">
-                        <Icons.Users size={32} />
-                        <div className="text-center">
-                          <p className="text-[14px] font-medium">
-                            {patients.length === 0
-                              ? 'Aún no hay pacientes registrados. Agregá el primero.'
-                              : 'No se encontraron pacientes con ese criterio.'}
-                          </p>
-                          {patients.length === 0 && (
-                            <button
-                              onClick={() => setAddOpen(true)}
-                              className="mt-2 text-[13px] text-[var(--cq-accent)] hover:underline"
-                            >
-                              Agregar el primero
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map(p => (
-                    <PatientRow
-                      key={p.id}
-                      patient={p}
-                      onEdit={setEditingPatient}
-                      onDelete={handleDelete}
-                    />
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Filtered count footer */}
-          {!loading && filtered.length > 0 && filtered.length < patients.length && (
-            <div className="px-5 py-2.5 border-t border-[var(--cq-border)]">
-              <span className="text-[12.5px] text-[var(--cq-fg-muted)]">
-                Mostrando {filtered.length} de {patients.length} pacientes
-              </span>
-            </div>
-          )}
-        </Card>
+        <PatientTable
+          loading={loading}
+          filtered={filtered}
+          patients={patients}
+          onEdit={setEditingPatient}
+          onDelete={handleDelete}
+          onAddOpen={() => setAddOpen(true)}
+        />
+        {hasMore && (
+          <p className="text-[12px] text-[var(--cq-fg-muted)] text-center py-2">
+            Mostrando los primeros 100 pacientes. Usá la búsqueda para encontrar pacientes específicos.
+          </p>
+        )}
       </div>
 
       <AddPatientModal

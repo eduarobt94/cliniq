@@ -18,7 +18,18 @@ function todayStr() {
 
 // Module-level cache: survives re-renders, shared across hook instances in the same session.
 // Avoids N+1 queries when multiple realtime events fire in quick succession.
+// Fix CN-CACHE: bounded to MAX_CACHE_SIZE entries to prevent unbounded memory growth.
+const MAX_CACHE_SIZE = 500;
 const _patientNameCache = new Map();
+
+function setPatientCache(id, name) {
+  if (_patientNameCache.size >= MAX_CACHE_SIZE) {
+    // Delete the oldest entry (Map preserves insertion order)
+    const firstKey = _patientNameCache.keys().next().value;
+    _patientNameCache.delete(firstKey);
+  }
+  _patientNameCache.set(id, name);
+}
 
 async function getPatientName(patientId) {
   if (_patientNameCache.has(patientId)) return _patientNameCache.get(patientId);
@@ -28,7 +39,7 @@ async function getPatientName(patientId) {
     .eq('id', patientId)
     .single();
   const name = data?.full_name ?? 'Paciente';
-  _patientNameCache.set(patientId, name);
+  setPatientCache(patientId, name);
   return name;
 }
 
@@ -88,58 +99,49 @@ export function useNotifications(clinicId, push) {
       });
   }, [clinicId, addNotif]);
 
-  // ── Realtime subscription ──────────────────────────────────────────────────
+  // ── Custom-event subscription ──────────────────────────────────────────────
+  // Listens to events dispatched by useAppointments' Realtime channel instead of
+  // opening a duplicate WebSocket subscription over the same appointments table.
   useEffect(() => {
     if (!clinicId) return;
 
-    const channel = supabase.channel(`notif-${clinicId}`);
-    channel
-      // New appointment created
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'appointments', filter: `clinic_id=eq.${clinicId}` },
-        async ({ new: appt }) => {
-          const key = `ins-${appt.id}`;
-          if (seenEvents.current.has(key)) return;
-          seenEvents.current.add(key);
+    // New appointment created
+    const handleCreated = async (e) => {
+      const appt = e.detail;
+      if (!appt) return;
 
-          const name = await getPatientName(appt.patient_id);
-          addNotif(`Nuevo turno: ${name}`, 'info');
-        }
-      )
+      const key = `ins-${appt.id}`;
+      if (seenEvents.current.has(key)) return;
+      seenEvents.current.add(key);
 
-      // Status changed — only notify for confirmed / cancelled
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'appointments', filter: `clinic_id=eq.${clinicId}` },
-        async ({ new: appt }) => {
-          if (appt.status !== 'confirmed' && appt.status !== 'cancelled') return;
+      const name = await getPatientName(appt.patient_id);
+      addNotif(`Nuevo turno: ${name}`, 'info');
+    };
 
-          // Dedup: same appointment reaching the same final status only fires once per session
-          const key = `upd-${appt.id}-${appt.status}`;
-          if (seenEvents.current.has(key)) return;
-          seenEvents.current.add(key);
+    // Status changed — only notify for confirmed / cancelled
+    const handleUpdated = async (e) => {
+      const appt = e.detail;
+      if (!appt) return;
+      if (appt.status !== 'confirmed' && appt.status !== 'cancelled') return;
 
-          const name = await getPatientName(appt.patient_id);
-          if (appt.status === 'confirmed') addNotif(`Turno confirmado: ${name}`, 'success');
-          if (appt.status === 'cancelled') addNotif(`Turno cancelado: ${name}`, 'error');
-        }
-      )
+      // Dedup: same appointment reaching the same final status only fires once per session
+      const key = `upd-${appt.id}-${appt.status}`;
+      if (seenEvents.current.has(key)) return;
+      seenEvents.current.add(key);
 
-      .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR') {
-          // Supabase will auto-reconnect; surface a one-time warning
-          const key = 'channel-error';
-          if (seenEvents.current.has(key)) return;
-          seenEvents.current.add(key);
-          push?.('Error de conexión en tiempo real. Reconectando…', 'warn');
-          // Clear the flag after 30s so a persistent failure re-notifies
-          setTimeout(() => seenEvents.current.delete(key), 30_000);
-        }
-      });
+      const name = await getPatientName(appt.patient_id);
+      if (appt.status === 'confirmed') addNotif(`Turno confirmado: ${name}`, 'success');
+      if (appt.status === 'cancelled') addNotif(`Turno cancelado: ${name}`, 'error');
+    };
 
-    return () => supabase.removeChannel(channel);
-  }, [clinicId, addNotif, push]);
+    window.addEventListener('cq_appointment_created', handleCreated);
+    window.addEventListener('cq_appointment_updated', handleUpdated);
+
+    return () => {
+      window.removeEventListener('cq_appointment_created', handleCreated);
+      window.removeEventListener('cq_appointment_updated', handleUpdated);
+    };
+  }, [clinicId, addNotif]);
 
   return { notifications, unreadCount, markAllRead };
 }

@@ -80,9 +80,10 @@ function EditModal({ automation, onSave, onClose }) {
     if (automation.type === 'appointment_reminder') {
       const h = parseInt(hoursBefore, 10);
       if (isNaN(h) || h < 1 || h > 168) { setErr('Las horas deben ser entre 1 y 168.'); return; }
-      if (!message.trim()) { setErr('El mensaje no puede estar vacío.'); return; }
-      fields.hours_before     = h;
-      fields.message_template = message.trim();
+      const isConv = h < 12; // conversational mode (free-text) only when < 12h
+      if (isConv && !message.trim()) { setErr('El mensaje no puede estar vacío.'); return; }
+      fields.hours_before = h;
+      if (isConv) fields.message_template = message.trim(); // solo guardar en modo conversacional
     }
 
     if (automation.type === 'patient_reactivation') {
