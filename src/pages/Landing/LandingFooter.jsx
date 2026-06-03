@@ -79,9 +79,8 @@ export function LandingFooter({ onSignup }) {
           <div>
             <MonoLabel>Contacto</MonoLabel>
             <ul className="mt-3 space-y-2 text-[13.5px]">
-              <li>hola@cliniq.uy</li>
-              <li>+598 99 000 000</li>
-              <li>Pocitos, Montevideo</li>
+              <li><a href="mailto:hola@cliniq.uy" className="hover:text-[var(--cq-accent)]">hola@cliniq.uy</a></li>
+              <li>Pocitos, Montevideo, UY</li>
             </ul>
           </div>
         </div>

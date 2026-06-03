@@ -1,0 +1,25 @@
+User-agent: *
+Allow: /
+Disallow: /src/
+Disallow: /node_modules/
+
+# AI crawlers — permitidos explícitamente
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://cliniq.uy/sitemap.xml
