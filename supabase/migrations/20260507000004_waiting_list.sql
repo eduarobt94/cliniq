@@ -1,22 +1,27 @@
--- Lista de espera para turnos
--- Pacientes que quieren ser avisados cuando se libere un turno
-
-CREATE TABLE IF NOT EXISTS waiting_list (
-  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  clinic_id     uuid NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
-  patient_id    uuid REFERENCES patients(id) ON DELETE SET NULL,
-  phone_number  text NOT NULL,
-  full_name     text NOT NULL DEFAULT '',
-  service       text,
-  date_from     date,
-  date_to       date,
-  notes         text,
-  status        text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','notified','cancelled')),
-  created_at    timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS waiting_list_clinic_id_idx ON waiting_list(clinic_id);
-CREATE INDEX IF NOT EXISTS waiting_list_status_idx    ON waiting_list(status);
+-- Lista de espera para turnos — RECONCILIACIÓN (audit 2026-07-06, CRÍTICO-2)
+--
+-- ⚠️ La tabla `waiting_list` se define de forma CANÓNICA en
+--    20260507000000_waiting_list.sql (columnas preferred_date_from/to,
+--    status IN ('waiting','notified','booked','expired','cancelled'),
+--    notified_at, updated_at, patient_id NOT NULL). Esa es la que usa el código
+--    (ai-agent-reply, notify-waitlist, useWaitingList, ListaEspera).
+--
+--    El CREATE TABLE que había aquí definía un esquema INCOMPATIBLE
+--    (date_from/to, phone_number NOT NULL, status IN ('pending','notified','cancelled'))
+--    y solo NO rompió por el `IF NOT EXISTS` + el orden de los archivos. Se eliminó
+--    para evitar el footgun: en un entorno nuevo, si esta migración corriera primero,
+--    la tabla quedaría con el esquema equivocado y TODO insert de lista de espera
+--    fallaría en silencio.
+--
+--    Esta migración conserva únicamente las políticas RLS `members_*`, que son las
+--    que sobreviven al cleanup de 20260516000000 (ese cleanup dropea las políticas
+--    de la migración 000000). Sin este bloque, `waiting_list` se quedaría sin
+--    política de SELECT para usuarios autenticados y el dashboard no podría leerla.
+--
+-- VERIFICACIÓN EN PROD (manual): correr `\d waiting_list` en el SQL Editor.
+--   Si el esquema es el incorrecto (date_from / status 'pending'), aplicar una
+--   migración correctiva idempotente que agregue preferred_date_from/to, updated_at,
+--   notified_at y ajuste el CHECK de status.
 
 ALTER TABLE waiting_list ENABLE ROW LEVEL SECURITY;
 

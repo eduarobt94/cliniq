@@ -509,11 +509,12 @@ function PatientTable({ loading, filtered, patients, onEdit, onDelete, onAddOpen
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function Pacientes() {
   const { push } = useOutletContext() ?? {};
-  const { patients: rawPatients, loading, refetch: refetchPatients, totalCount, hasMore } = usePatients();
   const { clinic } = useClinic();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('q') ?? '');
+  // MEDIO-10: la búsqueda va al servidor (encuentra pacientes más allá de los primeros 100)
+  const { patients: rawPatients, loading, refetch: refetchPatients, totalCount, hasMore, searching } = usePatients(debouncedSearch);
 
   // Clear the URL param once applied so back-nav doesn't re-filter
   useEffect(() => {
@@ -574,7 +575,9 @@ export function Pacientes() {
             <p className="text-[13px] text-[var(--cq-fg-muted)] mt-0.5">
               {loading
                 ? 'Cargando…'
-                : `${totalCount} paciente${totalCount !== 1 ? 's' : ''} en total`}
+                : searching
+                  ? `${totalCount} resultado${totalCount !== 1 ? 's' : ''}`
+                  : `${totalCount} paciente${totalCount !== 1 ? 's' : ''} en total`}
             </p>
           </div>
           <button
@@ -627,6 +630,11 @@ export function Pacientes() {
           onDelete={handleDelete}
           onAddOpen={() => setAddOpen(true)}
         />
+        {searching && totalCount > 100 && (
+          <p className="text-[12px] text-[var(--cq-fg-muted)] text-center py-2">
+            Mostrando 100 de {totalCount} coincidencias. Refiná la búsqueda para acotar.
+          </p>
+        )}
         {hasMore && (
           <p className="text-[12px] text-[var(--cq-fg-muted)] text-center py-2">
             Mostrando los primeros 100 pacientes. Usá la búsqueda para encontrar pacientes específicos.

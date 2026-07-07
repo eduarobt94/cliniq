@@ -140,7 +140,7 @@ async function insertMessage(
     senderType?:    'bot' | 'staff' | 'system' | null;
     messageType?:   'text' | 'audio' | 'image' | 'document' | 'sticker' | 'unknown';
   },
-) {
+): Promise<boolean> {
   const { error } = await supabase.from('messages').insert({
     conversation_id: opts.conversationId,
     clinic_id:       opts.clinicId,
@@ -152,7 +152,19 @@ async function insertMessage(
     sender_type:     opts.senderType ?? null,
     message_type:    opts.messageType ?? 'text',
   });
-  if (error) console.error('insertMessage error:', error);
+  if (error) {
+    // CRÍTICO-3: no perder mensajes en silencio. Log de alto nivel para alertar
+    // (p.ej. si falta una columna del schema, TODOS los inserts fallarían).
+    console.error('[webhook] CRITICAL insertMessage failed', {
+      direction:      opts.direction,
+      messageType:    opts.messageType ?? 'text',
+      conversationId: opts.conversationId,
+      code:           (error as { code?: string }).code,
+      message:        error.message,
+    });
+    return false;
+  }
+  return true;
 }
 
 // ─── Audit log ────────────────────────────────────────────────────────────────
@@ -227,12 +239,26 @@ serve(async (req: Request) => {
     const traceId = crypto.randomUUID().slice(0, 8);
     const log = createLogger(traceId);
 
-    // ── 1c: HMAC validation (backward compatible) ─────────────────────────────
+    // ── 1c: HMAC validation — FAIL-CLOSED (audit ALTO-4) ──────────────────────
     const signature  = req.headers.get('X-Hub-Signature-256');
     const APP_SECRET = Deno.env.get('WHATSAPP_APP_SECRET') ?? '';
 
+    // La función corre con --no-verify-jwt, así que la firma HMAC de Meta es la
+    // ÚNICA barrera. WHATSAPP_APP_SECRET DEBE estar configurado como secret de
+    // Supabase antes de operar el webhook. Sin secret, o sin firma válida → 403.
+    // ⚠ PRECONDICIÓN DE DEPLOY:
+    //   npx supabase secrets set WHATSAPP_APP_SECRET=<App Secret de Meta>
     let body: Record<string, unknown>;
-    if (APP_SECRET && signature) {
+    if (!APP_SECRET) {
+      log.error('WHATSAPP_APP_SECRET no configurado — rechazando (fail-closed). ' +
+        'Configurar el secret en Supabase antes de recibir webhooks.');
+      return new Response('Forbidden', { status: 403 });
+    }
+    if (!signature) {
+      log.warn('Missing X-Hub-Signature-256 header — rejecting unsigned payload');
+      return new Response('Forbidden', { status: 403 });
+    }
+    {
       let bodyBytes: ArrayBuffer;
       try { bodyBytes = await req.arrayBuffer(); }
       catch { return new Response('Bad Request', { status: 400 }); }
@@ -250,9 +276,6 @@ serve(async (req: Request) => {
         return new Response('Forbidden', { status: 403 });
       }
       try { body = JSON.parse(new TextDecoder().decode(bodyBytes)); }
-      catch { return new Response('Bad Request', { status: 400 }); }
-    } else {
-      try { body = await req.json(); }
       catch { return new Response('Bad Request', { status: 400 }); }
     }
 
@@ -289,6 +312,23 @@ serve(async (req: Request) => {
       if (existingLog) {
         log.info('Duplicate message — skipping', { waMessageId });
         return new Response(JSON.stringify({ ok: true, dup: true }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    // ── 1b2: Rate-limit por remitente ANTES de transcribir/invocar IA (ALTO-6) ──
+    // Evita que un solo número dispare gasto ilimitado de Whisper + Claude.
+    // Fail-open: si el RPC falla, dejamos pasar el mensaje (disponibilidad > límite).
+    {
+      const supabaseRate = createClient(SUPABASE_URL, SUPABASE_KEY);
+      const { data: allowed, error: rlErr } = await supabaseRate
+        .rpc('check_rate_limit', { p_phone: fromPhone });
+      if (rlErr) {
+        log.warn('rate-limit RPC error — fail-open', { err: rlErr.message });
+      } else if (allowed === false) {
+        log.warn('Rate limit exceeded — dropping message', { phone: fromPhone.slice(0, 6) + '…' });
+        return new Response(JSON.stringify({ ok: true, rate_limited: true }), {
           status: 200, headers: { 'Content-Type': 'application/json' },
         });
       }
