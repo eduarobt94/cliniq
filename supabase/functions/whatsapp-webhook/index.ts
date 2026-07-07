@@ -422,12 +422,41 @@ serve(async (req: Request) => {
       });
     }
 
+    // ── REP-ALTO-7: resolver la CLÍNICA primero (por phone_number_id de Meta),
+    //    después buscar el paciente DENTRO de esa clínica. El lookup global por
+    //    teléfono rompía multi-tenant: con el mismo número en 2 clínicas,
+    //    maybeSingle() fallaba y el paciente caía al flujo guest (duplicación).
+    let resolvedClinic: { id: string; settings?: Record<string, string>; wa_phone_number_id?: string } | null = null;
+    {
+      const { data: c1 } = await supabase
+        .from('clinics')
+        .select('id, settings, wa_phone_number_id')
+        .eq('wa_phone_number_id', incomingPhoneNumId)
+        .maybeSingle();
+      resolvedClinic = c1;
+      if (!resolvedClinic && WA_PHONE_NUMBER_ID_GLOBAL) {
+        const { data: c2 } = await supabase
+          .from('clinics')
+          .select('id, settings, wa_phone_number_id')
+          .eq('wa_phone_number_id', WA_PHONE_NUMBER_ID_GLOBAL)
+          .maybeSingle();
+        resolvedClinic = c2;
+      }
+    }
+
     // ── Find patient (search with and without +) — include ai_enabled ──────
-    const { data: patient } = await supabase
+    // Con clínica resuelta: scoped (multi-tenant seguro). Sin clínica resuelta
+    // (wa_phone_number_id no configurado): fallback global legacy, determinista
+    // por antigüedad en vez de errar con maybeSingle si hay 2+ coincidencias.
+    let patientQuery = supabase
       .from('patients')
       .select('id, full_name, clinic_id, phone_number, ai_enabled')
       .or(`phone_number.eq.${fromPhone},phone_number.eq.${fromPhoneRaw}`)
-      .maybeSingle();
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (resolvedClinic) patientQuery = patientQuery.eq('clinic_id', resolvedClinic.id);
+    const { data: patientRows } = await patientQuery;
+    const patient = patientRows?.[0] ?? null;
 
     const displayText = rawText || `[${msgType}]`;
 
@@ -437,25 +466,8 @@ serve(async (req: Request) => {
       // → intentamos ambos: el ID entrante y el env var global como fallback
       console.log('[webhook] Guest message — incomingPhoneNumId:', incomingPhoneNumId, 'globalId:', WA_PHONE_NUMBER_ID_GLOBAL);
 
-      let clinicForGuest: { id: string; settings?: Record<string, string>; wa_phone_number_id?: string } | null = null;
-
-      // Intento 1: coincidencia exacta con lo que envía Meta
-      const { data: c1 } = await supabase
-        .from('clinics')
-        .select('id, settings, wa_phone_number_id')
-        .eq('wa_phone_number_id', incomingPhoneNumId)
-        .maybeSingle();
-      clinicForGuest = c1;
-
-      // Intento 2: fallback usando el env var global (por si hay diferencia de formato)
-      if (!clinicForGuest && WA_PHONE_NUMBER_ID_GLOBAL) {
-        const { data: c2 } = await supabase
-          .from('clinics')
-          .select('id, settings, wa_phone_number_id')
-          .eq('wa_phone_number_id', WA_PHONE_NUMBER_ID_GLOBAL)
-          .maybeSingle();
-        clinicForGuest = c2;
-      }
+      // REP-ALTO-7: la clínica ya se resolvió antes del lookup de paciente — reutilizar.
+      const clinicForGuest = resolvedClinic;
 
       console.log('[webhook] clinicForGuest found:', !!clinicForGuest);
 
@@ -490,23 +502,51 @@ serve(async (req: Request) => {
               return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
             }
 
-            // Find the most recent 'new' appointment for this clinic (not yet confirmed/cancelled)
-            const { data: pendingAppt } = await supabase
-              .from('appointments')
-              .select('id, appointment_datetime, patients!inner(id, full_name, phone_number)')
-              .eq('clinic_id', clinicForGuest.id)
-              .eq('status', 'new')
-              .order('appointment_datetime', { ascending: true })
-              .limit(1)
-              .maybeSingle();
+            // REP-MEDIO-10 (audit): actuar sobre el turno NOTIFICADO al médico, no
+            // sobre "el new más antiguo" (con 2+ turnos nuevos podía confirmar el
+            // equivocado). El agente guarda doctor_pending_appointment_id en
+            // clinics.settings al notificar; el más antiguo queda como fallback.
+            const APPT_SELECT = 'id, appointment_datetime, patients!inner(id, full_name, phone_number)';
+            const pendingPointerId = clinicForGuest.settings?.doctor_pending_appointment_id;
+
+            let pendingAppt: Record<string, unknown> | null = null;
+            if (pendingPointerId) {
+              const { data } = await supabase
+                .from('appointments')
+                .select(APPT_SELECT)
+                .eq('id', pendingPointerId)
+                .eq('clinic_id', clinicForGuest.id)
+                .eq('status', 'new')
+                .maybeSingle();
+              pendingAppt = data;
+            }
+            if (!pendingAppt) {
+              const { data } = await supabase
+                .from('appointments')
+                .select(APPT_SELECT)
+                .eq('clinic_id', clinicForGuest.id)
+                .eq('status', 'new')
+                .order('appointment_datetime', { ascending: true })
+                .limit(1)
+                .maybeSingle();
+              pendingAppt = data;
+            }
+
+            const clearDoctorPointer = async () => {
+              if (!pendingPointerId) return;
+              const settings = { ...(clinicForGuest.settings ?? {}) } as Record<string, string>;
+              delete settings.doctor_pending_appointment_id;
+              await supabase.from('clinics').update({ settings }).eq('id', clinicForGuest.id);
+            };
 
             if (!pendingAppt) {
+              await clearDoctorPointer(); // puntero obsoleto (el turno ya no está 'new')
               await sendDoctor(`No hay turnos pendientes de confirmación en este momento.`);
               return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
             }
 
             const aptPatient = pendingAppt.patients as Record<string, string>;
-            const apptDt     = new Date(pendingAppt.appointment_datetime);
+            const apptDt     = new Date(pendingAppt.appointment_datetime as string);
             const dtLabel    = apptDt.toLocaleString('es-UY', {
               weekday: 'short', day: 'numeric', month: 'short',
               hour: '2-digit', minute: '2-digit', timeZone: 'America/Montevideo',
@@ -557,6 +597,9 @@ serve(async (req: Request) => {
                 }).catch(err => console.error('[webhook] Error triggering notify-waitlist (doctor reject):', err));
               }
             }
+
+            // Turno procesado (confirmado/rechazado/ya-procesado) — limpiar puntero
+            await clearDoctorPointer();
 
             return new Response(JSON.stringify({ ok: true, doctor: true }), {
               status: 200, headers: { 'Content-Type': 'application/json' },

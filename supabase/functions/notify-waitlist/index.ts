@@ -117,7 +117,7 @@ serve(async (req: Request) => {
         .eq('clinic_id', appt.clinic_id)
         .eq('status', 'waiting')
         .order('created_at', { ascending: true })
-        .limit(1);
+        .limit(10);
 
       if (wlErr) {
         console.error(`Error loading waiting list for clinic ${appt.clinic_id}:`, wlErr);
@@ -141,23 +141,48 @@ serve(async (req: Request) => {
         return r;
       }
 
-      // Build a Set for O(1) lookups when checking already-notified patients
       const apptServiceLower = appt.appointment_type ? (appt.appointment_type as string).toLowerCase() : null;
 
-      // Notificar a cada paciente en lista de espera
-      await Promise.all(waitlistEntries.map(async (entry) => {
+      // NUEVO-MEDIO-3 (audit): elegir la primera entrada COMPATIBLE por servicio
+      // (FIFO entre compatibles). Antes se tomaba solo la primera absoluta: si su
+      // servicio no coincidía, la cita quedaba marcada como procesada y nadie
+      // compatible se notificaba nunca.
+      const isCompatible = (entry: { service: string | null }) => {
+        if (!entry.service || !apptServiceLower) return true; // sin preferencia = acepta cualquiera
+        const entryService = entry.service.toLowerCase();
+        return apptServiceLower.includes(entryService) || entryService.includes(apptServiceLower);
+      };
+      // NUEVO-MEDIO-2 (audit): claim ATÓMICO de la entrada. Las citas canceladas
+      // se procesan en paralelo (Promise.all) y dos podían leer la misma entrada
+      // 'waiting' antes de que la otra la marcara → mismo paciente notificado
+      // dos veces. Solo un worker gana este UPDATE condicional; el perdedor
+      // pasa a la siguiente entrada compatible.
+      let claimedEntry: (typeof waitlistEntries)[number] | null = null;
+      for (const candidate of waitlistEntries.filter(isCompatible)) {
+        if (!(candidate.patients as Record<string, string>)?.phone_number) continue;
+        const { data: wlClaim } = await supabase
+          .from('waiting_list')
+          .update({ status: 'notified', notified_at: new Date().toISOString() })
+          .eq('id', candidate.id)
+          .eq('status', 'waiting')
+          .select('id')
+          .maybeSingle();
+        if (wlClaim) { claimedEntry = candidate; break; }
+      }
+
+      if (!claimedEntry) {
+        // Nadie compatible disponible — marcar la cita para no re-procesarla
+        await supabase
+          .from('appointments')
+          .update({ waitlist_notified_at: new Date().toISOString() })
+          .eq('id', appt.id);
+        r.skipped++;
+        return r;
+      }
+
+      // Notificar solo a la entrada reclamada (un cupo → un aviso)
+      await Promise.all([claimedEntry].map(async (entry) => {
         const patient = entry.patients as Record<string, string>;
-
-        if (!patient?.phone_number) { r.skipped++; return; }
-
-        // Filtro de servicio: si la entrada especifica servicio, verificar coincidencia
-        if (entry.service && apptServiceLower) {
-          const entryService = entry.service.toLowerCase();
-          if (!apptServiceLower.includes(entryService) && !entryService.includes(apptServiceLower)) {
-            r.skipped++;
-            return;
-          }
-        }
 
         const msgContent =
           `Hola ${patient.full_name} 👋 Tenemos una buena noticia: se liberó un turno en *${clinic.name ?? 'nuestra clínica'}*.\n\n` +
@@ -204,15 +229,18 @@ serve(async (req: Request) => {
               wa_message_id:  waId,
               status:         'sent',
             }),
-            supabase
-              .from('waiting_list')
-              .update({ status: 'notified', notified_at: new Date().toISOString() })
-              .eq('id', entry.id),
+            // (waiting_list ya quedó en 'notified' por el claim atómico de arriba)
           ]);
 
           console.log(`✅ Waitlist notified: ${patient.phone_number} (entry ${entry.id})`);
           r.notified++;
         } else {
+          // Envío falló — revertir el claim para que otra corrida lo reintente
+          await supabase
+            .from('waiting_list')
+            .update({ status: 'waiting', notified_at: null })
+            .eq('id', entry.id);
+
           // Audit log — fallo
           await supabase.from('whatsapp_message_log').insert({
             clinic_id:      appt.clinic_id,
