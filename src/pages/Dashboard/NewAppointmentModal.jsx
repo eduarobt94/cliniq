@@ -337,12 +337,17 @@ export function NewAppointmentModal({ open, onClose, clinicId, defaultDate, onSu
       setSuccess(true);
       setTimeout(onClose, 1400);
     } catch (err) {
-      const msg = err?.message ?? '';
-      if (msg.includes('23505') || msg.includes('unique') || msg.includes('duplicate')) {
+      const msg  = err?.message ?? '';
+      const code = err?.code ?? '';
+      if (code === '23P01' || msg.includes('appointments_no_overlap') || msg.includes('exclusion')) {
+        // 23P01 = exclusion_violation → el slot ya está ocupado para ese profesional (audit CRÍTICO-1)
+        setError('Ese horario ya está ocupado para ese profesional. Elegí otro horario.');
+      } else if (msg.includes('23505') || msg.includes('unique') || msg.includes('duplicate')) {
         if (msg.includes('phone')) {
           setError('Ya existe un paciente con ese número de teléfono.');
         } else {
-          setError('Ya existe una cita en ese horario.');
+          // UNIQUE(clinic_id, patient_id, appointment_datetime): mismo paciente, misma hora exacta.
+          setError('Este paciente ya tiene una cita registrada a esa misma hora.');
         }
       } else if (msg.includes('fetch') || msg.includes('network') || msg.includes('NetworkError') || msg.includes('Failed to fetch')) {
         setError('Error de conexión. Verificá tu internet.');

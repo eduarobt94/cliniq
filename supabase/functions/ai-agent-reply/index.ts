@@ -36,7 +36,17 @@ const ESCALATION_PATTERNS = [
 
 function requiresEscalation(text: string): boolean {
   const lower = text.toLowerCase();
-  return ESCALATION_PATTERNS.some((p) => lower.includes(p));
+  return ESCALATION_PATTERNS.some((p) => {
+    const idx = lower.indexOf(p);
+    if (idx === -1) return false;
+    // MEDIO-7: guardia de negación conservadora. Suprime solo si "no/sin/nada de"
+    // está inmediatamente antes del patrón (ej. "sin dolor fuerte", "no emergencia").
+    // Intencionalmente NO suprime negaciones lejanas: en contexto médico, escalar de
+    // más es preferible a escalar de menos (un humano revisa). Recall-first.
+    const preceding = lower.slice(Math.max(0, idx - 10), idx);
+    if (/\b(no|sin|nada de)\s+$/.test(preceding)) return false;
+    return true;
+  });
 }
 
 // ─── Send WhatsApp text ───────────────────────────────────────────────────────
@@ -275,7 +285,7 @@ serve(async (req: Request) => {
 
       // 6. Clinic
       supabase.from('clinics')
-        .select('name, wa_phone_number_id, address, phone, email_contact, settings')
+        .select('name, wa_phone_number_id, address, phone, email_contact, settings, timezone')
         .eq('id', clinicId)
         .maybeSingle(),
 
@@ -419,21 +429,33 @@ serve(async (req: Request) => {
     const patientName = String(patient?.full_name ?? 'Paciente nuevo');
     const clinicName  = String(clinic.name ?? 'la clínica');
 
-    // Calcular fecha/hora en zona Uruguay (UTC-3) — el servidor corre en UTC
-    const UY_OFFSET_MS = -3 * 60 * 60 * 1000;
-    const nowUtc   = new Date();
-    const nowUY    = new Date(nowUtc.getTime() + UY_OFFSET_MS);
+    // MEDIO-8: fecha/hora en la timezone de la clínica (fallback UY). Antes se asumía
+    // UTC-3 fijo con aritmética manual; ahora usamos Intl para soportar cualquier zona.
+    // Para America/Montevideo el resultado es idéntico al anterior (cero regresión).
+    const clinicTz = String((clinic as Record<string, unknown>).timezone ?? '').trim() || UY_TZ;
 
-    // Hoy en formato legible
     const DAY_NAMES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
     const MON_NAMES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-    const fechaHoy  = `${DAY_NAMES[nowUY.getUTCDay()]} ${nowUY.getUTCDate()} de ${MON_NAMES[nowUY.getUTCMonth()]} de ${nowUY.getUTCFullYear()}`;
-    const horaHoy   = `${String(nowUY.getUTCHours()).padStart(2,'0')}:${String(nowUY.getUTCMinutes()).padStart(2,'0')}`;
+
+    // Partes de "hoy" en la zona de la clínica
+    const [todayY, todayM, todayD] = new Intl.DateTimeFormat('en-CA', {
+      timeZone: clinicTz, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date()).split('-').map(Number);
+
+    // Ancla a mediodía UTC del día local: getUTCDay() da el día de semana correcto y
+    // sumar 24h mantiene el mediodía en días siguientes (seguro ante DST).
+    const todayAnchor = new Date(Date.UTC(todayY, todayM - 1, todayD, 12, 0, 0));
+
+    const horaHoy = new Intl.DateTimeFormat('es-UY', {
+      timeZone: clinicTz, hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(new Date());
+
+    const fechaHoy = `${DAY_NAMES[todayAnchor.getUTCDay()]} ${todayD} de ${MON_NAMES[todayM - 1]} de ${todayY}`;
 
     // Generar próximos 14 días con ISO date explícita
     // ⚠ Claude DEBE copiar estas fechas literalmente — no debe calcular fechas por su cuenta
     const proximosDias = Array.from({ length: 14 }, (_, i) => {
-      const d = new Date(nowUY.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
+      const d = new Date(todayAnchor.getTime() + (i + 1) * 24 * 60 * 60 * 1000);
       const iso = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
       return `  ${DAY_NAMES[d.getUTCDay()]} ${iso.slice(8)} de ${MON_NAMES[d.getUTCMonth()]} → ${iso}`;
     }).join('\n');
@@ -809,7 +831,7 @@ ${COMMON_BLOCK}`;
       }
 
       // Weekly schedule check
-      const dow = new Date(date + 'T12:00:00').getDay(); // 0=Sun…6=Sat
+      const dow = new Date(date + 'T12:00:00Z').getUTCDay(); // 0=Sun…6=Sat (ancla mediodía UTC, indep. del server)
       const row = scheduleRows?.find((r) => (r.day_of_week as number) === dow);
       if (row && !(row.is_open as boolean)) {
         return { allowed: false, reason: `La clínica no atiende los ${SCHEDULE_DAY_NAMES[dow]}s. Por favor elegí otro día.` };
@@ -897,7 +919,14 @@ ${COMMON_BLOCK}`;
         })
         .select('id')
         .single();
-      if (apptErr) { console.error('[ai-agent-reply] Error creating appointment:', apptErr.message); return { error: apptErr.message }; }
+      if (apptErr) {
+        console.error('[ai-agent-reply] Error creating appointment:', apptErr.message);
+        // 23P01 = exclusion_violation → el horario ya está ocupado (audit CRÍTICO-1)
+        if ((apptErr as { code?: string }).code === '23P01' || apptErr.message?.includes('appointments_no_overlap')) {
+          return { error: 'Ese horario ya está ocupado para ese profesional. Ofrecé al paciente otro horario disponible.' };
+        }
+        return { error: apptErr.message };
+      }
       console.log('[ai-agent-reply] Appointment created:', appt.id);
       return { id: appt.id, datetime: appointmentDatetime };
     }
@@ -934,6 +963,9 @@ ${COMMON_BLOCK}`;
         } else if (toolBlock.name === 'cancel_appointments') {
           const input = toolBlock.input as { appointment_ids?: string[] };
           console.log('[ai-agent-reply] Tool: cancel_appointments', JSON.stringify(input));
+          // Guard (audit MEDIO-9): sin paciente resuelto (guest) no hay turnos propios que tocar.
+          // Evita cancelar turnos de otros pacientes con scope solo-clínica.
+          if (!resolvedPatientId) return { success: false, error: 'No hay un paciente registrado en esta conversación para cancelar turnos.' };
           const ids = input.appointment_ids ?? [];
           if (!ids.length) return { success: false, error: 'No se especificaron IDs de turnos a cancelar.' };
           // Fix 2: añadir patient_id para prevenir IDOR — solo cancela turnos del paciente actual
@@ -953,6 +985,8 @@ ${COMMON_BLOCK}`;
             old_appointment_ids?: string[]; service?: string; date?: string; time?: string; notes?: string;
           };
           console.log('[ai-agent-reply] Tool: reschedule_appointment', JSON.stringify(input));
+          // Guard (audit MEDIO-9): sin paciente resuelto (guest) no hay turnos propios que reagendar.
+          if (!resolvedPatientId) return { success: false, error: 'No hay un paciente registrado en esta conversación para reagendar turnos.' };
           const oldIds = input.old_appointment_ids ?? [];
           if (!oldIds.length || !input.date || !input.time)
             return { success: false, error: 'Faltan datos para reagendar: IDs anteriores, fecha y hora.' };
@@ -1006,6 +1040,8 @@ ${COMMON_BLOCK}`;
         } else if (toolBlock.name === 'confirm_appointment') {
           const input = toolBlock.input as { appointment_id?: string };
           console.log('[ai-agent-reply] Tool: confirm_appointment', JSON.stringify(input));
+          // Guard (audit MEDIO-9): sin paciente resuelto (guest) no hay turnos propios que confirmar.
+          if (!resolvedPatientId) return { success: false, error: 'No hay un paciente registrado en esta conversación para confirmar turnos.' };
           if (!input.appointment_id) return { success: false, error: 'Necesito el ID del turno a confirmar.' };
           // Fix 2: añadir patient_id para prevenir IDOR — solo confirma turnos del paciente actual
           const confirmQuery = supabase
