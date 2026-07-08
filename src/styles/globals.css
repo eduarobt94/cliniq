@@ -99,6 +99,16 @@ body {
 /* Hide scrollbar inside scroll-columns (TimePicker, etc.) */
 .cq-scroll-hidden::-webkit-scrollbar { display: none; }
 
+/* ── Focus visible universal (audit UX 2026-07-07) ────────────────────────────
+   Solo 13 elementos en toda la app tenían focus ring — la navegación por teclado
+   era prácticamente invisible (WCAG 2.4.7). :focus-visible aparece únicamente al
+   navegar con teclado (no al clickear), y esta regla, declarada después de las
+   utilities, le gana en cascada al `outline-none` de los inputs. */
+:focus-visible {
+  outline: 2px solid var(--cq-accent);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
