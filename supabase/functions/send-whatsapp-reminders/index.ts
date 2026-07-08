@@ -249,6 +249,7 @@ serve(async (req: Request) => {
         .from('appointments')
         .select(`
           id,
+          status,
           appointment_datetime,
           notes,
           patients!inner ( id, full_name, phone_number, clinic_id ),
@@ -290,6 +291,24 @@ serve(async (req: Request) => {
         const svcMatch = notesStr.match(/Servicio:\s*([^—\n]+)/);
         const service  = svcMatch ? svcMatch[1].trim() : 'su consulta';
 
+        // NUEVO-MEDIO-4 (audit): claim atómico ANTES de enviar. El lock
+        // reminders_last_run es check-then-set (no atómico) y dos ejecuciones
+        // solapadas del cron podían doble-enviar. Solo un worker gana este UPDATE
+        // condicional; el perdedor sale sin enviar. Si el envío falla, se revierte
+        // el claim para que el próximo tick reintente.
+        const { data: claim } = await supabase
+          .from('appointments')
+          .update({ reminder_sent_at: new Date().toISOString() })
+          .eq('id', appt.id)
+          .is('reminder_sent_at', null)
+          .select('id')
+          .maybeSingle();
+        if (!claim) {
+          console.log(`[reminders] Claim perdido para appt ${appt.id} — otro worker lo tomó`);
+          r.skipped++;
+          return;
+        }
+
         let waId: string | null = null;
         let msgContent: string;
         let msgDirection: string;
@@ -313,6 +332,24 @@ serve(async (req: Request) => {
           waId         = await sendWaFreeText(patient.phone_number, phoneNumberId, rendered);
           msgContent   = rendered;
           msgDirection = 'outbound_ai'; // visible en inbox, activa flujo de confirmación del agente IA
+
+          // NUEVO-MEDIO-5 (audit): Meta rechaza free-text sin sesión abierta
+          // (ventana de 24h). Si falla, fallback al template aprobado para que
+          // el paciente igual reciba el recordatorio.
+          if (!waId) {
+            console.warn(`[reminders] Free-text falló para ${patient.phone_number} (¿ventana 24h?) — fallback a template`);
+            waId = await sendWaTemplate(
+              patient.phone_number,
+              phoneNumberId,
+              patient.full_name,
+              time,
+              clinic.name ?? 'el consultorio',
+            );
+            if (waId) {
+              msgContent   = `📅 Recordatorio de turno enviado (fallback template) — ${patient.full_name}, ${time} en ${clinic.name}`;
+              msgDirection = 'system_template';
+            }
+          }
         } else {
           // ── Template path: Meta approved template (required for ≥12h) ────
           waId = await sendWaTemplate(
@@ -328,11 +365,14 @@ serve(async (req: Request) => {
 
         if (waId) {
           // ── Mark appointment as reminded + upsert conversation in parallel ──
+          // NUEVO-ALTO-1 (audit): NO degradar turnos ya confirmados a 'pending'.
+          // Solo los 'new' pasan a 'pending' (esperando respuesta al recordatorio).
+          // reminder_sent_at ya quedó marcado por el claim atómico de arriba.
+          const wasNew = (appt as Record<string, unknown>).status === 'new';
           const [, { data: convRow, error: convErr }] = await Promise.all([
-            supabase
-              .from('appointments')
-              .update({ status: 'pending', reminder_sent_at: new Date().toISOString() })
-              .eq('id', appt.id),
+            wasNew
+              ? supabase.from('appointments').update({ status: 'pending' }).eq('id', appt.id)
+              : Promise.resolve({ data: null, error: null }),
             supabase
               .from('conversations')
               .upsert(
@@ -378,7 +418,12 @@ serve(async (req: Request) => {
           console.log(`✅ Reminder (${useConversational ? 'conversational' : 'template'}) sent to ${patient.phone_number} (waId: ${waId})`);
           r.sent++;
         } else {
-          // ── Failed send — just log it ─────────────────────────────────────
+          // ── Failed send — revertir el claim para que el próximo tick reintente ──
+          await supabase
+            .from('appointments')
+            .update({ reminder_sent_at: null })
+            .eq('id', appt.id);
+
           await supabase.from('whatsapp_message_log').insert({
             clinic_id:      auto.clinic_id,
             patient_id:     patient.id,

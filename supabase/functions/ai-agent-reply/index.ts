@@ -393,9 +393,16 @@ serve(async (req: Request) => {
       ? (Date.now() - new Date(conv.agent_last_human_reply_at).getTime()) / 60000
       : 999;
 
-    if (!force && conv.agent_mode === 'human' && consecutiveUnanswered >= 1 && minutesSinceHumanForUnanswered >= 2) {
-      console.log(`[ai-agent-reply] ${consecutiveUnanswered} msg(s) sin respuesta, humano inactivo ${minutesSinceHumanForUnanswered.toFixed(1)}min → IA retoma`);
-      // Continuar (no hacer return) — la IA responderá
+    // REP-MEDIO-8 (audit): gate REAL — antes este bloque solo logueaba y la IA
+    // respondía en modo humano aunque no hubiera nada sin responder (podía pisar
+    // una conversación que el staff ya había resuelto). En modo humano, sin
+    // mensajes del paciente pendientes de respuesta → no intervenir.
+    if (conv.agent_mode === 'human' && consecutiveUnanswered === 0) {
+      console.log('[ai-agent-reply] Modo humano sin mensajes pendientes → skip');
+      return new Response('ok', { status: 200 });
+    }
+    if (conv.agent_mode === 'human') {
+      console.log(`[ai-agent-reply] ${consecutiveUnanswered} msg(s) sin respuesta, humano inactivo ${minutesSinceHumanForUnanswered.toFixed(1)}min → IA cubre`);
     }
 
     // ── C2. Escalation check ─────────────────────────────────────────────────
@@ -1236,9 +1243,21 @@ ${COMMON_BLOCK}`;
         : (hasAppt || detectedIntent === 'consulta_precio')                        ? 'warm'
         : 'cold';
 
+      // REP-MEDIO-8 (audit): NO auto-resetear human→bot. Si el staff tomó la
+      // conversación, la IA solo CUBRE mensajes sin responder — el control sigue
+      // siendo humano hasta que el staff lo devuelva explícitamente (toggle Inbox).
+      if (conv.agent_mode === 'human') {
+        await supabase.from('messages').insert({
+          conversation_id: conversationId,
+          clinic_id:       clinicId,
+          direction:       'system',
+          sender_type:     'system',
+          content:         '🤖 La IA respondió por inactividad del staff — la conversación sigue en modo humano',
+          status:          'sent',
+        });
+      }
+
       await supabase.from('conversations').update({
-        // Si la IA retomó (force) o respondió en modo human, volver a bot
-        agent_mode:    conv.agent_mode === 'human' ? 'bot' : conv.agent_mode,
         agent_context: {
           intent:            detectedIntent,
           summary:           appointmentCreated
@@ -1270,6 +1289,12 @@ ${COMMON_BLOCK}`;
         try {
           await sendWaText(doctorPhone, docMsg, phoneNumId, accessToken);
           console.log('[ai-agent-reply] Doctor notified at', doctorPhone);
+          // REP-MEDIO-10 (audit): registrar QUÉ turno se notificó, para que el
+          // "1"/"2" del médico actúe sobre este turno y no sobre el más antiguo.
+          // El webhook lo lee de settings.doctor_pending_appointment_id y lo limpia.
+          await supabase.from('clinics').update({
+            settings: { ...clinicSettings, doctor_pending_appointment_id: appointmentCreated.id },
+          }).eq('id', clinicId);
         } catch (err) {
           console.error('[ai-agent-reply] Error notifying doctor:', err);
         }
