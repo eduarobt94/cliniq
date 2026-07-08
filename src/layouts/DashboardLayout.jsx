@@ -1,5 +1,5 @@
 ﻿import { useState, useCallback, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from '../pages/Dashboard/Sidebar';
 import { TopBar } from '../pages/Dashboard/TopBar';
 import { NewAppointmentModal } from '../pages/Dashboard/NewAppointmentModal';
@@ -9,10 +9,31 @@ import { useAuth } from '../context/AuthContext';
 import { ToastContainer, useToast } from '../components/ui';
 import { useNotifications } from '../hooks/useNotifications';
 
+const PAGE_TITLES = {
+  '':                 'Dashboard',
+  'agenda':           'Agenda',
+  'pacientes':        'Pacientes',
+  'automatizaciones': 'Automatizaciones',
+  'inbox':            'Inbox',
+  'reportes':         'Reportes',
+  'lista-espera':     'Lista de espera',
+  'configuracion':    'Configuración',
+};
+
 export function DashboardLayout() {
   const { clinic } = useAuth();
   const { toasts, push, dismiss } = useToast();
   const { notifications, unreadCount, markAllRead } = useNotifications(clinic?.id, push);
+  const location = useLocation();
+
+  // Título del documento por página (audit UX 2026-07-07): con varias pestañas
+  // abiertas (Agenda + Inbox es un caso real de recepción) todas decían lo mismo.
+  useEffect(() => {
+    const section = location.pathname.replace(/^\/dashboard\/?/, '').split('/')[0];
+    const page = PAGE_TITLES[section] ?? 'Dashboard';
+    document.title = `${page} — Cliniq`;
+    return () => { document.title = 'Cliniq'; };
+  }, [location.pathname]);
 
   const COMPACT_KEY = 'cq_compact_mode:v1';
   const [compact, setCompact] = useState(() => {
