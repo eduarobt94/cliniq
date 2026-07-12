@@ -18,11 +18,13 @@ Auditoría de arquitectura, seguridad, performance, escalabilidad, IA, código y
 - ✅ Todas las migraciones aplicadas — `supabase migration list --linked` sin drift, incluida `20260707000000_rls_role_enforcement`
 - ✅ Las 4 edge functions tocadas por el audit redeployadas: `whatsapp-webhook` v94, `ai-agent-reply` v102, `send-whatsapp-reminders` v71, `notify-waitlist` v7 (todas `updated_at` 2026-07-08 ~09:09-09:10)
 
-**🔴 QA pendiente en vivo (no verificable por CLI — hacer manualmente):**
-1. Usuario con rol `viewer` → confirmar que es solo-lectura en toda la app (antes podía escribir vía API)
-2. Toggle de IA del Inbox → cambiar y recargar la página, confirmar que persiste
-3. Con 2+ turnos `new`, el médico responde "1" por WhatsApp → confirmar que confirma el turno correcto (el notificado, no el más antiguo)
-4. Conversación en modo `human` sin mensajes del paciente sin responder → confirmar que la IA NO interviene
+**QA en vivo (browser, 2026-07-08):**
+1. 🔴 PENDIENTE — Usuario con rol `viewer` solo-lectura: requiere una **segunda cuenta con rol `viewer`** (la cuenta de prueba es owner). Las políticas RLS `fn_user_clinic_ids_writer/_owner` sí están confirmadas activas en prod por CLI.
+2. ✅ **PASS** — Toggle de IA del Inbox: verificado en vivo. Desactivar → `patients.ai_enabled=false` persiste en DB → sobrevive reload completo. (El toggle escribe `patients.ai_enabled`, no `conversations.agent_mode`.)
+3. 🔴 PENDIENTE — Doctor flow: NO browser-testable, requiere mensajes reales de WhatsApp del médico + `supabase functions logs whatsapp-webhook`
+4. 🔴 PENDIENTE — Gate agente modo humano: NO browser-testable, requiere inbound real de WhatsApp
+
+**Verificado de paso en el smoke test (2026-07-08):** búsqueda server-side de Pacientes ("1 resultado" con filtro correcto), focus-visible universal (outline accent al enfocar), título por página (Dashboard/Inbox/Pacientes — Cliniq), 0 errores de consola, Web Vitals TTFB 172ms. El **export de turnos ya existe** (botón en dashboard, deshabilitado sin datos).
 
 **Hallazgos identificados pero NO implementados (quedan para próxima sesión):**
 - Command palette (⌘K ya existe, falta agregar acciones tipo "Nuevo turno", "Ir a Reportes")
@@ -80,7 +82,7 @@ Auditoría de arquitectura, seguridad, performance, escalabilidad, IA, código y
 - Export de datos (CSV de pacientes, turnos)
 - Undo en acciones destructivas (5s con toast, patrón "Deshacer")
 
-**Usuario de prueba:** `maria@bonomi.uy` / `demo1234`
+**Usuario de prueba:** ⚠️ `maria@bonomi.uy` / `demo1234` es **INVÁLIDO** (verificado 2026-07-08 — Supabase responde "Invalid login credentials"). Recomendado: crear un usuario demo dedicado en Supabase Auth y documentarlo acá. **No** hardcodear credenciales de cuentas personales reales en este archivo (queda en el historial de git).
 **Dev server:** `npm run dev` → localhost:5173
 
 ---
