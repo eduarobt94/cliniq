@@ -19,7 +19,7 @@ Auditoría de arquitectura, seguridad, performance, escalabilidad, IA, código y
 - ✅ Las 4 edge functions tocadas por el audit redeployadas: `whatsapp-webhook` v94, `ai-agent-reply` v102, `send-whatsapp-reminders` v71, `notify-waitlist` v7 (todas `updated_at` 2026-07-08 ~09:09-09:10)
 
 **QA en vivo (browser, 2026-07-08):**
-1. 🔴 PENDIENTE — Usuario con rol `viewer` solo-lectura: requiere una **segunda cuenta con rol `viewer`** (la cuenta de prueba es owner). Las políticas RLS `fn_user_clinic_ids_writer/_owner` sí están confirmadas activas en prod por CLI.
+1. ✅ **PASS** — Viewer solo-lectura (REP-ALTO-6): verificado en vivo con `viewer.demo@cliniq.test`. Lee pacientes OK; INSERT → "new row violates row-level security policy"; UPDATE paciente / UPDATE estado de turno / DELETE → 0 filas afectadas (todas bloqueadas por RLS). El fix RLS por roles funciona como se diseñó.
 2. ✅ **PASS** — Toggle de IA del Inbox: verificado en vivo. Desactivar → `patients.ai_enabled=false` persiste en DB → sobrevive reload completo. (El toggle escribe `patients.ai_enabled`, no `conversations.agent_mode`.)
 3. 🔴 PENDIENTE — Doctor flow: NO browser-testable, requiere mensajes reales de WhatsApp del médico + `supabase functions logs whatsapp-webhook`
 4. 🔴 PENDIENTE — Gate agente modo humano: NO browser-testable, requiere inbound real de WhatsApp
