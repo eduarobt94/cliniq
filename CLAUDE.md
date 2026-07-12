@@ -82,7 +82,11 @@ Auditoría de arquitectura, seguridad, performance, escalabilidad, IA, código y
 - Export de datos (CSV de pacientes, turnos)
 - Undo en acciones destructivas (5s con toast, patrón "Deshacer")
 
-**Usuario de prueba:** ⚠️ `maria@bonomi.uy` / `demo1234` es **INVÁLIDO** (verificado 2026-07-08 — Supabase responde "Invalid login credentials"). Recomendado: crear un usuario demo dedicado en Supabase Auth y documentarlo acá. **No** hardcodear credenciales de cuentas personales reales en este archivo (queda en el historial de git).
+**Usuarios de prueba** (clínica "MVD y Sonrisa Salud", `3fec67db-04b5-413a-9cbc-d422bf607319`):
+- **Owner:** cuenta personal del dueño (no se documenta la contraseña acá — queda en historial de git).
+- **Viewer demo:** `viewer.demo@cliniq.test` / `ViewerDemo2026!` — cuenta descartable para probar RLS de rol viewer (solo-lectura). ⚠️ `maria@bonomi.uy / demo1234` quedó INVÁLIDA (verificado 2026-07-08).
+- **⚠️ Nota crear usuarios por SQL:** insertar en `auth.users` directamente deja columnas de tokens en NULL → GoTrue falla el login con "Database error querying schema". Fix: `UPDATE auth.users SET confirmation_token='', recovery_token='', email_change='', email_change_token_new='', email_change_token_current='', phone_change='', phone_change_token='', reauthentication_token='' WHERE ...`. **Preferir crear usuarios por el Dashboard (Auth → Add user → Auto Confirm)**, que produce el registro correcto.
+
 **Dev server:** `npm run dev` → localhost:5173
 
 ---
