@@ -142,20 +142,19 @@ export function useReportes(clinicId, range = '1a') {
           });
           const quarterSeries = buildQuarterSeries(monthSeries);
 
-          // top_patients del RPC: [{ id, name, visits, next_appointment_datetime }]
-          const topPatients = top_patients.map(p => ({
-            id:     p.id,
-            name:   p.name ?? 'Paciente',
-            visits: p.visits,
-            next:   p.next_appointment_datetime
-              ? new Date(p.next_appointment_datetime).toLocaleDateString('es-UY', {
-                  day: 'numeric', month: 'short', timeZone: UY_TZ,
-                })
-              : '—',
-          }));
+          // top_patients del RPC devuelve [{ patient_id, visit_count }] — NO trae
+          // nombre ni próximo turno (bug detectado en QA 2026-07-08: se mapeaba
+          // p.id/p.name/p.visits, campos inexistentes → tabla en blanco). Se
+          // enriquece con un lookup de nombres + próximo turno, igual que el fallback.
+          const topIds = top_patients.map(p => p.patient_id).filter(Boolean);
 
-          // msgCount y autoStats siguen necesitando queries separadas
-          const [{ count: msgCount }, { data: autoStats }] = await Promise.all([
+          // msgCount, autoStats, nombres y próximos turnos — todo en paralelo
+          const [
+            { count: msgCount },
+            { data: autoStats },
+            { data: tpNames },
+            { data: tpNext },
+          ] = await Promise.all([
             supabase
               .from('messages')
               .select('id', { count: 'exact', head: true })
@@ -167,7 +166,37 @@ export function useReportes(clinicId, range = '1a') {
               .select('total_sent, ok, success_rate, last_sent_at')
               .eq('clinic_id', clinicId)
               .maybeSingle(),
+            topIds.length
+              ? supabase.from('patients').select('id, full_name').in('id', topIds)
+              : Promise.resolve({ data: [] }),
+            topIds.length
+              ? supabase.from('appointments')
+                  .select('patient_id, appointment_datetime')
+                  .eq('clinic_id', clinicId)
+                  .in('patient_id', topIds)
+                  .in('status', ['new', 'pending', 'confirmed'])
+                  .gte('appointment_datetime', new Date().toISOString())
+                  .order('appointment_datetime', { ascending: true })
+              : Promise.resolve({ data: [] }),
           ]);
+
+          const nameById = {};
+          for (const p of (tpNames ?? [])) nameById[p.id] = p.full_name;
+          const nextById = {};
+          for (const a of (tpNext ?? [])) {
+            if (!nextById[a.patient_id]) nextById[a.patient_id] = a.appointment_datetime;
+          }
+
+          const topPatients = top_patients.map(p => ({
+            id:     p.patient_id,
+            name:   nameById[p.patient_id] ?? 'Paciente',
+            visits: p.visit_count,
+            next:   nextById[p.patient_id]
+              ? new Date(nextById[p.patient_id]).toLocaleDateString('es-UY', {
+                  day: 'numeric', month: 'short', timeZone: UY_TZ,
+                })
+              : '—',
+          }));
 
           if (!cancelled) {
             setData({
