@@ -3,9 +3,37 @@
 ## ⚡ INICIO RÁPIDO DE SESIÓN
 > Leé esta sección primero. Resume el estado actual y qué hacer a continuación.
 
-**Última sesión completada: 2026-05-16**
+**Última sesión completada: 2026-07-08**
 
-### ✅ Completado en esta sesión (2026-05-16)
+### ✅ Auditoría integral completa (2026-07-06 → 2026-07-08) — cerrada y desplegada
+Auditoría de arquitectura, seguridad, performance, escalabilidad, IA, código y producto. 3 PRs mergeadas a `main`, **migraciones y edge functions ya desplegadas en producción**.
+
+**PR #3** (`972329d`) — anti-solapamiento de turnos (constraint `EXCLUDE USING gist` + `duration_minutes`/`ends_at`), reconciliación de schema `waiting_list` (dos migraciones homónimas en conflicto), HMAC del webhook fail-closed (`WHATSAPP_APP_SECRET` obligatorio), rate-limit por remitente (`ai_rate_limit` + RPC `check_rate_limit`), cron de seguimiento IA sin full-scan (`conversations.last_message_at` denormalizado), timezone del agente por clínica (antes UTC-3 hardcodeado), guards de paciente-scope en cancel/reschedule/confirm del agente, `insertMessage` fail-loud, paginación server-side en Pacientes.
+
+**PR #4** (`7990bb8`) — RLS por roles (`fn_user_clinic_ids_writer`/`_owner`: `viewer` pasa a solo-lectura; **fix del toggle IA del Inbox que no persistía** por falta de policy UPDATE en `conversations`), multi-tenant real en el webhook (lookup de paciente scoped por clínica, antes global), doctor flow confirma el turno *notificado* (no el más antiguo), gate del agente en modo humano ya no es no-op y no auto-resetea `human→bot`, claims atómicos en `send-whatsapp-reminders`/`notify-waitlist` (evita doble-envío), fallback free-text→template, filtro de servicio en waitlist, fix CI (pnpm version + vite CVE alta).
+
+**PR #5** (`bfcb61c`) — audit UX: focus-visible universal (antes solo 13 elementos de toda la app tenían foco de teclado visible), título de documento por página.
+
+**Estado en producción (verificado por CLI, 2026-07-08):**
+- ✅ Todas las migraciones aplicadas — `supabase migration list --linked` sin drift, incluida `20260707000000_rls_role_enforcement`
+- ✅ Las 4 edge functions tocadas por el audit redeployadas: `whatsapp-webhook` v94, `ai-agent-reply` v102, `send-whatsapp-reminders` v71, `notify-waitlist` v7 (todas `updated_at` 2026-07-08 ~09:09-09:10)
+
+**QA en vivo (browser, 2026-07-08):**
+1. ✅ **PASS** — Viewer solo-lectura (REP-ALTO-6): verificado en vivo con `viewer.demo@cliniq.test`. Lee pacientes OK; INSERT → "new row violates row-level security policy"; UPDATE paciente / UPDATE estado de turno / DELETE → 0 filas afectadas (todas bloqueadas por RLS). El fix RLS por roles funciona como se diseñó.
+2. ✅ **PASS** — Toggle de IA del Inbox: verificado en vivo. Desactivar → `patients.ai_enabled=false` persiste en DB → sobrevive reload completo. (El toggle escribe `patients.ai_enabled`, no `conversations.agent_mode`.)
+3. 🔴 PENDIENTE — Doctor flow: NO browser-testable, requiere mensajes reales de WhatsApp del médico + `supabase functions logs whatsapp-webhook`
+4. 🔴 PENDIENTE — Gate agente modo humano: NO browser-testable, requiere inbound real de WhatsApp
+
+**Verificado de paso en el smoke test (2026-07-08):** búsqueda server-side de Pacientes ("1 resultado" con filtro correcto), focus-visible universal (outline accent al enfocar), título por página (Dashboard/Inbox/Pacientes — Cliniq), 0 errores de consola, Web Vitals TTFB 172ms. El **export de turnos ya existe** (botón en dashboard, deshabilitado sin datos).
+
+**Hallazgos identificados pero NO implementados (quedan para próxima sesión):**
+- Command palette (⌘K ya existe, falta agregar acciones tipo "Nuevo turno", "Ir a Reportes")
+- Paginación/virtualización del Inbox (hoy corta en 50 conversaciones sin aviso)
+- Undo en acciones destructivas (borrar paciente/mensaje)
+- Export CSV (Pacientes, Reportes)
+- Refactor de `ai-agent-reply` (1250+ líneas, god function) — deuda de mantenibilidad, requiere rama dedicada con QA suite
+
+### ✅ Completado en sesión (2026-05-16)
 - **Fix H2 — AuthCallback timeout:** `timedOut = useRef` no re-triggerea useEffect. Fix: navigate('/login') directamente en setTimeout. Removido useRef innecesario.
 - **Fix W6 — ResetPassword flash:** `setSuccess(true)` antes de `updatePassword()` previene redirect a /login cuando `passwordRecoveryMode` se limpia.
 - **Fix W5 — ErrorBoundary console.error:** wrapped en `if (import.meta.env.DEV)` en ambos ErrorBoundary y DashboardErrorBoundary.
@@ -44,21 +72,21 @@
 - **Fixes inbox:** badge `tone="warn"`, dedup `outbound_ai` en Realtime, `agent_mode` solo en envío exitoso, búsqueda con acentos
 
 ### 🔴 Pendiente — TAREAS INMEDIATAS
-1. **Ejecutar migración** `20260507000004_waiting_list.sql` en Supabase SQL Editor (tabla `waiting_list`)
-2. **Ejecutar migración** `20260515000000_messages_type_video.sql` en Supabase SQL Editor (constraint `video`)
-3. **Ejecutar migración** `20260512000000_messages_audio.sql` en Supabase SQL Editor (columna `message_type`)
-4. **Ejecutar migración** `20260430000002_new_automations.sql` en Supabase SQL Editor
-5. **Ejecutar migración** `20260504000000_fix_views_timezone.sql` en Supabase SQL Editor
-6. **Token WhatsApp permanente** — crear System User token en Meta Business Manager → actualizar secret `WHATSAPP_ACCESS_TOKEN`
-7. **Redesplegar funciones** después de aplicar migraciones: `whatsapp-webhook`, `ai-agent-reply`
+1. **QA manual de los 4 puntos del audit** (ver arriba) — usuario viewer, toggle IA, doctor flow, gate del agente
+2. **Token WhatsApp permanente** — verificar si sigue siendo token de prueba (60 días) en Meta Business Manager → actualizar secret `WHATSAPP_ACCESS_TOKEN` si venció
 
 ### 🟡 Próximas funcionalidades sugeridas
 - Configuración → WhatsApp: UI real para gestionar token y número (actualmente mock)
-- Notificación automática de lista de espera cuando se cancela un turno
-- Panel de analytics de transcripciones de audio
+- Command palette con acciones (⌘K ya existe la búsqueda; falta agregar comandos)
+- Paginación/virtualización del Inbox (hoy corta en 50 conversaciones)
 - Export de datos (CSV de pacientes, turnos)
+- Undo en acciones destructivas (5s con toast, patrón "Deshacer")
 
-**Usuario de prueba:** `maria@bonomi.uy` / `demo1234`
+**Usuarios de prueba** (clínica "MVD y Sonrisa Salud", `3fec67db-04b5-413a-9cbc-d422bf607319`):
+- **Owner:** cuenta personal del dueño (no se documenta la contraseña acá — queda en historial de git).
+- **Viewer demo:** `viewer.demo@cliniq.test` / `ViewerDemo2026!` — cuenta descartable para probar RLS de rol viewer (solo-lectura). ⚠️ `maria@bonomi.uy / demo1234` quedó INVÁLIDA (verificado 2026-07-08).
+- **⚠️ Nota crear usuarios por SQL:** insertar en `auth.users` directamente deja columnas de tokens en NULL → GoTrue falla el login con "Database error querying schema". Fix: `UPDATE auth.users SET confirmation_token='', recovery_token='', email_change='', email_change_token_new='', email_change_token_current='', phone_change='', phone_change_token='', reauthentication_token='' WHERE ...`. **Preferir crear usuarios por el Dashboard (Auth → Add user → Auto Confirm)**, que produce el registro correcto.
+
 **Dev server:** `npm run dev` → localhost:5173
 
 ---
@@ -153,27 +181,16 @@ supabase/
 | `messages` | FK → conversations. `direction`: `inbound/outbound/outbound_ai/system/system_template`. `message_type`: `text/audio/image/document/sticker/video/unknown` (DEFAULT `text`). `REPLICA IDENTITY FULL` |
 | `whatsapp_message_log` | Auditoría — sigue siendo insertada para backward compat |
 | `clinic_services` | CRUD servicios. Cols: `name`, `duration_minutes`, `price`, `discount_type` (percent/fixed), `discount_value`, `is_active` |
-| `waiting_list` | Lista de espera. Cols: `patient_id` (nullable), `phone_number`, `full_name`, `service`, `date_from`, `date_to`, `notes`, `status` (pending/notified/cancelled) |
+| `waiting_list` | Lista de espera. Cols: `patient_id` (NOT NULL), `service`, `preferred_date_from`, `preferred_date_to`, `notes`, `status` (`waiting/notified/booked/expired/cancelled`), `notified_at`, `updated_at`. Esquema canónico definido en `20260507000000_waiting_list.sql` — ver nota en `20260507000004_waiting_list.sql` sobre el conflicto reconciliado (audit CRÍTICO-2) |
+| `ai_rate_limit` | Rate-limit de IA por remitente. Cols: `phone_number` (PK), `window_start`, `count`. RPC `check_rate_limit(phone, max, window_seconds)` — default 12 msg/60s |
 
 ### Migraciones
-| Archivo | Estado |
-|---|---|
-| `20260420000000_cliniq_mvp.sql` | ✅ Ejecutada |
-| `20260422000000_cliniq_optimizations.sql` | ✅ Ejecutada |
-| `20260423000000_clinic_members.sql` | ✅ Ejecutada |
-| `20260424000000_profiles_and_rpc.sql` | ✅ Ejecutada |
-| `20260425000000_invite_flow.sql` | ✅ Ejecutada |
-| `20260428000000_whatsapp_automations.sql` | ✅ Ejecutada |
-| `20260428000000_fix_whatsapp_rls.sql` | ✅ Ejecutada |
-| `20260429000000_inbox_v2.sql` | ✅ Ejecutada |
-| `20260429000001_inbox_delete_policy.sql` | ✅ Ejecutada |
-| `20260430000000_ai_agent_handoff.sql` | ✅ Ejecutada |
-| `20260430000002_new_automations.sql` | 🔴 PENDIENTE |
-| `20260504000000_fix_views_timezone.sql` | 🔴 PENDIENTE |
-| `20260507000003_clinic_services.sql` | ✅ Ejecutada |
-| `20260507000004_waiting_list.sql` | 🔴 PENDIENTE |
-| `20260512000000_messages_audio.sql` | 🔴 PENDIENTE — columna `message_type` |
-| `20260515000000_messages_type_video.sql` | 🔴 PENDIENTE — agrega `video` al constraint |
+> **⚠️ NO mantener esta tabla a mano** (fue la causa del CRÍTICO-3 del audit 2026-07-06: drift entre lo documentado y lo real). Fuente de verdad:
+> ```bash
+> npx supabase migration list --linked   # compara local vs remoto
+> npx supabase db push --linked          # aplica pendientes
+> ```
+> Ver `supabase/migrations/README.md` para el flujo completo y detección de drift en CI. Migraciones clave del audit: `20260706000000` (anti-solapamiento de turnos), `20260706000001` (cron sin full-scan), `20260706000002` (rate-limit IA), `20260707000000` (RLS por roles).
 
 **⚠️ Nunca volver a ejecutar las ya aplicadas.**
 
@@ -209,8 +226,9 @@ for (let round = 0; round < 4; round++) {
 
 ### Lógica de activación (`shouldAgentReply`)
 - `agent_mode = 'bot'` → siempre responde
-- `agent_mode = 'human'` → solo si humano lleva > 2min inactivo Y hay mensajes sin responder
+- `agent_mode = 'human'` → solo si humano lleva > 2min inactivo Y hay mensajes sin responder (audit REP-MEDIO-8: gate real, antes era no-op; si cubre, NO auto-resetea a `bot` — el control sigue siendo del staff)
 - `ai_enabled = false` → nunca responde
+- Doctor flow: el "1"/"2" del médico actúa sobre `clinics.settings.doctor_pending_appointment_id` (turno notificado), no sobre "el más antiguo" (audit REP-MEDIO-10)
 
 ### Mensajes de audio en el agente
 - El webhook transcribe el audio con Whisper antes de llamar al agente
@@ -234,6 +252,7 @@ SUPABASE_URL=https://jmpyygecgqkeuwwaioew.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 WHATSAPP_VERIFY_TOKEN=cliniq_webhook_2026
 WHATSAPP_ACCESS_TOKEN=<system-user-token>   ← 🔴 VENCE si es token de prueba (60 días)
+WHATSAPP_APP_SECRET=<app-secret-de-meta>    ← ✅ Configurado (2026-07-06). OBLIGATORIO: sin este secret el webhook rechaza TODO con 403 (fail-closed, audit ALTO-4). Meta → Configuración de la app → Básica → "Clave secreta de la app"
 WHATSAPP_PHONE_NUMBER_ID=<phone-number-id>
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...                        ← ✅ Configurado (Whisper transcripción)
