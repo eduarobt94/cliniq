@@ -140,7 +140,7 @@ function EditPatientModal({ patient, onClose, onSuccess, existingPatients = EMPT
       aria-labelledby="edit-patient-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
     >
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      <div className="cq-backdrop-in absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div
         className="cq-modal-in relative w-full max-w-[400px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] p-6"
       >

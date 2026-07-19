@@ -177,7 +177,7 @@ function ClosureRow({ closure, onDelete, onNotify, notifying, isOwner }) {
           )}
           <button
             onClick={() => onDelete(closure.id)}
-            className="size-8 rounded-[6px] hover:bg-[var(--cq-danger)]/10 text-[var(--cq-fg-muted)] hover:text-[var(--cq-danger)] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+            className="size-8 rounded-[6px] hover:bg-[var(--cq-danger)]/10 text-[var(--cq-fg-muted)] hover:text-[var(--cq-danger)] flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
             aria-label="Eliminar día cerrado"
           >
             <Icons.Close size={13} />

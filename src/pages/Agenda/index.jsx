@@ -492,7 +492,7 @@ function WeekView({ currentDate, appointments, loading, onNew }) {
                 ) : dayAppts.length === 0 ? (
                   <button
                     onClick={() => onNew(iso)}
-                    className="w-full mt-1 h-7 rounded-[5px] border border-dashed border-transparent hover:border-[var(--cq-border)] hover:bg-[var(--cq-surface-2)] text-[10.5px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] transition-all flex items-center justify-center opacity-0 hover:opacity-100 focus:opacity-100"
+                    className="w-full mt-1 h-7 rounded-[5px] border border-dashed border-transparent hover:border-[var(--cq-border)] hover:bg-[var(--cq-surface-2)] text-[10.5px] text-[var(--cq-fg-muted)] hover:text-[var(--cq-fg)] transition flex items-center justify-center opacity-0 hover:opacity-100 focus:opacity-100"
                     aria-label={`Nuevo turno para el ${iso}`}
                   >
                     +

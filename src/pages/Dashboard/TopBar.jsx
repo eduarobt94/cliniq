@@ -98,7 +98,7 @@ const NOTIF_CONFIG = {
 function NotifPanel({ notifications, onClose, onNavigate }) {
   return (
     <div
-      className="cq-modal-in absolute right-0 top-[calc(100%+6px)] z-30 w-[340px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[14px] shadow-xl overflow-hidden"
+      className="cq-pop-right absolute right-0 top-[calc(100%+6px)] z-30 w-[340px] bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[14px] shadow-xl overflow-hidden"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--cq-border)]">

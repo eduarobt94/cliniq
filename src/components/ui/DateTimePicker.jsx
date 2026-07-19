@@ -207,7 +207,7 @@ export function DatePicker({ value, onChange, disabled, min, schedule, closures,
 
       {open && (
         <div
-          className="cq-modal-in-fast absolute left-0 top-[calc(100%+4px)] z-50 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[12px] shadow-xl"
+          className="cq-pop-left absolute left-0 top-[calc(100%+4px)] z-50 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[12px] shadow-xl"
         >
           <Calendar
             value={value}
@@ -365,7 +365,7 @@ export function TimePicker({ value, onChange, disabled, onBlur, 'aria-label': ar
       {/* Dropdown */}
       {open && (
         <div
-          className="cq-modal-in-fast absolute left-0 top-[calc(100%+4px)] z-50 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[12px] shadow-xl overflow-hidden"
+          className="cq-pop-left absolute left-0 top-[calc(100%+4px)] z-50 bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[12px] shadow-xl overflow-hidden"
         >
           <div className="flex items-center px-2 pt-3 pb-2 gap-1">
             <ScrollColumn items={HOURS}   selected={hStr} onSelect={selectH} colRef={hRef} />

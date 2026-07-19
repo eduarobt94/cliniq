@@ -110,7 +110,7 @@ function EditModal({ automation, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div className="cq-backdrop-in fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div
         className="bg-[var(--cq-surface)] border border-[var(--cq-border)] rounded-[16px] w-full max-w-[520px] shadow-xl flex flex-col max-h-[90vh] overflow-y-auto"
         role="dialog"
