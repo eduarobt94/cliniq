@@ -15,6 +15,9 @@
   --cq-success: oklch(0.60 0.09 160);
   --cq-warn: oklch(0.68 0.10 80);
   --cq-danger: oklch(0.58 0.11 25);
+  /* Motion — curvas de easing como tokens únicos (audit animaciones 2026-07) */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);      /* ease-out fuerte para UI que entra/sale */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);  /* movimiento en pantalla */
 }
 
 html,
@@ -93,8 +96,17 @@ body {
 
 /* Modal animation utility — use this class instead of an inline style so that the
    prefers-reduced-motion media query below can suppress it via !important. */
-.cq-modal-in       { animation: cqModalIn 220ms cubic-bezier(.2,.7,.2,1); }
-.cq-modal-in-fast  { animation: cqModalIn 160ms cubic-bezier(.2,.7,.2,1); }
+.cq-modal-in       { animation: cqModalIn 220ms var(--ease-out); }
+.cq-modal-in-fast  { animation: cqModalIn 160ms var(--ease-out); }
+
+/* Popovers/dropdowns anclados al trigger — escalan desde su borde, no el centro (audit §3) */
+.cq-pop        { animation: cqModalIn 160ms var(--ease-out); transform-origin: top; }
+.cq-pop-left   { animation: cqModalIn 160ms var(--ease-out); transform-origin: top left; }
+.cq-pop-right  { animation: cqModalIn 160ms var(--ease-out); transform-origin: top right; }
+
+/* Fade-in del backdrop de modales — solo opacity (audit §7) */
+@keyframes cqBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+.cq-backdrop-in { animation: cqBackdropIn 200ms var(--ease-out); }
 
 /* Hide scrollbar inside scroll-columns (TimePicker, etc.) */
 .cq-scroll-hidden::-webkit-scrollbar { display: none; }

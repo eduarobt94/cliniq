@@ -175,7 +175,7 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
                 </div>
                 <button
                   onClick={handleCopy}
-                  className={`shrink-0 h-10 px-3 rounded-[8px] border transition-all flex items-center gap-1.5 text-[13px] font-medium ${
+                  className={`shrink-0 h-10 px-3 rounded-[8px] border transition flex items-center gap-1.5 text-[13px] font-medium ${
                     copied
                       ? 'border-[var(--cq-success)] text-[var(--cq-success)] bg-[color-mix(in_oklch,var(--cq-success)_8%,transparent)]'
                       : 'border-[var(--cq-border)] hover:border-[var(--cq-fg)] hover:bg-[var(--cq-surface-2)]'
@@ -194,13 +194,13 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
             <div className="flex gap-2 pt-2">
               <button
                 onClick={reset}
-                className="flex-1 h-10 rounded-[10px] border border-[var(--cq-border)] hover:bg-[var(--cq-surface-2)] transition-all text-[13.5px] font-medium"
+                className="flex-1 h-10 rounded-[10px] border border-[var(--cq-border)] hover:bg-[var(--cq-surface-2)] transition text-[13.5px] font-medium"
               >
                 Invitar otro
               </button>
               <button
                 onClick={handleClose}
-                className="flex-1 h-10 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] hover:bg-[var(--cq-accent)] transition-all text-[13.5px] font-medium"
+                className="flex-1 h-10 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] hover:bg-[var(--cq-accent)] transition text-[13.5px] font-medium"
               >
                 Listo
               </button>
@@ -213,7 +213,7 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
               <label htmlFor="invite-email" className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--cq-fg-muted)]">
                 Correo electrónico
               </label>
-              <div className={`flex items-center gap-2 h-11 px-3.5 rounded-[10px] border bg-[var(--cq-surface)] transition-all focus-within:border-[var(--cq-success)] focus-within:ring-1 focus-within:ring-[var(--cq-success)] ${
+              <div className={`flex items-center gap-2 h-11 px-3.5 rounded-[10px] border bg-[var(--cq-surface)] transition focus-within:border-[var(--cq-success)] focus-within:ring-1 focus-within:ring-[var(--cq-success)] ${
                 (email && !emailValid) || emailBlurError ? 'border-[var(--cq-danger)]' : 'border-[var(--cq-border)]'
               }`}>
                 <span className="text-[var(--cq-fg-muted)] shrink-0"><Icons.Mail size={14} /></span>
@@ -247,7 +247,7 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
                     key={r.value}
                     type="button"
                     onClick={() => setRole(r.value)}
-                    className={`text-left p-3 rounded-[10px] border transition-all ${
+                    className={`text-left p-3 rounded-[10px] border transition ${
                       role === r.value
                         ? 'border-[var(--cq-fg)] bg-[var(--cq-surface-2)]'
                         : 'border-[var(--cq-border)] hover:border-[var(--cq-fg-muted)]'
@@ -273,14 +273,14 @@ export function InviteMemberModal({ open, onClose, clinicId }) {
               <button
                 type="button"
                 onClick={handleClose}
-                className="flex-1 h-11 rounded-[10px] border border-[var(--cq-border)] hover:bg-[var(--cq-surface-2)] transition-all text-[13.5px] font-medium"
+                className="flex-1 h-11 rounded-[10px] border border-[var(--cq-border)] hover:bg-[var(--cq-surface-2)] transition text-[13.5px] font-medium"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={!emailValid || submitting}
-                className="flex-1 h-11 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] hover:bg-[var(--cq-accent)] disabled:opacity-60 transition-all active:scale-[0.99] inline-flex items-center justify-center gap-2 text-[13.5px] font-medium"
+                className="flex-1 h-11 rounded-[10px] bg-[var(--cq-fg)] text-[var(--cq-bg)] hover:bg-[var(--cq-accent)] disabled:opacity-60 transition active:scale-[0.99] inline-flex items-center justify-center gap-2 text-[13.5px] font-medium"
               >
                 {submitting ? (
                   <><span className="size-4 border-2 border-[var(--cq-bg)]/40 border-t-[var(--cq-bg)] rounded-full animate-spin" /> Enviando invitación…</>
